@@ -1,0 +1,11 @@
+import { chromium } from 'playwright'
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' })
+const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+const page = await ctx.newPage()
+page.on('pageerror', (e) => console.log('PAGEERROR:', e.message))
+page.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE:', m.text()) })
+await page.goto('http://localhost:4175/#/availability', { waitUntil: 'networkidle' })
+await page.waitForTimeout(1500)
+console.log('main length:', await page.evaluate(() => document.getElementById('main-content')?.innerHTML.length))
+console.log('text:', (await page.evaluate(() => document.getElementById('main-content')?.innerText || '')).slice(0, 300))
+await browser.close()

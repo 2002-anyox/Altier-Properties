@@ -1,0 +1,202 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   Altier Properties — design tokens
+   Light: warm ivory planes, deep navy ink, muted gold accent
+   Dark:  deep navy planes, warm ivory ink, muted gold accent
+   ============================================================ */
+
+:root {
+  color-scheme: light;
+
+  --c-surface: 243 239 231;        /* #F3EFE7  page plane   */
+  --c-surface-card: 252 250 246;   /* #FCFAF6  chart/card   */
+  --c-surface-raised: 255 254 252; /* #FFFEFC  popovers     */
+  --c-surface-inset: 237 231 220;  /* #EDE7DC  wells/tracks */
+  --c-surface-rail: 15 22 32;      /* #0F1620  nav rail     */
+
+  --c-border: 226 218 204;         /* #E2DACC */
+  --c-border-strong: 208 197 178;  /* #D0C5B2 */
+
+  --c-text-primary: 15 22 32;      /* #0F1620 */
+  --c-text-secondary: 71 84 100;   /* #475464 */
+  --c-text-muted: 122 132 145;     /* #7A8491 */
+  --c-text-onrail: 244 239 230;    /* #F4EFE6 */
+  --c-text-onrail-muted: 154 166 181;
+
+  --c-accent: 168 124 34;          /* #A87C22  gold — text-safe */
+  --c-accent-strong: 138 100 24;   /* #8A6418 */
+  --c-accent-soft: 236 224 200;    /* #ECE0C8 */
+  --c-accent-ink: 92 66 14;        /* #5C420E */
+
+  --c-status-good: 12 163 12;
+  --c-status-warning: 250 178 25;
+  --c-status-serious: 236 131 90;
+  --c-status-critical: 208 59 59;
+  --c-status-info: 42 111 214;
+
+  /* chart roles — validated categorical set (light, surface #FCFAF6) */
+  --viz-1: #2a6fd6;
+  --viz-2: #a87c22;
+  --viz-3: #127f60;
+  --viz-4: #6f5fc0;
+  --viz-5: #b0492e;
+  --viz-grid: #e2dacc;
+  --viz-axis: #d0c5b2;
+  --viz-surface: #fcfaf6;
+  --viz-good: #0ca30c;
+  --viz-warning: #fab219;
+  --viz-serious: #ec835a;
+  --viz-critical: #d03b3b;
+
+  --c-shadow: 26 22 14;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --c-surface: 10 15 23;           /* #0A0F17 */
+  --c-surface-card: 21 28 39;      /* #151C27 */
+  --c-surface-raised: 28 37 50;    /* #1C2532 */
+  --c-surface-inset: 16 22 31;     /* #10161F */
+  --c-surface-rail: 8 12 19;       /* #080C13 */
+
+  --c-border: 40 51 66;            /* #283342 */
+  --c-border-strong: 58 72 91;     /* #3A485B */
+
+  --c-text-primary: 246 242 234;   /* #F6F2EA */
+  --c-text-secondary: 178 189 202; /* #B2BDCA */
+  --c-text-muted: 137 148 162;     /* #8994A2 */
+  --c-text-onrail: 246 242 234;
+  --c-text-onrail-muted: 146 158 173;
+
+  --c-accent: 203 168 95;          /* #CBA85F */
+  --c-accent-strong: 225 195 130;  /* #E1C382 */
+  --c-accent-soft: 46 40 27;       /* #2E281B */
+  --c-accent-ink: 240 226 196;
+
+  --c-status-good: 44 190 76;
+  --c-status-warning: 250 178 25;
+  --c-status-serious: 236 131 90;
+  --c-status-critical: 232 96 96;
+  --c-status-info: 74 141 232;
+
+  /* chart roles — validated categorical set (dark, surface #151C27) */
+  --viz-1: #4a8de8;
+  --viz-2: #b98a2e;
+  --viz-3: #159c74;
+  --viz-4: #8a79de;
+  --viz-5: #c85b3c;
+  --viz-grid: #283342;
+  --viz-axis: #3a485b;
+  --viz-surface: #151c27;
+  --viz-good: #0ca30c;
+  --viz-warning: #fab219;
+  --viz-serious: #ec835a;
+  --viz-critical: #d03b3b;
+
+  --c-shadow: 0 0 0;
+}
+
+@layer base {
+  * { border-color: rgb(var(--c-border)); }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    @apply bg-surface text-ink font-sans antialiased;
+    font-feature-settings: 'cv05' 1, 'ss01' 1;
+    overscroll-behavior-y: none;
+  }
+
+  h1, h2, h3, h4 { @apply font-display; letter-spacing: -0.015em; }
+
+  /* Focus: a single, unmistakable ring everywhere */
+  :focus-visible {
+    outline: 2px solid rgb(var(--c-accent));
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  [data-theme='dark'] :focus-visible { outline-color: rgb(var(--c-accent-strong)); }
+
+  ::selection { background: rgb(var(--c-accent) / 0.22); }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--c-border-strong) / 0.8);
+    border-radius: 99px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(var(--c-text-muted) / 0.7); background-clip: content-box; }
+}
+
+@layer components {
+  .card {
+    @apply bg-surface-card border border-line rounded-2xl shadow-card;
+  }
+  .card-pad { @apply p-5 sm:p-6; }
+
+  .hairline { @apply border-line; }
+
+  .tnum { font-variant-numeric: tabular-nums; }
+
+  .rail-gradient {
+    background:
+      radial-gradient(120% 60% at 50% -10%, rgb(203 168 95 / 0.14), transparent 60%),
+      linear-gradient(180deg, rgb(var(--c-surface-rail)) 0%, rgb(var(--c-surface-rail)) 60%, rgb(var(--c-surface-rail) / 0.96) 100%);
+  }
+
+  .gold-rule {
+    background: linear-gradient(90deg, transparent, rgb(var(--c-accent) / 0.55), transparent);
+  }
+
+  .glass {
+    background: rgb(var(--c-surface-card) / 0.82);
+    backdrop-filter: saturate(160%) blur(14px);
+    -webkit-backdrop-filter: saturate(160%) blur(14px);
+  }
+
+  .skeleton {
+    background-image: linear-gradient(
+      90deg,
+      rgb(var(--c-surface-inset)) 0%,
+      rgb(var(--c-border)) 40%,
+      rgb(var(--c-surface-inset)) 80%
+    );
+    background-size: 480px 100%;
+    @apply animate-shimmer rounded-md;
+  }
+
+  .scroll-x {
+    @apply overflow-x-auto;
+    scrollbar-width: thin;
+  }
+
+  .link-underline {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-size: 0% 1px;
+    background-repeat: no-repeat;
+    background-position: 0 100%;
+    transition: background-size 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .link-underline:hover { background-size: 100% 1px; }
+}
+
+/* Motion is a garnish, never a gate. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff; }
+}
