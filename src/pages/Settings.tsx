@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, Moon, Palette, RotateCcw, ShieldCheck, Sun, Users2 } from 'lucide-react'
+import { Check, Coins, Globe2, Moon, Palette, RotateCcw, ShieldCheck, Sun, Users2 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import {
   Avatar, Button, Card, CardHeader, Chip, Field, Input, Select, Tabs, Toggle, cx,
@@ -8,10 +8,12 @@ import {
 import { ReminderModal } from './Notifications'
 import { useStore } from '../lib/store'
 import { ROLES, can, roleLabel, type Permission } from '../lib/rbac'
-import { mediumDate } from '../lib/format'
+import { mediumDate, money, num } from '../lib/format'
+import { CURRENCIES, REGIONS, currencyDef, regionDef } from '../lib/money'
+import { LANGUAGES, type Language } from '../lib/strings'
 import type { Role } from '../lib/types'
 
-type Tab = 'profile' | 'team' | 'roles' | 'reminders' | 'appearance'
+type Tab = 'profile' | 'localisation' | 'team' | 'roles' | 'reminders' | 'appearance'
 
 const PERMISSION_ROWS: Array<{ label: string; permission: Permission }> = [
   { label: 'View dashboard', permission: 'view:dashboard' },
@@ -50,6 +52,7 @@ export default function Settings() {
         onChange={setTab}
         tabs={[
           { value: 'profile', label: 'Profile' },
+          { value: 'localisation', label: 'Region & currency' },
           { value: 'team', label: 'Team', count: state.team.length },
           { value: 'roles', label: 'Roles & access' },
           { value: 'reminders', label: 'Reminders' },
@@ -102,6 +105,107 @@ export default function Settings() {
               >
                 Reset demo data
               </Button>
+            </Card>
+          </div>
+        )}
+
+        {tab === 'localisation' && (
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Card className="card-pad lg:col-span-2">
+              <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink">
+                <Globe2 size={16} className="text-gold" /> Where you operate
+              </h3>
+              <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-ink-secondary">
+                Region sets how dates and numbers are written; currency sets what every amount is shown in.
+                Choosing a region moves the currency with it, and you can override the currency afterwards.
+              </p>
+
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                <Field label="Region" id="set-region" hint="Controls date and number formatting.">
+                  <Select
+                    id="set-region"
+                    value={state.locale}
+                    onChange={(e) => {
+                      dispatch({ type: 'set-region', locale: e.target.value })
+                      toast({ title: `Region set to ${regionDef(e.target.value).label}`, tone: 'success' })
+                    }}
+                  >
+                    {REGIONS.map((r) => <option key={r.locale} value={r.locale}>{r.label}</option>)}
+                  </Select>
+                </Field>
+
+                <Field label="Currency" id="set-currency" hint="Every figure in the platform is shown in this currency.">
+                  <Select
+                    id="set-currency"
+                    value={state.currency}
+                    onChange={(e) => {
+                      dispatch({ type: 'set-currency', currency: e.target.value })
+                      toast({ title: `Amounts now shown in ${currencyDef(e.target.value).label}`, tone: 'success' })
+                    }}
+                  >
+                    {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.label}</option>)}
+                  </Select>
+                </Field>
+
+                <Field label="Interface language" id="set-language" hint="Sample data stays in the language it was entered.">
+                  <Select
+                    id="set-language"
+                    value={state.language}
+                    onChange={(e) => {
+                      dispatch({ type: 'set-language', language: e.target.value as Language })
+                      toast({ title: `Interface language changed`, tone: 'success' })
+                    }}
+                  >
+                    {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.native} — {l.coverage.toLowerCase()}</option>)}
+                  </Select>
+                </Field>
+              </div>
+
+              <div className="mt-6 rounded-xl border border-line bg-surface-inset/60 p-4">
+                <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-muted">How it will read</p>
+                <dl className="mt-3 grid gap-3 text-[13px] sm:grid-cols-3">
+                  <div>
+                    <dt className="text-ink-muted">Monthly rent</dt>
+                    <dd className="tnum mt-0.5 text-[15px] font-semibold text-ink">{money(2450)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-ink-muted">Portfolio revenue</dt>
+                    <dd className="tnum mt-0.5 text-[15px] font-semibold text-ink">{money(487_500, true)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-ink-muted">Today</dt>
+                    <dd className="mt-0.5 text-[15px] font-semibold text-ink">{mediumDate(new Date().toISOString().slice(0, 10))}</dd>
+                  </div>
+                </dl>
+              </div>
+            </Card>
+
+            <Card className="card-pad">
+              <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink">
+                <Coins size={16} className="text-gold" /> Conversion
+              </h3>
+              <p className="mt-2 text-[13px] leading-relaxed text-ink-secondary">
+                The sample portfolio is priced in euros. Amounts are converted for display only — switching
+                currency never rewrites a stored figure.
+              </p>
+              <dl className="mt-4 space-y-2.5 border-t border-line pt-4 text-[13px]">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-ink-muted">Base currency</dt>
+                  <dd className="text-ink-secondary">EUR</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-ink-muted">Showing</dt>
+                  <dd className="text-ink-secondary">{state.currency}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-ink-muted">Rate applied</dt>
+                  <dd className="tnum text-ink-secondary">1 EUR = {num(currencyDef(state.currency).rate, currencyDef(state.currency).rate < 10 ? 2 : 0)}</dd>
+                </div>
+              </dl>
+              <p className="mt-4 rounded-lg border border-gold/40 bg-gold-soft/40 p-3 text-[11.5px] leading-relaxed text-gold-ink">
+                These are indicative demo rates. A live deployment would read them from a rates provider and
+                stamp each invoice with the rate used when it was raised, so historic figures never drift.
+              </p>
             </Card>
           </div>
         )}

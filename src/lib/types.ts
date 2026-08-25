@@ -19,8 +19,15 @@ export type PropertyType =
   | 'short_stay'
   | 'commercial'
 
-/** How a property earns: a long lease, or nightly short stays. */
-export type TenancyMode = 'long_term' | 'short_stay'
+/**
+ * How a property earns.
+ *  - `long_term`  fixed-term lease: a start, an end, a renewal decision
+ *  - `rental`     open-ended rental: rolling monthly until the tenant gives
+ *                 notice, with several months paid up front so a tenant
+ *                 cannot leave after one or two and strand the owner
+ *  - `short_stay` nightly, Airbnb-style
+ */
+export type TenancyMode = 'long_term' | 'rental' | 'short_stay'
 
 export interface Address {
   line1: string
@@ -125,10 +132,17 @@ export interface Booking {
   mode: TenancyMode
   status: BookingStatus
   start: string
-  end: string
-  /** Nightly for short stays, monthly for leases. */
+  /** `null` on an open-ended rental — it runs until notice is given. */
+  end: string | null
+  /** Nightly for short stays, monthly for leases and rentals. */
   rate: number
   deposit: number
+  /** Months of rent taken up front. Open-ended rentals require several. */
+  advanceMonths: number
+  /** Rent is paid through to this date; the advance tops it up. */
+  paidThrough: string | null
+  /** Notice the tenant must give before leaving. */
+  noticeDays: number
   guests: number
   source: BookingSource
   checkIn: string
@@ -141,6 +155,7 @@ export type InvoiceStatus = 'paid' | 'pending' | 'overdue' | 'upcoming' | 'parti
 
 export type ChargeType =
   | 'rent'
+  | 'advance'
   | 'booking'
   | 'deposit'
   | 'utilities'

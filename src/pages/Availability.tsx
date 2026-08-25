@@ -12,7 +12,7 @@ import {
 import { useStore } from '../lib/store'
 import { TODAY, addDays, daysBetween, iso } from '../lib/data'
 import { mediumDate, money, relativeDay, shortDate } from '../lib/format'
-import { buildMonthGrid, upcomingAvailability } from '../lib/derive'
+import { buildMonthGrid, endOf, isOpenEnded, upcomingAvailability } from '../lib/derive'
 import { itemVariants, listVariants } from '../lib/motion'
 import type { Booking, Property, TenancyMode } from '../lib/types'
 
@@ -81,8 +81,9 @@ export default function Availability() {
         <SearchInput value={query} onChange={setQuery} placeholder="Filter properties…" className="min-w-[200px] flex-1" />
         <Select value={mode} onChange={(e) => setMode(e.target.value as any)} aria-label="Filter by letting model" className="w-auto min-w-[160px]">
           <option value="all">All letting models</option>
-          <option value="long_term">Long term only</option>
-          <option value="short_stay">Short stay only</option>
+          <option value="long_term">Fixed-term leases</option>
+          <option value="rental">Open-ended rentals</option>
+          <option value="short_stay">Short stays</option>
         </Select>
         {view === 'timeline' && (
           <div className="flex items-center gap-1 rounded-xl border border-line bg-surface-card p-1">
@@ -150,7 +151,7 @@ function Timeline({ properties, bookings, days }: { properties: Property[]; book
           {/* rows */}
           <div className="relative">
             {properties.map((p) => {
-              const rows = bookings.filter((b) => b.propertyId === p.id && b.status !== 'cancelled' && b.start <= days[days.length - 1].iso && b.end >= days[0].iso)
+              const rows = bookings.filter((b) => b.propertyId === p.id && b.status !== 'cancelled' && b.start <= days[days.length - 1].iso && endOf(b) >= days[0].iso)
               return (
                 <div key={p.id} className="flex border-b border-line last:border-b-0">
                   <div className="sticky left-0 z-10 flex w-[232px] shrink-0 items-center gap-2.5 border-r border-line bg-surface-card px-4 py-2.5">
@@ -170,7 +171,8 @@ function Timeline({ properties, bookings, days }: { properties: Property[]; book
                     ))}
                     {rows.map((b) => {
                       const from = Math.max(0, daysBetween(days[0].iso, b.start))
-                      const to = Math.min(days.length, daysBetween(days[0].iso, b.end))
+                      const openEnded = isOpenEnded(b)
+                      const to = openEnded ? days.length : Math.min(days.length, daysBetween(days[0].iso, b.end ?? days[0].iso))
                       const width = Math.max(colWidth * 0.7, (to - from) * colWidth - 4)
                       const isShort = b.mode === 'short_stay'
                       return (
@@ -181,18 +183,22 @@ function Timeline({ properties, bookings, days }: { properties: Property[]; book
                           transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
                           style={{ left: from * colWidth + 2, width, transformOrigin: 'left' }}
                           className={cx(
-                            'absolute top-[9px] flex h-7 items-center overflow-hidden rounded-lg px-2 text-[11px] font-medium shadow-sm transition-transform duration-200 hover:z-10 hover:scale-[1.02]',
+                            'absolute top-[9px] flex h-7 items-center overflow-hidden px-2 text-[11px] font-medium shadow-sm transition-transform duration-200 hover:z-10 hover:scale-[1.02]',
+                            /* An open-ended rental has no right-hand edge to draw. */
+                            openEnded ? 'rounded-l-lg rounded-r-none' : 'rounded-lg',
                             b.status === 'upcoming'
                               ? 'bg-gold-soft text-gold-ink ring-1 ring-gold/40'
                               : isShort
                                 ? 'bg-[rgb(var(--c-status-info)/0.16)] text-[rgb(var(--c-status-info))] ring-1 ring-[rgb(var(--c-status-info)/0.35)]'
-                                : 'bg-navy-900 text-white dark:bg-navy-700',
+                                : openEnded
+                                  ? 'bg-gold text-white dark:text-navy-950'
+                                  : 'bg-navy-900 text-white dark:bg-navy-700',
                           )}
                           onMouseEnter={() => setHovered(b.id)}
                           onMouseLeave={() => setHovered(null)}
-                          title={`${b.reference} · ${shortDate(b.start)} – ${shortDate(b.end)}`}
+                          title={`${b.reference} · ${shortDate(b.start)} – ${openEnded ? 'open-ended' : shortDate(b.end ?? b.start)}`}
                         >
-                          <span className="truncate">{isShort ? 'Stay' : 'Lease'} · {b.reference}</span>
+                          <span className="truncate">{isShort ? 'Stay' : openEnded ? 'Rental' : 'Lease'} · {b.reference}</span>
                         </motion.div>
                       )
                     })}
@@ -205,7 +211,8 @@ function Timeline({ properties, bookings, days }: { properties: Property[]; book
       </div>
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line px-5 py-3">
-        <Legend className="bg-navy-900 dark:bg-navy-700" label="Long-term lease" />
+        <Legend className="bg-navy-900 dark:bg-navy-700" label="Fixed-term lease" />
+        <Legend className="bg-gold rounded-r-none" label="Open-ended rental (runs until notice)" />
         <Legend className="bg-[rgb(var(--c-status-info)/0.4)]" label="Short stay" />
         <Legend className="bg-gold-soft ring-1 ring-gold/40" label="Confirmed, not started" />
         <Legend className="bg-gold/20" label="Today" />
@@ -232,8 +239,8 @@ function MonthView({ properties, bookings }: { properties: Property[]; bookings:
     const map = new Map<string, { in: Booking[]; out: Booking[]; occupied: number }>()
     grid.forEach((g) => {
       const ins = bookings.filter((b) => b.status !== 'cancelled' && b.start === g.date)
-      const outs = bookings.filter((b) => b.status !== 'cancelled' && b.end === g.date)
-      const occupied = bookings.filter((b) => b.status !== 'cancelled' && b.start <= g.date && b.end > g.date).length
+      const outs = bookings.filter((b) => b.status !== 'cancelled' && b.end !== null && b.end === g.date)
+      const occupied = bookings.filter((b) => b.status !== 'cancelled' && b.start <= g.date && endOf(b) > g.date).length
       map.set(g.date, { in: ins, out: outs, occupied })
     })
     return map
@@ -385,7 +392,7 @@ function ListView({ properties, freeingUp }: { properties: Property[]; freeingUp
                       <span className="block truncate text-[13px] font-medium text-ink">{p.name}</span>
                       <span className="block truncate text-[11.5px] text-ink-muted">{p.address.district}</span>
                     </span>
-                    <span className="tnum shrink-0 text-[12.5px] font-medium text-ink-secondary">{money(p.price, 'EUR', true)}</span>
+                    <span className="tnum shrink-0 text-[12.5px] font-medium text-ink-secondary">{money(p.price, true)}</span>
                   </Link>
                 </li>
               ))}

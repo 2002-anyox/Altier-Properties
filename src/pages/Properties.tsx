@@ -8,7 +8,7 @@ import { PageHeader } from '../components/layout/PageHeader'
 import { PropertyImage } from '../components/PropertyImage'
 import {
   Button, Card, Chip, EmptyState, PROPERTY_STATUS_META, SearchInput, SegmentedControl, Select,
-  StatusChip, cx,
+  StatusChip, cx, statusLabel,
 } from '../components/ui'
 import { useStore } from '../lib/store'
 import { can } from '../lib/rbac'
@@ -168,7 +168,8 @@ export default function Properties() {
                   <span className="text-[12px] font-medium text-ink-secondary">Letting model</span>
                   <Select value={mode} onChange={(e) => setMode(e.target.value as any)}>
                     <option value="all">Any model</option>
-                    <option value="long_term">Long term</option>
+                    <option value="long_term">Fixed-term lease</option>
+                    <option value="rental">Open-ended rental</option>
                     <option value="short_stay">Short stay</option>
                   </Select>
                 </label>
@@ -365,7 +366,7 @@ function MapView({ properties }: { properties: Property[] }) {
           {(Object.keys(PROPERTY_STATUS_META) as Array<keyof typeof PROPERTY_STATUS_META>).map((k) => (
             <span key={k} className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-secondary">
               <span className={cx('h-2 w-2 rounded-full', PROPERTY_STATUS_META[k].dot)} aria-hidden />
-              {PROPERTY_STATUS_META[k].label}
+              {statusLabel(k)}
             </span>
           ))}
         </div>

@@ -5,7 +5,7 @@ import { Download, FileBarChart, Percent, TrendingUp } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { AreaTrendChart, BarList, ChartFrame, ColumnChart, DonutChart, VIZ } from '../components/charts'
 import {
-  Button, Card, CardHeader, Meter, PROPERTY_STATUS_META, SegmentedControl, Select, cx,
+  Button, Card, CardHeader, Meter, PROPERTY_STATUS_META, SegmentedControl, Select, cx, statusLabel,
 } from '../components/ui'
 import { useStore } from '../lib/store'
 import { money, pct } from '../lib/format'
@@ -50,7 +50,8 @@ export default function Reports() {
 
   const byModel = useMemo(() => {
     const rows = [
-      { label: 'Long term', mode: 'long_term' as const },
+      { label: 'Fixed lease', mode: 'long_term' as const },
+      { label: 'Open rental', mode: 'rental' as const },
       { label: 'Short stay', mode: 'short_stay' as const },
     ]
     return rows.map((r) => {
@@ -157,7 +158,7 @@ export default function Reports() {
               { key: 'collected', label: 'Collected', color: VIZ[0] },
               { key: 'billed', label: 'Billed', color: VIZ[1], dashed: true },
             ]}
-            format={(n) => money(n, 'EUR', true)}
+            format={(n) => money(n, true)}
             height={252}
           />
         </ChartFrame>
@@ -169,14 +170,14 @@ export default function Reports() {
             <table className="w-full text-left text-[12.5px]">
               <thead className="text-ink-muted"><tr className="border-b border-line"><th className="py-2 pr-4 font-medium">Status</th><th className="py-2 text-right font-medium">Count</th></tr></thead>
               <tbody className="divide-y divide-[rgb(var(--c-border))]">
-                {mix.map((m) => <tr key={m.status}><td className="py-2 pr-4 text-ink-secondary">{PROPERTY_STATUS_META[m.status].label}</td><td className="tnum py-2 text-right text-ink">{m.count}</td></tr>)}
+                {mix.map((m) => <tr key={m.status}><td className="py-2 pr-4 text-ink-secondary">{statusLabel(m.status)}</td><td className="tnum py-2 text-right text-ink">{m.count}</td></tr>)}
               </tbody>
             </table>
           }
         >
           <div className="px-3 py-2">
             <DonutChart
-              segments={mix.filter((m) => m.count > 0).map((m) => ({ label: PROPERTY_STATUS_META[m.status].label, value: m.count, color: statusColors[m.status] }))}
+              segments={mix.filter((m) => m.count > 0).map((m) => ({ label: statusLabel(m.status), value: m.count, color: statusColors[m.status] }))}
               centerValue={String(kpis.totalProperties)}
               centerLabel="Properties"
               size={162}
@@ -198,7 +199,7 @@ export default function Reports() {
             </table>
           }
         >
-          <div className="pt-2"><BarList items={byDistrict} format={(n) => money(n, 'EUR', true)} color={VIZ[0]} /></div>
+          <div className="pt-2"><BarList items={byDistrict} format={(n) => money(n, true)} color={VIZ[0]} /></div>
         </ChartFrame>
 
         <ChartFrame
@@ -219,7 +220,7 @@ export default function Reports() {
             data={byModel}
             xKey="label"
             series={[{ key: 'revenue', label: 'Revenue', color: VIZ[0] }, { key: 'costs', label: 'Maintenance', color: VIZ[4] }]}
-            format={(n) => money(n, 'EUR', true)}
+            format={(n) => money(n, true)}
             height={218}
           />
         </ChartFrame>
@@ -256,7 +257,7 @@ export default function Reports() {
                 <tr key={r.property.id} className="transition-colors hover:bg-surface-inset/60">
                   <td className="px-5 py-3 sm:px-6">
                     <Link to={`/properties/${r.property.id}`} className="font-medium text-ink hover:text-gold">{r.property.name}</Link>
-                    <span className="block text-[11.5px] text-ink-muted">{r.property.code} · {r.property.mode === 'short_stay' ? 'Short stay' : 'Long term'}</span>
+                    <span className="block text-[11.5px] text-ink-muted">{r.property.code} · {r.property.mode === 'short_stay' ? 'Short stay' : r.property.mode === 'rental' ? 'Open rental' : 'Fixed lease'}</span>
                   </td>
                   <td className="px-4 py-3 text-ink-secondary">{r.property.address.district}</td>
                   <td className="tnum px-4 py-3 text-right text-ink">{money(r.revenue)}</td>

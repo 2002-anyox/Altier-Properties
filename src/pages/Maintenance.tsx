@@ -187,7 +187,7 @@ export default function Maintenance() {
                               <span className={cx('inline-flex items-center gap-1 text-[11px]', late ? 'text-[rgb(var(--c-status-critical))]' : 'text-ink-muted')}>
                                 <Timer size={11} /> {shortDate(m.dueOn)}
                               </span>
-                              <span className="tnum text-[11px] text-ink-muted">{money(m.actualCost ?? m.estimatedCost, 'EUR', true)}</span>
+                              <span className="tnum text-[11px] text-ink-muted">{money(m.actualCost ?? m.estimatedCost, true)}</span>
                             </div>
                           </button>
                         </motion.li>

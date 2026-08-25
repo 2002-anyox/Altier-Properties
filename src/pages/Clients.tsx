@@ -151,7 +151,7 @@ export default function Clients() {
                       </p>
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="tnum text-[15px] font-semibold text-ink">{money(c.lifetimeValue, 'EUR', true)}</p>
+                      <p className="tnum text-[15px] font-semibold text-ink">{money(c.lifetimeValue, true)}</p>
                       <p className="mt-0.5 inline-flex items-center gap-1 text-[11.5px] text-ink-muted">
                         <Star size={10} className="fill-gold text-gold" /> {c.rating.toFixed(1)}
                       </p>

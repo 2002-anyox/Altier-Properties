@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Link, useNavigate } from 'react-router-dom'
 import {
@@ -7,6 +7,7 @@ import {
 import clsx from 'clsx'
 import { useStore } from '../../lib/store'
 import { ROLES, roleLabel } from '../../lib/rbac'
+import { t } from '../../lib/strings'
 import { Avatar, Button, IconButton, cx } from '../ui'
 import { popVariants, spring } from '../../lib/motion'
 import { relativeDay } from '../../lib/format'
@@ -25,13 +26,23 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
   const [roleOpen, setRoleOpen] = useState(false)
   const navigate = useNavigate()
 
+  /* Both menus are dismissible from the keyboard, not just by clicking away. */
+  useEffect(() => {
+    if (!bellOpen && !roleOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setBellOpen(false); setRoleOpen(false) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [bellOpen, roleOpen])
+
   const unread = useMemo(() => state.notifications.filter((n) => !n.read), [state.notifications])
   const me = state.team.find((t) => t.id === state.currentUserId) ?? state.team[0]
 
   return (
     <header className="glass sticky top-0 z-40 border-b border-line">
       <div className="mx-auto flex h-16 w-full max-w-full items-center gap-2 px-4 sm:gap-3 sm:px-6">
-        <IconButton label="Open navigation" onClick={onOpenNav} className="lg:hidden">
+        <IconButton label={t('action.openNav')} onClick={onOpenNav} className="lg:hidden">
           <Menu size={19} />
         </IconButton>
 
@@ -40,12 +51,12 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
           className="group flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-line bg-surface-card px-3 text-left text-sm text-ink-muted transition-colors duration-200 hover:border-line-strong sm:max-w-md"
         >
           <Search size={15} className="shrink-0" aria-hidden />
-          <span className="flex-1 truncate">Search properties, clients, invoices…</span>
+          <span className="flex-1 truncate">{t('action.search')}</span>
           <kbd className="hidden rounded-md border border-line bg-surface-inset px-1.5 py-0.5 text-[10.5px] font-medium sm:block">⌘K</kbd>
         </button>
 
         <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-1.5">
-          <IconButton label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} onClick={toggleTheme}>
+          <IconButton label={theme === 'dark' ? t('action.themeLight') : t('action.themeDark')} onClick={toggleTheme}>
             <AnimatePresence mode="wait" initial={false}>
               <motion.span
                 key={theme}
@@ -62,7 +73,7 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
 
           {/* Notifications */}
           <div className="relative">
-            <IconButton label={`Notifications, ${unread.length} unread`} onClick={() => { setBellOpen((v) => !v); setRoleOpen(false) }}>
+            <IconButton label={`${t('action.notifications')}, ${unread.length} ${t('action.unread')}`} onClick={() => { setBellOpen((v) => !v); setRoleOpen(false) }}>
               <Bell size={17} />
               {unread.length > 0 && (
                 <motion.span
@@ -81,21 +92,21 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
                   <div className="fixed inset-0 z-40" onClick={() => setBellOpen(false)} aria-hidden />
                   <motion.div
                     variants={popVariants} initial="initial" animate="animate" exit="exit"
-                    className="absolute right-0 z-50 mt-2 w-[min(380px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-surface-raised shadow-lift"
+                    className="fixed inset-x-3 top-[4.25rem] z-50 overflow-hidden rounded-2xl border border-line bg-surface-raised shadow-lift sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[380px]"
                   >
                     <div className="flex items-center justify-between border-b border-line px-4 py-3">
                       <div>
-                        <p className="text-[13.5px] font-semibold text-ink">Notifications</p>
-                        <p className="text-[11.5px] text-ink-muted">{unread.length} unread</p>
+                        <p className="text-[13.5px] font-semibold text-ink">{t('action.notifications')}</p>
+                        <p className="text-[11.5px] text-ink-muted">{unread.length} {t('action.unread')}</p>
                       </div>
                       <Button
                         size="sm" variant="ghost"
                         onClick={() => { dispatch({ type: 'mark-all-read' }); toast({ title: 'All caught up', tone: 'success' }) }}
                       >
-                        <Check size={13} /> Mark all read
+                        <Check size={13} /> {t('action.markAllRead')}
                       </Button>
                     </div>
-                    <ul className="max-h-[min(420px,60vh)] divide-y divide-[rgb(var(--c-border))] overflow-y-auto">
+                    <ul className="max-h-[min(420px,55vh)] divide-y divide-[rgb(var(--c-border))] overflow-y-auto overscroll-contain">
                       {state.notifications.slice(0, 8).map((n) => (
                         <li key={n.id}>
                           <button
@@ -117,7 +128,7 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
                         to="/notifications" onClick={() => setBellOpen(false)}
                         className="block rounded-xl px-3 py-2 text-center text-[13px] font-medium text-ink-secondary transition-colors hover:bg-surface-inset hover:text-ink"
                       >
-                        Open notification centre
+                        {t('action.openCentre')}
                       </Link>
                     </div>
                   </motion.div>
@@ -147,12 +158,12 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
                   <div className="fixed inset-0 z-40" onClick={() => setRoleOpen(false)} aria-hidden />
                   <motion.div
                     variants={popVariants} initial="initial" animate="animate" exit="exit"
-                    className="absolute right-0 z-50 mt-2 w-[min(300px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-surface-raised shadow-lift"
+                    className="fixed inset-x-3 top-[4.25rem] z-50 overflow-hidden rounded-2xl border border-line bg-surface-raised shadow-lift sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[300px]"
                     role="menu"
                   >
                     <div className="border-b border-line px-4 py-3">
                       <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
-                        <UserCog size={12} /> View as
+                        <UserCog size={12} /> {t('action.viewAs')}
                       </p>
                     </div>
                     <ul className="p-1.5">

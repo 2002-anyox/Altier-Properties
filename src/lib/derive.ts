@@ -3,6 +3,12 @@ import type {
   Booking, Client, Invoice, MaintenanceRequest, Property, PropertyStatus,
 } from './types'
 
+/** An open-ended rental has no end date; for range maths treat it as running
+ *  indefinitely, and render it as "open-ended" rather than as a date. */
+export const OPEN_ENDED_SENTINEL = '2999-12-31'
+export const endOf = (b: Booking) => b.end ?? OPEN_ENDED_SENTINEL
+export const isOpenEnded = (b: Booking) => b.end === null
+
 export interface Kpis {
   totalProperties: number
   occupiedUnits: number
@@ -151,9 +157,10 @@ export function propertyPerformance(
     const billed = inv.reduce((a, i) => a + i.amount, 0)
     const outstanding = inv.reduce((a, i) => a + (i.amount - i.paidAmount), 0)
     const costs = maintenance.filter((m) => m.propertyId === p.id).reduce((a, m) => a + (m.actualCost ?? m.estimatedCost * 0.5), 0)
+    /* An open-ended rental is counted to today, not to a fabricated end. */
     const nights = bookings
       .filter((b) => b.propertyId === p.id && b.status !== 'cancelled')
-      .reduce((a, b) => a + Math.max(0, daysBetween(b.start, b.end)), 0)
+      .reduce((a, b) => a + Math.max(0, daysBetween(b.start, b.end ?? iso(TODAY))), 0)
     return {
       property: p,
       revenue,
@@ -179,10 +186,10 @@ export function upcomingAvailability(properties: Property[], windowDays = 45) {
 }
 
 /** A booking occupies a property on a given ISO day. */
-export const bookingCovers = (b: Booking, day: string) => day >= b.start && day < b.end
+export const bookingCovers = (b: Booking, day: string) => day >= b.start && day < endOf(b)
 
 export function bookingsForRange(bookings: Booking[], from: string, to: string) {
-  return bookings.filter((b) => b.status !== 'cancelled' && b.start < to && b.end > from)
+  return bookings.filter((b) => b.status !== 'cancelled' && b.start < to && endOf(b) > from)
 }
 
 export function buildMonthGrid(anchor: Date) {

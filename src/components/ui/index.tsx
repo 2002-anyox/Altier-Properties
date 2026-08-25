@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import clsx from 'clsx'
 import { Check, ChevronDown, Search, X } from 'lucide-react'
 import { drawerVariants, popVariants, spring, swift } from '../../lib/motion'
+import { t } from '../../lib/strings'
 import type { InvoiceStatus, MaintenancePriority, MaintenanceStatus, PropertyStatus } from '../../lib/types'
 
 export const cx = clsx
@@ -126,12 +127,16 @@ export function Chip({ className, children, dot }: { className?: string; childre
   )
 }
 
+/** Status wording follows the interface language; the English label in
+ *  PROPERTY_STATUS_META is the fallback. */
+export const statusLabel = (status: PropertyStatus) => t(`status.${status}`)
+
 /** `onImage` swaps to a legible dark pill for use over photography. */
 export const StatusChip = ({ status, onImage }: { status: PropertyStatus; onImage?: boolean }) => {
   const m = PROPERTY_STATUS_META[status]
   return (
     <Chip className={onImage ? 'bg-navy-950/75 text-white ring-1 ring-white/15 backdrop-blur-sm' : m.chip} dot={m.dot}>
-      {m.label}
+      {statusLabel(status)}
     </Chip>
   )
 }

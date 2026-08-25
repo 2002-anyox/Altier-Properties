@@ -187,8 +187,10 @@ export default function ClientDetail() {
                           <td className="px-4 py-3">
                             <Link to={`/properties/${b.propertyId}`} className="text-ink-secondary hover:text-gold">{p?.name}</Link>
                           </td>
-                          <td className="px-4 py-3 text-ink-secondary">{b.mode === 'short_stay' ? 'Short stay' : 'Long term'}</td>
-                          <td className="px-4 py-3 text-ink-secondary">{shortDate(b.start)} – {shortDate(b.end)}</td>
+                          <td className="px-4 py-3 text-ink-secondary">{b.mode === 'short_stay' ? 'Short stay' : b.mode === 'rental' ? 'Open-ended rental' : 'Fixed-term lease'}</td>
+                          <td className="px-4 py-3 text-ink-secondary">
+                            {shortDate(b.start)} – {b.end ? shortDate(b.end) : <span className="text-gold">open-ended</span>}
+                          </td>
                           <td className="px-4 py-3">
                             <Chip className={
                               b.status === 'in_progress' ? 'bg-gold-soft text-gold-ink'

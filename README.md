@@ -45,11 +45,22 @@ arrivals and departures, and a list view including everything freeing up in the 
 properties, agreements, payment history, reliability scoring, notes and a single communications
 thread across email, calls, SMS, portal messages and internal notes.
 
-**Bookings and tenancies** — long lets and short stays in one pipeline, with source, term, deposit,
-linked charges and turnover prompts.
+**Bookings and tenancies** — three agreement types in one pipeline:
 
-**Payments and invoices** — paid, pending, part paid, overdue and upcoming; overdue ageing; inline
-*record payment* and *send reminder*; an invoice drawer that discloses fees and funding dates.
+- *Fixed-term lease* — a start, an end and a renewal decision.
+- *Open-ended rental* — rolling monthly until the tenant gives notice, with several months of rent
+  taken up front so a tenancy cannot collapse after one or two months and strand the owner. The
+  record carries the advance taken, the notice required, and the date rent is paid through; alerts
+  fire as that date approaches and again once it lapses.
+- *Short stay* — nightly, Airbnb-style.
+
+**Region, currency and language** — figures are held in one base currency and presented in another,
+so switching never rewrites a stored amount. Ten currencies including the Ugandan, Kenyan and
+Tanzanian shilling, region-aware date and number formatting, and an interface language setting.
+
+**Payments and invoices** — rent, advances, deposits, bookings and ancillary charges; paid, pending,
+part paid, overdue and upcoming; overdue ageing; inline *record payment* and *send reminder*; an
+invoice drawer that discloses fees and funding dates.
 
 **Maintenance** — a five-stage board or list, with priority, vendor, assignee, estimated and actual
 cost, and a full job timeline.

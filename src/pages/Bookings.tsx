@@ -11,10 +11,17 @@ import { can } from '../lib/rbac'
 import { TODAY, daysBetween, iso } from '../lib/data'
 import { mediumDate, money, relativeDay, shortDate } from '../lib/format'
 import { itemVariants, listVariants } from '../lib/motion'
+import { isOpenEnded } from '../lib/derive'
 import type { Booking, BookingSource, BookingStatus, TenancyMode } from '../lib/types'
 
 const SOURCE_LABEL: Record<BookingSource, string> = {
   direct: 'Direct', airbnb: 'Airbnb', booking_com: 'Booking.com', agency: 'Agency', corporate: 'Corporate',
+}
+
+const MODE_LABEL: Record<TenancyMode, string> = {
+  long_term: 'Fixed-term lease',
+  rental: 'Open-ended rental',
+  short_stay: 'Short stay',
 }
 
 const STATUS_CHIP: Record<BookingStatus, string> = {
@@ -102,7 +109,8 @@ export default function Bookings() {
           <SearchInput value={query} onChange={setQuery} placeholder="Search reference, property or client…" className="min-w-[220px] flex-1" />
           <Select value={mode} onChange={(e) => setMode(e.target.value as any)} aria-label="Filter by letting model" className="w-auto min-w-[160px]">
             <option value="all">All models</option>
-            <option value="long_term">Long term</option>
+            <option value="long_term">Fixed-term lease</option>
+            <option value="rental">Open-ended rental</option>
             <option value="short_stay">Short stay</option>
           </Select>
           <Select value={source} onChange={(e) => setSource(e.target.value as any)} aria-label="Filter by booking source" className="w-auto min-w-[150px]">
@@ -156,13 +164,13 @@ export default function Bookings() {
                 {rows.map((b) => {
                   const p = state.properties.find((x) => x.id === b.propertyId)
                   const c = state.clients.find((x) => x.id === b.clientId)
-                  const nights = Math.max(1, daysBetween(b.start, b.end))
+                  const nights = Math.max(1, daysBetween(b.start, b.end ?? b.start))
                   const value = b.mode === 'short_stay' ? nights * b.rate : b.rate
                   return (
                     <tr key={b.id} className="cursor-pointer transition-colors hover:bg-surface-inset/60" onClick={() => setSelected(b)}>
                       <td className="px-5 py-3 sm:px-6">
                         <span className="block font-medium text-ink">{b.reference}</span>
-                        <span className="block text-[11.5px] text-ink-muted">{b.mode === 'short_stay' ? `${nights} nights` : 'Long term'}</span>
+                        <span className="block text-[11.5px] text-ink-muted">{b.mode === 'short_stay' ? `${nights} nights` : b.mode === 'rental' ? `${b.advanceMonths}-month advance` : 'Fixed term'}</span>
                       </td>
                       <td className="px-4 py-3">
                         <span className="flex items-center gap-2">
@@ -171,7 +179,9 @@ export default function Bookings() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-ink-secondary">{p?.name}</td>
-                      <td className="px-4 py-3 text-ink-secondary">{shortDate(b.start)} – {shortDate(b.end)}</td>
+                      <td className="px-4 py-3 text-ink-secondary">
+                        {shortDate(b.start)} – {b.end ? shortDate(b.end) : <span className="text-gold">open-ended</span>}
+                      </td>
                       <td className="px-4 py-3">
                         <Chip className="bg-surface-inset text-ink-secondary"><Globe size={10} /> {SOURCE_LABEL[b.source]}</Chip>
                       </td>
@@ -190,7 +200,7 @@ export default function Bookings() {
         open={!!selected}
         onClose={() => setSelected(null)}
         title={selected?.reference ?? ''}
-        subtitle={selected && <span>{selected.mode === 'short_stay' ? 'Short stay' : 'Long-term lease'} · {SOURCE_LABEL[selected.source]}</span>}
+        subtitle={selected && <span>{MODE_LABEL[selected.mode]} · {SOURCE_LABEL[selected.source]}</span>}
         footer={
           <>
             <Button variant="secondary" onClick={() => setSelected(null)}>Close</Button>
@@ -217,10 +227,21 @@ export default function Bookings() {
               <Detail label="Property" value={<Link to={`/properties/${selected.propertyId}`} className="text-ink hover:text-gold">{selectedProperty?.name}</Link>} />
               <Detail label="District" value={selectedProperty?.address.district ?? '—'} />
               <Detail label="Starts" value={`${mediumDate(selected.start)} · ${selected.checkIn}`} />
-              <Detail label="Ends" value={`${mediumDate(selected.end)} · ${selected.checkOut}`} />
+              <Detail
+                label="Ends"
+                value={selected.end ? `${mediumDate(selected.end)} · ${selected.checkOut}` : 'Open-ended — runs until notice'}
+              />
               <Detail label="Rate" value={`${money(selected.rate)} ${selected.mode === 'short_stay' ? 'per night' : 'per month'}`} />
               <Detail label="Deposit held" value={money(selected.deposit)} />
-              <Detail label="Guests" value={String(selected.guests)} />
+              {selected.mode === 'rental' ? (
+                <>
+                  <Detail label="Advance taken" value={`${selected.advanceMonths} months · ${money(selected.rate * selected.advanceMonths)}`} />
+                  <Detail label="Notice required" value={`${selected.noticeDays} days`} />
+                  <Detail label="Rent paid through" value={selected.paidThrough ? mediumDate(selected.paidThrough) : '—'} />
+                </>
+              ) : (
+                <Detail label="Guests" value={String(selected.guests)} />
+              )}
               <Detail label="Created" value={mediumDate(selected.createdAt)} />
             </dl>
 
@@ -249,9 +270,13 @@ export default function Bookings() {
             {selected.status !== 'completed' && selected.status !== 'cancelled' && (
               <div className="rounded-xl border border-gold/40 bg-gold-soft/40 p-3.5">
                 <p className="text-[12.5px] font-medium text-gold-ink">
-                  {daysBetween(iso(TODAY), selected.end) >= 0
-                    ? `${selected.mode === 'short_stay' ? 'Check-out' : 'Lease end'} ${relativeDay(selected.end)} — turnover and cleaning can be scheduled from the maintenance board.`
-                    : 'This agreement has run past its end date. Confirm the renewal or close it off.'}
+                  {isOpenEnded(selected)
+                    ? selected.paidThrough && daysBetween(iso(TODAY), selected.paidThrough) < 0
+                      ? `Rent lapsed ${Math.abs(daysBetween(iso(TODAY), selected.paidThrough))} days ago. The ${selected.advanceMonths}-month advance is spent — collect before the arrears grow.`
+                      : `Rent is covered to ${selected.paidThrough ? mediumDate(selected.paidThrough) : '—'}. ${selected.noticeDays} days notice required to end the tenancy.`
+                    : selected.end && daysBetween(iso(TODAY), selected.end) >= 0
+                      ? `${selected.mode === 'short_stay' ? 'Check-out' : 'Lease end'} ${relativeDay(selected.end)} — turnover and cleaning can be scheduled from the maintenance board.`
+                      : 'This agreement has run past its end date. Confirm the renewal or close it off.'}
                 </p>
               </div>
             )}

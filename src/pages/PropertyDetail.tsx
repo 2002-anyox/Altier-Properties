@@ -10,7 +10,7 @@ import { PropertyImage } from '../components/PropertyImage'
 import { ChartFrame, ColumnChart, VIZ } from '../components/charts'
 import {
   Avatar, Button, Card, CardHeader, Chip, EmptyState, InvoiceChip, MaintenanceChip, Meter,
-  PROPERTY_STATUS_META, PriorityChip, Select, StatusChip, Tabs, cx,
+  PROPERTY_STATUS_META, PriorityChip, Select, StatusChip, Tabs, cx, statusLabel,
 } from '../components/ui'
 import { useStore } from '../lib/store'
 import { can } from '../lib/rbac'
@@ -45,6 +45,7 @@ export default function PropertyDetail() {
   const manager = state.team.find((t) => t.id === property.managerId)
   const current = bookings.find((b) => b.status === 'in_progress')
   const currentClient = current ? state.clients.find((c) => c.id === current.clientId) : undefined
+  const rentCovered = current?.paidThrough ? daysBetween(iso(TODAY), current.paidThrough) : 0
   const revenue = invoices.reduce((a, i) => a + i.paidAmount, 0)
   const outstanding = invoices.reduce((a, i) => a + (i.amount - i.paidAmount), 0)
   const spend = jobs.reduce((a, m) => a + (m.actualCost ?? 0), 0)
@@ -66,7 +67,7 @@ export default function PropertyDetail() {
 
   const changeStatus = (next: PropertyStatus) => {
     dispatch({ type: 'set-property-status', id: property.id, status: next })
-    toast({ title: `${property.name} is now ${PROPERTY_STATUS_META[next].label.toLowerCase()}`, tone: 'success' })
+    toast({ title: `${property.name} is now ${statusLabel(next).toLowerCase()}`, tone: 'success' })
   }
 
   const tabs: Array<{ value: Tab; label: string; count?: number }> = [
@@ -94,7 +95,7 @@ export default function PropertyDetail() {
                 className="w-auto min-w-[176px]"
               >
                 {(Object.keys(PROPERTY_STATUS_META) as PropertyStatus[]).map((s) => (
-                  <option key={s} value={s}>{PROPERTY_STATUS_META[s].label}</option>
+                  <option key={s} value={s}>{statusLabel(s)}</option>
                 ))}
               </Select>
             )}
@@ -116,7 +117,7 @@ export default function PropertyDetail() {
             <div className="absolute left-4 top-4 flex flex-wrap gap-2">
               <StatusChip status={property.status} onImage />
               <Chip className="bg-navy-950/75 text-white ring-1 ring-white/15 backdrop-blur-sm">
-                {property.mode === 'short_stay' ? 'Short stay' : 'Long term'}
+                {property.mode === 'short_stay' ? 'Short stay' : property.mode === 'rental' ? 'Open-ended rental' : 'Fixed-term lease'}
               </Chip>
             </div>
             <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-3">
@@ -163,28 +164,68 @@ export default function PropertyDetail() {
                   <Avatar name={currentClient.name} size={38} tone="gold" />
                   <div className="min-w-0">
                     <p className="truncate text-[14px] font-medium text-ink group-hover:text-gold">{currentClient.name}</p>
-                    <p className="truncate text-[12px] text-ink-muted">{current.reference} · {current.mode === 'short_stay' ? 'Short stay' : 'Lease'}</p>
+                    <p className="truncate text-[12px] text-ink-muted">{current.reference} · {current.mode === 'short_stay' ? 'Short stay' : current.mode === 'rental' ? 'Open-ended rental' : 'Fixed-term lease'}</p>
                   </div>
                 </Link>
                 <div className="mt-4 space-y-3 border-t border-line pt-4">
-                  <div className="flex justify-between text-[12.5px]">
-                    <span className="text-ink-muted">Term</span>
-                    <span className="text-ink-secondary">{mediumDate(current.start)} – {mediumDate(current.end)}</span>
-                  </div>
-                  <div>
-                    <div className="mb-1.5 flex justify-between text-[12.5px]">
-                      <span className="text-ink-muted">Term elapsed</span>
-                      <span className="text-ink-secondary">
-                        {Math.max(0, daysBetween(iso(TODAY), current.end))} days remaining
-                      </span>
-                    </div>
-                    <Meter
-                      value={Math.max(0, daysBetween(current.start, iso(TODAY)))}
-                      max={Math.max(1, daysBetween(current.start, current.end))}
-                      tone="gold"
-                      label="Proportion of the term elapsed"
-                    />
-                  </div>
+                  {current.mode === 'rental' ? (
+                    <>
+                      <div className="flex justify-between text-[12.5px]">
+                        <span className="text-ink-muted">Started</span>
+                        <span className="text-ink-secondary">{mediumDate(current.start)} · open-ended</span>
+                      </div>
+                      <div className="flex justify-between text-[12.5px]">
+                        <span className="text-ink-muted">Advance taken</span>
+                        <span className="text-ink-secondary">{current.advanceMonths} months</span>
+                      </div>
+                      <div className="flex justify-between text-[12.5px]">
+                        <span className="text-ink-muted">Notice required</span>
+                        <span className="text-ink-secondary">{current.noticeDays} days</span>
+                      </div>
+                      <div>
+                        <div className="mb-1.5 flex justify-between text-[12.5px]">
+                          <span className="text-ink-muted">Rent covered to</span>
+                          <span className={cx(rentCovered < 0 ? 'text-[rgb(var(--c-status-critical))]' : 'text-ink-secondary')}>
+                            {current.paidThrough ? mediumDate(current.paidThrough) : '—'}
+                          </span>
+                        </div>
+                        <Meter
+                          value={Math.max(0, Math.min(rentCovered, 90))}
+                          max={90}
+                          tone={rentCovered < 0 ? 'critical' : rentCovered < 14 ? 'gold' : 'good'}
+                          label="Days of rent remaining before the tenancy lapses"
+                        />
+                        <p className="mt-1.5 text-[11.5px] text-ink-muted">
+                          {rentCovered < 0
+                            ? `${Math.abs(rentCovered)} days in arrears`
+                            : `${rentCovered} days of rent remaining`}
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex justify-between text-[12.5px]">
+                        <span className="text-ink-muted">Term</span>
+                        <span className="text-ink-secondary">
+                          {mediumDate(current.start)} – {current.end ? mediumDate(current.end) : 'open-ended'}
+                        </span>
+                      </div>
+                      <div>
+                        <div className="mb-1.5 flex justify-between text-[12.5px]">
+                          <span className="text-ink-muted">Term elapsed</span>
+                          <span className="text-ink-secondary">
+                            {current.end ? `${Math.max(0, daysBetween(iso(TODAY), current.end))} days remaining` : 'no fixed end'}
+                          </span>
+                        </div>
+                        <Meter
+                          value={Math.max(0, daysBetween(current.start, iso(TODAY)))}
+                          max={Math.max(1, current.end ? daysBetween(current.start, current.end) : 365)}
+                          tone="gold"
+                          label="Proportion of the term elapsed"
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             ) : (
@@ -238,7 +279,7 @@ export default function PropertyDetail() {
                 {[
                   ['Reference', property.code],
                   ['Type', property.type.replace(/_/g, ' ')],
-                  ['Letting model', property.mode === 'short_stay' ? 'Short stay' : 'Long term'],
+                  ['Letting model', property.mode === 'short_stay' ? 'Short stay' : property.mode === 'rental' ? 'Open-ended rental' : 'Fixed-term lease'],
                   ['District', property.address.district],
                   ['Acquired', mediumDate(property.acquiredOn)],
                   ['Documents', `${property.documents.length} on file`],
@@ -274,10 +315,10 @@ export default function PropertyDetail() {
                     <div className="min-w-0 flex-1 pb-1">
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
                         <p className="text-[13.5px] font-medium text-ink">{row.who}</p>
-                        <p className="text-[12px] text-ink-muted">{shortDate(row.from)} – {row.to ? shortDate(row.to) : 'present'}</p>
+                        <p className="text-[12px] text-ink-muted">{shortDate(row.from)} – {row.to ? shortDate(row.to) : 'ongoing'}</p>
                       </div>
                       <p className="mt-0.5 text-[12px] text-ink-muted">
-                        {row.ref} · {row.mode === 'short_stay' ? 'Short stay' : 'Long term'} · {row.status.replace(/_/g, ' ')}
+                        {row.ref} · {row.mode === 'short_stay' ? 'Short stay' : row.mode === 'rental' ? 'Open-ended rental' : 'Fixed-term lease'} · {row.status.replace(/_/g, ' ')}
                       </p>
                     </div>
                   </li>
@@ -287,9 +328,9 @@ export default function PropertyDetail() {
 
             <Card className="card-pad">
               <h3 className="text-[15px] font-semibold text-ink">Utilisation</h3>
-              <p className="mt-1 text-[12.5px] text-ink-muted">Nights let across all recorded agreements</p>
+              <p className="mt-1 text-[12.5px] text-ink-muted">Nights let across all agreements; open-ended rentals counted to today</p>
               <p className="tnum mt-5 text-[32px] font-semibold leading-none text-ink">
-                {bookings.reduce((a, b) => a + Math.max(0, daysBetween(b.start, b.end)), 0)}
+                {bookings.reduce((a, b) => a + Math.max(0, daysBetween(b.start, b.end ?? iso(TODAY))), 0)}
               </p>
               <p className="mt-1.5 text-[12.5px] text-ink-muted">nights across {bookings.length} agreements</p>
               <div className="mt-6 space-y-3 border-t border-line pt-5 text-[13px]">
@@ -328,7 +369,7 @@ export default function PropertyDetail() {
                 data={monthly}
                 xKey="label"
                 series={[{ key: 'income', label: 'Income', color: VIZ[0] }, { key: 'costs', label: 'Maintenance', color: VIZ[4] }]}
-                format={(n) => money(n, 'EUR', true)}
+                format={(n) => money(n, true)}
                 height={210}
               />
             </ChartFrame>

@@ -51,9 +51,25 @@ TeamMember ── manages ──> Property
 Notification ── points at ──> Property | Client | Invoice | Booking | MaintenanceRequest
 ```
 
-A **Booking** is deliberately polymorphic: `mode: 'long_term' | 'short_stay'`. A twelve-month lease
-and a three-night stay are the same object at different densities — that is what lets one calendar,
-one ledger and one pipeline serve both.
+A **Booking** is deliberately polymorphic: `mode: 'long_term' | 'rental' | 'short_stay'`. A
+twelve-month lease, an open-ended rental and a three-night stay are the same object at different
+densities — that is what lets one calendar, one ledger and one pipeline serve all three.
+
+| Mode | End date | Money up front | Ends when |
+|---|---|---|---|
+| `long_term` | fixed | one month deposit | the term runs out, or it is renewed |
+| `rental` | **none** | deposit **plus 3–12 months rent in advance** | the tenant gives notice (30–60 days) |
+| `short_stay` | fixed | full stay charged before arrival | check-out |
+
+The open-ended rental is the common arrangement in much of East Africa and is absent from every
+product surveyed. It has no expiry to count down to, so the thing that matters is the date rent is
+**paid through**: the advance sets it at move-in, each monthly payment pushes it forward, and the
+platform warns as it approaches and again once it lapses into arrears. On the timeline these
+agreements are drawn without a right-hand edge, because they have no scheduled end.
+
+**Presentation** is separate from data. Amounts are stored in one base currency and converted at
+display time; region controls date and number formatting; language controls the interface chrome.
+None of the three rewrites a stored figure.
 
 **Property status** is a five-state system used consistently across every surface, always paired with
 a label so colour never carries the meaning alone:

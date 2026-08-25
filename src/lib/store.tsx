@@ -3,6 +3,8 @@ import {
   BOOKINGS, CLIENTS, DEFAULT_REMINDERS, INVOICES, MAINTENANCE, PROPERTIES, TEAM, TODAY,
   buildNotifications, dayOffset, iso,
 } from './data'
+import { REGIONS, currencyDef, setPresentation } from './money'
+import { setLanguage, type Language } from './strings'
 import type {
   AppNotification, Booking, Client, Invoice, MaintenanceRequest, MaintenanceStatus,
   Property, PropertyStatus, ReminderSettings, Role, TeamMember,
@@ -21,6 +23,10 @@ interface State {
   team: TeamMember[]
   role: Role
   currentUserId: string
+  /** How figures and dates are presented. Amounts stay in EUR underneath. */
+  locale: string
+  currency: string
+  language: Language
 }
 
 type Action =
@@ -36,6 +42,9 @@ type Action =
   | { type: 'add-maintenance'; request: MaintenanceRequest }
   | { type: 'add-note'; clientId: string; text: string }
   | { type: 'update-reminders'; reminders: Partial<ReminderSettings> }
+  | { type: 'set-region'; locale: string }
+  | { type: 'set-currency'; currency: string }
+  | { type: 'set-language'; language: Language }
   | { type: 'reset' }
 
 const seed = (): State => ({
@@ -49,6 +58,9 @@ const seed = (): State => ({
   team: TEAM,
   role: 'owner',
   currentUserId: 'tm-01',
+  locale: 'en-GB',
+  currency: 'EUR',
+  language: 'en',
 })
 
 function reducer(state: State, action: Action): State {
@@ -160,6 +172,16 @@ function reducer(state: State, action: Action): State {
       const readIds = new Set(state.notifications.filter((n) => n.read).map((n) => n.id))
       return { ...state, reminders, notifications: fresh.map((n) => (readIds.has(n.id) ? { ...n, read: true } : n)) }
     }
+    /* Choosing a region moves the currency with it — nobody wants Uganda
+       priced in euros — but an explicit currency choice afterwards sticks. */
+    case 'set-region': {
+      const region = REGIONS.find((r) => r.locale === action.locale)
+      return { ...state, locale: action.locale, currency: region?.currency ?? state.currency }
+    }
+    case 'set-currency':
+      return { ...state, currency: currencyDef(action.currency).code }
+    case 'set-language':
+      return { ...state, language: action.language }
     case 'reset':
       return seed()
     default:
@@ -215,7 +237,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     try {
       const raw = localStorage.getItem(PREFS_KEY)
       if (raw) {
-        const parsed = JSON.parse(raw) as { role?: Role; reminders?: ReminderSettings }
+        const parsed = JSON.parse(raw) as {
+          role?: Role; reminders?: ReminderSettings
+          locale?: string; currency?: string; language?: Language
+        }
         if (parsed.role) {
           const member = base.team.find((t) => t.role === parsed.role)
           base.role = parsed.role
@@ -225,6 +250,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           base.reminders = { ...base.reminders, ...parsed.reminders }
           base.notifications = buildNotifications(base.properties, base.invoices, base.bookings, base.maintenance, base.clients, base.reminders)
         }
+        if (parsed.locale) base.locale = parsed.locale
+        if (parsed.currency) base.currency = parsed.currency
+        if (parsed.language) base.language = parsed.language
       }
     } catch {
       /* storage unavailable — the demo still runs */
@@ -246,9 +274,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ role: state.role, reminders: state.reminders }))
+      localStorage.setItem(PREFS_KEY, JSON.stringify({
+        role: state.role,
+        reminders: state.reminders,
+        locale: state.locale,
+        currency: state.currency,
+        language: state.language,
+      }))
     } catch { /* ignore */ }
-  }, [state.role, state.reminders])
+  }, [state.role, state.reminders, state.locale, state.currency, state.language])
+
+  /* Applied during render, not in an effect: the format helpers are read
+     synchronously by children, so an effect would leave one stale frame. */
+  setPresentation(state.locale, state.currency)
+  setLanguage(state.language)
 
   const toast = useCallback((t: Omit<Toast, 'id'>) => {
     const id = Date.now() + Math.random()

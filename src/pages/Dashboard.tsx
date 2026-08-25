@@ -8,7 +8,7 @@ import {
 import { PageHeader } from '../components/layout/PageHeader'
 import { StatTile } from '../components/StatTile'
 import { AreaTrendChart, ChartFrame, DonutChart, VIZ, VIZ_STATUS } from '../components/charts'
-import { Button, Card, CardHeader, Chip, EmptyState, Meter, PROPERTY_STATUS_META, StatusChip, cx } from '../components/ui'
+import { Button, Card, CardHeader, Chip, EmptyState, Meter, PROPERTY_STATUS_META, StatusChip, cx, statusLabel } from '../components/ui'
 import { useStore } from '../lib/store'
 import { can } from '../lib/rbac'
 import { TODAY, daysBetween, iso } from '../lib/data'
@@ -35,9 +35,11 @@ export default function Dashboard() {
       .flatMap((b) => {
         const rows: Array<{ id: string; kind: 'in' | 'out'; date: string; booking: typeof b }> = []
         const inGap = daysBetween(today, b.start)
-        const outGap = daysBetween(today, b.end)
         if (inGap >= 0 && inGap <= 7) rows.push({ id: `${b.id}-in`, kind: 'in', date: b.start, booking: b })
-        if (outGap >= 0 && outGap <= 7) rows.push({ id: `${b.id}-out`, kind: 'out', date: b.end, booking: b })
+        if (b.end) {
+          const outGap = daysBetween(today, b.end)
+          if (outGap >= 0 && outGap <= 7) rows.push({ id: `${b.id}-out`, kind: 'out', date: b.end, booking: b })
+        }
         return rows
       })
       .sort((a, b) => (a.date < b.date ? -1 : 1))
@@ -111,7 +113,7 @@ export default function Dashboard() {
                   <Sparkles size={12} /> This month
                 </p>
                 <p className="mt-4 text-[44px] font-semibold leading-none tracking-[-0.03em] text-white dark:text-ink">
-                  {money(kpis.monthlyRevenue, 'EUR')}
+                  {money(kpis.monthlyRevenue)}
                 </p>
                 <p className="mt-2.5 text-[13px] text-[rgb(var(--c-text-onrail-muted))] dark:text-ink-muted">
                   Collected revenue ·{' '}
@@ -123,8 +125,8 @@ export default function Dashboard() {
 
                 <div className="mt-6 space-y-3.5 border-t border-white/10 pt-5 dark:border-line">
                   <Row label="Collection rate" value={`${kpis.collectionRate.toFixed(1)}%`} meter={kpis.collectionRate} />
-                  <Row label="Upcoming (30 days)" value={money(kpis.upcomingAmount, 'EUR', true)} />
-                  <Row label="Overdue balance" value={money(kpis.overdueAmount, 'EUR', true)} tone="critical" />
+                  <Row label="Upcoming (30 days)" value={money(kpis.upcomingAmount, true)} />
+                  <Row label="Overdue balance" value={money(kpis.overdueAmount, true)} tone="critical" />
                 </div>
               </div>
             </div>
@@ -137,7 +139,7 @@ export default function Dashboard() {
         >
           <StatTile
             label="Total properties" value={String(kpis.totalProperties)} rawValue={kpis.totalProperties}
-            footnote={`${kpis.inactiveUnits} inactive · ${properties.filter((p) => p.mode === 'short_stay').length} short-stay`}
+            footnote={`${properties.filter((p) => p.mode === 'rental').length} open rentals · ${properties.filter((p) => p.mode === 'short_stay').length} short-stay`}
             to="/properties" icon={<Building2 size={15} />} tone="gold"
           />
           <StatTile
@@ -158,14 +160,14 @@ export default function Dashboard() {
           {showMoney && (
             <>
               <StatTile
-                label="Overdue payments" value={money(kpis.overdueAmount, 'EUR', true)} rawValue={kpis.overdueAmount}
-                format={(n) => money(n, 'EUR', true)}
+                label="Overdue payments" value={money(kpis.overdueAmount, true)} rawValue={kpis.overdueAmount}
+                format={(n) => money(n, true)}
                 footnote={`${kpis.overdueCount} invoices past due`} to="/payments?status=overdue"
                 icon={<TriangleAlert size={15} />} tone="critical"
               />
               <StatTile
-                label="Upcoming payments" value={money(kpis.upcomingAmount, 'EUR', true)} rawValue={kpis.upcomingAmount}
-                format={(n) => money(n, 'EUR', true)}
+                label="Upcoming payments" value={money(kpis.upcomingAmount, true)} rawValue={kpis.upcomingAmount}
+                format={(n) => money(n, true)}
                 footnote={`${kpis.upcomingCount} due in the next 30 days`} to="/payments?status=upcoming"
                 icon={<CircleDollarSign size={15} />}
               />
@@ -224,7 +226,7 @@ export default function Dashboard() {
                 { key: 'collected', label: 'Collected', color: VIZ[0] },
                 { key: 'billed', label: 'Billed', color: VIZ[1], dashed: true },
               ]}
-              format={(n) => money(n, 'EUR', true)}
+              format={(n) => money(n, true)}
               height={244}
             />
           </ChartFrame>
@@ -245,7 +247,7 @@ export default function Dashboard() {
               <tbody className="divide-y divide-[rgb(var(--c-border))]">
                 {mix.map((m) => (
                   <tr key={m.status}>
-                    <td className="py-2 pr-4 text-ink-secondary">{PROPERTY_STATUS_META[m.status].label}</td>
+                    <td className="py-2 pr-4 text-ink-secondary">{statusLabel(m.status)}</td>
                     <td className="tnum py-2 text-right text-ink">{m.count}</td>
                   </tr>
                 ))}
@@ -256,7 +258,7 @@ export default function Dashboard() {
           <div className="px-3 py-2">
             <DonutChart
               segments={mix.filter((m) => m.count > 0).map((m) => ({
-                label: PROPERTY_STATUS_META[m.status].label,
+                label: statusLabel(m.status),
                 value: m.count,
                 color: statusColors[m.status],
               }))}
@@ -274,7 +276,7 @@ export default function Dashboard() {
           <Card className="flex flex-col">
             <CardHeader
               title="Needs chasing"
-              subtitle={`${money(kpis.overdueAmount, 'EUR')} outstanding`}
+              subtitle={`${money(kpis.overdueAmount)} outstanding`}
               action={<Link to="/payments?status=overdue" className="text-[12.5px] font-medium text-gold link-underline">View all</Link>}
             />
             <div className="mt-3 flex-1">

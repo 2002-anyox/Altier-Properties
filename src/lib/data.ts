@@ -1,3 +1,4 @@
+import { presentation } from './money'
 import type {
   AppNotification, Booking, BookingSource, Client, Invoice, MaintenanceRequest,
   Property, PropertyDocument, PropertyStatus, PropertyType, ReminderSettings,
@@ -76,8 +77,8 @@ const SEEDS: Seed[] = [
   { name: 'Alcântara Loft 12', type: 'apartment', mode: 'short_stay', status: 'occupied', district: 'Alcântara', beds: 1, baths: 1, sqm: 64, price: 185, x: 0.24, y: 0.66 },
   { name: 'Belém Riverside 07', type: 'apartment', mode: 'short_stay', status: 'available', district: 'Belém', beds: 2, baths: 2, sqm: 88, price: 240, x: 0.12, y: 0.71 },
   { name: 'Avenida Penthouse', type: 'apartment', mode: 'long_term', status: 'occupied', district: 'Avenida da Liberdade', beds: 3, baths: 3, sqm: 176, price: 6200, x: 0.48, y: 0.34 },
-  { name: 'Estrela Garden Flat', type: 'apartment', mode: 'long_term', status: 'available', district: 'Estrela', beds: 2, baths: 1, sqm: 82, price: 1950, x: 0.34, y: 0.58 },
-  { name: 'Parque das Nações Tower 21F', type: 'apartment', mode: 'long_term', status: 'reserved', district: 'Parque das Nações', beds: 3, baths: 2, sqm: 132, price: 3100, x: 0.88, y: 0.22 },
+  { name: 'Estrela Garden Flat', type: 'apartment', mode: 'rental', status: 'available', district: 'Estrela', beds: 2, baths: 1, sqm: 82, price: 1950, x: 0.34, y: 0.58 },
+  { name: 'Parque das Nações Tower 21F', type: 'apartment', mode: 'rental', status: 'reserved', district: 'Parque das Nações', beds: 3, baths: 2, sqm: 132, price: 3100, x: 0.88, y: 0.22 },
   { name: 'Cascais Ocean Villa', type: 'villa', mode: 'short_stay', status: 'occupied', district: 'Cascais', beds: 5, baths: 4, sqm: 340, price: 720, x: 0.06, y: 0.84 },
   { name: 'Sintra Hill House', type: 'villa', mode: 'short_stay', status: 'maintenance', district: 'Sintra', beds: 4, baths: 3, sqm: 265, price: 480, x: 0.02, y: 0.46 },
   { name: 'Baixa Commercial Suite 300', type: 'commercial', mode: 'long_term', status: 'occupied', district: 'Baixa', beds: 0, baths: 2, sqm: 410, price: 7400, x: 0.52, y: 0.48 },
@@ -85,15 +86,15 @@ const SEEDS: Seed[] = [
   { name: 'Graça Serviced Residence 2A', type: 'serviced', mode: 'short_stay', status: 'occupied', district: 'Graça', beds: 2, baths: 2, sqm: 104, price: 210, x: 0.62, y: 0.38 },
   { name: 'Graça Serviced Residence 2B', type: 'serviced', mode: 'short_stay', status: 'available', district: 'Graça', beds: 2, baths: 2, sqm: 104, price: 210, x: 0.63, y: 0.36 },
   { name: 'Alfama Stone Apartment', type: 'apartment', mode: 'short_stay', status: 'occupied', district: 'Alfama', beds: 1, baths: 1, sqm: 52, price: 165, x: 0.58, y: 0.50 },
-  { name: 'Campo de Ourique 3D', type: 'apartment', mode: 'long_term', status: 'occupied', district: 'Campo de Ourique', beds: 3, baths: 2, sqm: 118, price: 2280, x: 0.28, y: 0.52 },
+  { name: 'Campo de Ourique 3D', type: 'apartment', mode: 'rental', status: 'occupied', district: 'Campo de Ourique', beds: 3, baths: 2, sqm: 118, price: 2280, x: 0.28, y: 0.52 },
   { name: 'Lapa Consulate House', type: 'house', mode: 'long_term', status: 'occupied', district: 'Lapa', beds: 5, baths: 4, sqm: 302, price: 8900, x: 0.30, y: 0.62 },
   { name: 'Marvila Warehouse Unit 4', type: 'commercial', mode: 'long_term', status: 'reserved', district: 'Marvila', beds: 0, baths: 2, sqm: 620, price: 5600, x: 0.78, y: 0.30 },
   { name: 'Bairro Alto Duplex', type: 'apartment', mode: 'short_stay', status: 'occupied', district: 'Bairro Alto', beds: 2, baths: 1, sqm: 74, price: 195, x: 0.42, y: 0.46 },
-  { name: 'Restelo Family Home', type: 'house', mode: 'long_term', status: 'available', district: 'Restelo', beds: 4, baths: 3, sqm: 240, price: 3950, x: 0.10, y: 0.62 },
-  { name: 'Saldanha Corporate 9C', type: 'apartment', mode: 'long_term', status: 'occupied', district: 'Saldanha', beds: 2, baths: 2, sqm: 98, price: 2650, x: 0.56, y: 0.26 },
+  { name: 'Restelo Family Home', type: 'house', mode: 'rental', status: 'available', district: 'Restelo', beds: 4, baths: 3, sqm: 240, price: 3950, x: 0.10, y: 0.62 },
+  { name: 'Saldanha Corporate 9C', type: 'apartment', mode: 'rental', status: 'occupied', district: 'Saldanha', beds: 2, baths: 2, sqm: 98, price: 2650, x: 0.56, y: 0.26 },
   { name: 'Anjos Micro-Loft 5', type: 'apartment', mode: 'short_stay', status: 'inactive', district: 'Anjos', beds: 1, baths: 1, sqm: 38, price: 120, x: 0.60, y: 0.30 },
   { name: 'Estoril Sea Terrace', type: 'apartment', mode: 'short_stay', status: 'reserved', district: 'Estoril', beds: 3, baths: 2, sqm: 142, price: 395, x: 0.04, y: 0.78 },
-  { name: 'Areeiro Residence 11', type: 'apartment', mode: 'long_term', status: 'maintenance', district: 'Areeiro', beds: 2, baths: 1, sqm: 86, price: 1780, x: 0.70, y: 0.26 },
+  { name: 'Areeiro Residence 11', type: 'apartment', mode: 'rental', status: 'maintenance', district: 'Areeiro', beds: 2, baths: 1, sqm: 86, price: 1780, x: 0.70, y: 0.26 },
   { name: 'Comércio Retail Front', type: 'commercial', mode: 'long_term', status: 'occupied', district: 'Baixa', beds: 0, baths: 1, sqm: 155, price: 6100, x: 0.54, y: 0.54 },
 ]
 
@@ -291,6 +292,11 @@ export const BOOKINGS: Booking[] = (() => {
   const out: Booking[] = []
   let n = 0
   const activeClients = CLIENTS.filter((c) => c.status !== 'past')
+  const addMonths = (from: string, months: number) => {
+    const d = new Date(from + 'T00:00:00')
+    d.setMonth(d.getMonth() + months)
+    return iso(d)
+  }
 
   PROPERTIES.forEach((p, pi) => {
     const attach = (clientIdx: number) => {
@@ -299,19 +305,20 @@ export const BOOKINGS: Booking[] = (() => {
       return c
     }
 
+    /* ---------------- Fixed-term lease: a start and an end ------------- */
     if (p.mode === 'long_term') {
-      // The live lease must actually cover today, or the calendar contradicts the status
       if (p.status === 'occupied' || p.status === 'maintenance') {
         const c = attach(pi)
         const months = pick([12, 12, 18, 24, 36])
         const elapsed = intBetween(30, months * 30 - 45)
         const start = dayOffset(-elapsed)
-        const end = iso(addDays(start, months * 30))
         out.push({
           id: `b-${++n}`, reference: `LSE-${2600 + n}`, propertyId: p.id, clientId: c.id,
           mode: 'long_term', status: 'in_progress',
-          start, end, rate: p.price, deposit: p.price * 2, guests: Math.max(1, p.bedrooms),
-          source: pick(['direct', 'agency', 'corporate']), checkIn: '14:00', checkOut: '11:00',
+          start, end: addMonths(start, months), rate: p.price, deposit: p.price * 2,
+          advanceMonths: 1, paidThrough: null, noticeDays: 60,
+          guests: Math.max(1, p.bedrooms), source: pick(['direct', 'agency', 'corporate']),
+          checkIn: '14:00', checkOut: '11:00',
           notes: 'Standard 60-day renewal notice window.', createdAt: dayOffset(-(elapsed + intBetween(14, 60))),
         })
       }
@@ -320,59 +327,101 @@ export const BOOKINGS: Booking[] = (() => {
         const start = dayOffset(intBetween(4, 30))
         out.push({
           id: `b-${++n}`, reference: `LSE-${2600 + n}`, propertyId: p.id, clientId: c.id,
-          mode: 'long_term', status: 'upcoming', start, end: iso(addDays(start, 365)),
-          rate: p.price, deposit: p.price * 2, guests: Math.max(1, p.bedrooms),
-          source: 'agency', checkIn: '14:00', checkOut: '11:00',
+          mode: 'long_term', status: 'upcoming', start, end: addMonths(start, 12),
+          rate: p.price, deposit: p.price * 2, advanceMonths: 1, paidThrough: null, noticeDays: 60,
+          guests: Math.max(1, p.bedrooms), source: 'agency', checkIn: '14:00', checkOut: '11:00',
           notes: 'Deposit received; keys released on move-in day.', createdAt: dayOffset(-intBetween(5, 25)),
         })
       }
-    } else {
-      /* Short stays: a run of completed stays, then the live one the status
-         promises, then forward bookings — so the calendar always agrees with
-         the property's status. */
-      const windows: Array<{ from: number; to: number; state: Booking['status'] }> = []
-      let cursor = -intBetween(80, 120)
-      const pastCount = p.status === 'inactive' ? 2 : intBetween(2, 4)
-      for (let k = 0; k < pastCount; k++) {
-        const nights = intBetween(2, p.type === 'villa' ? 10 : 6)
-        if (cursor + nights >= -3) break
-        windows.push({ from: cursor, to: cursor + nights, state: 'completed' })
-        cursor = cursor + nights + intBetween(3, 12)
-      }
-      if (p.status === 'occupied') {
-        const nights = intBetween(3, p.type === 'villa' ? 12 : 8)
-        const from = -intBetween(1, Math.max(1, nights - 2))
-        windows.push({ from, to: from + nights, state: 'in_progress' })
-        cursor = from + nights + intBetween(2, 6)
-      } else if (p.status === 'reserved') {
-        const from = intBetween(3, 14)
-        windows.push({ from, to: from + intBetween(3, 9), state: 'upcoming' })
-        cursor = from + 12
-      } else {
-        cursor = Math.max(cursor, intBetween(4, 20))
-      }
-      if (p.status !== 'inactive' && p.status !== 'maintenance') {
-        const forward = intBetween(2, 4)
-        for (let k = 0; k < forward; k++) {
-          const nights = intBetween(2, p.type === 'villa' ? 10 : 6)
-          const from = Math.max(cursor, 2)
-          windows.push({ from, to: from + nights, state: chance(0.15) ? 'pending' : 'upcoming' })
-          cursor = from + nights + intBetween(3, 16)
-        }
-      }
-      windows.forEach((w, k) => {
-        const c = attach(pi + k * 3)
-        out.push({
-          id: `b-${++n}`, reference: `STY-${7100 + n}`, propertyId: p.id, clientId: c.id,
-          mode: 'short_stay', status: w.state, start: dayOffset(w.from), end: dayOffset(w.to),
-          rate: p.price, deposit: Math.round(p.price * 1.5), guests: intBetween(1, Math.max(2, p.bedrooms * 2)),
-          source: pick(SOURCES), checkIn: '15:00', checkOut: '11:00',
-          notes: pick(['Self check-in via smart lock.', 'Early check-in requested.', 'Cot requested for infant.', 'Airport transfer arranged.', 'Late checkout approved (13:00).']),
-          createdAt: dayOffset(w.from - intBetween(8, 60)),
-        })
-      })
+      return
     }
+
+    /* -------- Open-ended rental: rolling until the tenant gives notice --
+       Several months are taken up front, so the tenancy cannot collapse
+       after one or two months and leave the owner re-letting at no notice. */
+    if (p.mode === 'rental') {
+      if (p.status === 'occupied' || p.status === 'maintenance') {
+        const c = attach(pi)
+        const advanceMonths = pick([3, 3, 3, 4, 6, 12])
+        const elapsed = intBetween(45, 900)
+        const start = dayOffset(-elapsed)
+        /* Rent is covered to a date the advance and every monthly payment
+           since have pushed forward; a date in the past means arrears. */
+        const paidThrough = dayOffset(intBetween(-6, 52))
+        out.push({
+          id: `b-${++n}`, reference: `RNT-${4800 + n}`, propertyId: p.id, clientId: c.id,
+          mode: 'rental', status: 'in_progress', start, end: null,
+          rate: p.price, deposit: p.price, advanceMonths, paidThrough,
+          noticeDays: pick([30, 30, 60]),
+          guests: Math.max(1, p.bedrooms), source: pick(['direct', 'direct', 'agency']),
+          checkIn: '12:00', checkOut: '12:00',
+          notes: `${advanceMonths} months taken in advance at move-in. Rolling monthly thereafter.`,
+          createdAt: dayOffset(-(elapsed + intBetween(7, 30))),
+        })
+      }
+      if (p.status === 'reserved') {
+        const c = attach(pi + 5)
+        const advanceMonths = pick([3, 3, 6])
+        const start = dayOffset(intBetween(4, 26))
+        out.push({
+          id: `b-${++n}`, reference: `RNT-${4800 + n}`, propertyId: p.id, clientId: c.id,
+          mode: 'rental', status: 'upcoming', start, end: null,
+          rate: p.price, deposit: p.price, advanceMonths,
+          paidThrough: addMonths(start, advanceMonths), noticeDays: 30,
+          guests: Math.max(1, p.bedrooms), source: 'direct', checkIn: '12:00', checkOut: '12:00',
+          notes: `${advanceMonths} months advance cleared. Keys on move-in day.`,
+          createdAt: dayOffset(-intBetween(4, 20)),
+        })
+      }
+      return
+    }
+
+    /* ---------------- Short stays: nightly, in and out ----------------- */
+    const windows: Array<{ from: number; to: number; state: Booking['status'] }> = []
+    let cursor = -intBetween(80, 120)
+    const pastCount = p.status === 'inactive' ? 2 : intBetween(2, 4)
+    for (let k = 0; k < pastCount; k++) {
+      const nights = intBetween(2, p.type === 'villa' ? 10 : 6)
+      if (cursor + nights >= -3) break
+      windows.push({ from: cursor, to: cursor + nights, state: 'completed' })
+      cursor = cursor + nights + intBetween(3, 12)
+    }
+    if (p.status === 'occupied') {
+      const nights = intBetween(3, p.type === 'villa' ? 12 : 8)
+      const from = -intBetween(1, Math.max(1, nights - 2))
+      windows.push({ from, to: from + nights, state: 'in_progress' })
+      cursor = from + nights + intBetween(2, 6)
+    } else if (p.status === 'reserved') {
+      const from = intBetween(3, 14)
+      windows.push({ from, to: from + intBetween(3, 9), state: 'upcoming' })
+      cursor = from + 12
+    } else {
+      cursor = Math.max(cursor, intBetween(4, 20))
+    }
+    if (p.status !== 'inactive' && p.status !== 'maintenance') {
+      const forward = intBetween(2, 4)
+      for (let k = 0; k < forward; k++) {
+        const nights = intBetween(2, p.type === 'villa' ? 10 : 6)
+        const from = Math.max(cursor, 2)
+        windows.push({ from, to: from + nights, state: chance(0.15) ? 'pending' : 'upcoming' })
+        cursor = from + nights + intBetween(3, 16)
+      }
+    }
+    windows.forEach((w, k) => {
+      const c = attach(pi + k * 3)
+      out.push({
+        id: `b-${++n}`, reference: `STY-${7100 + n}`, propertyId: p.id, clientId: c.id,
+        mode: 'short_stay', status: w.state, start: dayOffset(w.from), end: dayOffset(w.to),
+        rate: p.price, deposit: Math.round(p.price * 1.5), advanceMonths: 0,
+        paidThrough: null, noticeDays: 0,
+        guests: intBetween(1, Math.max(2, p.bedrooms * 2)), source: pick(SOURCES),
+        checkIn: '15:00', checkOut: '11:00',
+        notes: pick(['Self check-in via smart lock.', 'Early check-in requested.', 'Cot requested for infant.', 'Airport transfer arranged.', 'Late checkout approved (13:00).']),
+        createdAt: dayOffset(w.from - intBetween(8, 60)),
+      })
+    })
   })
+
   // One cancellation makes the pipeline believable — never a live or past stay
   const cancellable = out.findIndex((b) => b.status === 'upcoming' && b.mode === 'short_stay')
   if (cancellable >= 0) out[cancellable] = { ...out[cancellable], status: 'cancelled', notes: 'Guest cancelled — within the free-cancellation window.' }
@@ -389,11 +438,59 @@ export const INVOICES: Invoice[] = (() => {
     out.push({ ...v, id: `i-${n}`, number: `ALT-INV-${n}` })
   }
 
+  const addMonths = (from: string, months: number) => {
+    const d = new Date(from + 'T00:00:00')
+    d.setMonth(d.getMonth() + months)
+    return iso(d)
+  }
+
   BOOKINGS.forEach((b) => {
     const p = PROPERTIES.find((x) => x.id === b.propertyId)!
     if (b.status === 'cancelled') return
 
-    if (b.mode === 'long_term') {
+    /* Open-ended rental: the advance up front, then rolling monthly rent
+       whose status is decided by how far the tenant has paid through. */
+    if (b.mode === 'rental') {
+      push({
+        propertyId: p.id, clientId: b.clientId, bookingId: b.id, type: 'advance',
+        issuedOn: iso(addDays(b.start, -12)), dueOn: iso(addDays(b.start, -3)),
+        amount: p.price * b.advanceMonths,
+        paidAmount: b.status === 'upcoming' ? p.price * b.advanceMonths : p.price * b.advanceMonths,
+        status: 'paid', method: pick(['bank_transfer', 'mobile_money', 'mobile_money', 'cash']),
+        paidOn: iso(addDays(b.start, -4)),
+        memo: `${b.advanceMonths} months rent in advance at move-in`,
+      })
+      push({
+        propertyId: p.id, clientId: b.clientId, bookingId: b.id, type: 'deposit',
+        issuedOn: iso(addDays(b.start, -12)), dueOn: iso(addDays(b.start, -3)),
+        amount: b.deposit, paidAmount: b.deposit, status: 'paid',
+        method: 'mobile_money', paidOn: iso(addDays(b.start, -4)),
+        memo: 'Refundable security deposit — held in client account',
+      })
+
+      const rollingFrom = addMonths(b.start, b.advanceMonths)
+      const covered = b.paidThrough ?? rollingFrom
+      for (let m = -11; m <= 3; m++) {
+        const due = iso(new Date(TODAY.getFullYear(), TODAY.getMonth() + m, 1))
+        if (due < rollingFrom) continue
+        const today = iso(TODAY)
+        const status: Invoice['status'] =
+          due <= covered ? 'paid'
+            : due <= today ? 'overdue'
+              : daysBetween(today, due) <= 7 ? 'pending' : 'upcoming'
+        push({
+          propertyId: p.id, clientId: b.clientId, bookingId: b.id, type: 'rent',
+          issuedOn: iso(addDays(due, -10)), dueOn: due, amount: p.price,
+          paidAmount: status === 'paid' ? p.price : 0, status,
+          method: status === 'paid' ? pick(['mobile_money', 'mobile_money', 'bank_transfer', 'cash']) : null,
+          paidOn: status === 'paid' ? iso(addDays(due, -intBetween(0, 5))) : null,
+          memo: `Monthly rent — ${new Date(due + 'T00:00:00').toLocaleString('en-GB', { month: 'long', year: 'numeric' })}`,
+        })
+      }
+      return
+    }
+
+    if (b.mode === 'long_term' && b.end) {
       // Twelve monthly rent charges around today
       for (let m = -11; m <= 3; m++) {
         const due = iso(addDays(new Date(TODAY.getFullYear(), TODAY.getMonth() + m, 1), 0))
@@ -419,7 +516,7 @@ export const INVOICES: Invoice[] = (() => {
         paidOn: iso(addDays(b.start, -8)), memo: 'Security deposit — held in client account',
       })
     } else {
-      const nights = Math.max(1, daysBetween(b.start, b.end))
+      const nights = Math.max(1, daysBetween(b.start, b.end ?? b.start))
       const total = nights * b.rate
       const due = iso(addDays(b.start, -3))
       const past = due <= iso(TODAY)
@@ -593,7 +690,7 @@ export function buildNotifications(
 
   bookings.forEach((b) => {
     const inDays = daysBetween(today, b.start)
-    const outDays = daysBetween(today, b.end)
+    const outDays = b.end ? daysBetween(today, b.end) : Number.POSITIVE_INFINITY
     if (b.status === 'upcoming' && inDays >= 0 && inDays <= 3) {
       out.push({
         id: `n-in-${b.id}`, kind: 'check_in', priority: inDays === 0 ? 'high' : 'normal',
@@ -610,7 +707,28 @@ export function buildNotifications(
         createdAt: dayOffset(0), read: false, entity: { type: 'booking', id: b.id }, actionLabel: 'Schedule turnover',
       })
     }
-    if (b.mode === 'long_term' && b.status === 'in_progress') {
+    /* An open-ended rental never expires — what matters is how far the rent
+       is paid through, and whether the advance is running down. */
+    if (b.mode === 'rental' && b.status === 'in_progress' && b.paidThrough) {
+      const covered = daysBetween(today, b.paidThrough)
+      if (covered < 0) {
+        out.push({
+          id: `n-rent-${b.id}`, kind: 'payment_overdue', priority: covered < -21 ? 'critical' : 'high',
+          title: `Rent lapsed ${Math.abs(covered)} days ago`,
+          body: `${clientOf(b.clientId)} at ${nameOf(b.propertyId)} is occupying beyond the paid period. Advance was ${b.advanceMonths} months at move-in.`,
+          createdAt: b.paidThrough, read: false, entity: { type: 'booking', id: b.id }, actionLabel: 'Chase rent',
+        })
+      } else if (covered <= reminders.rentDueLeadDays * 3) {
+        out.push({
+          id: `n-rent-${b.id}`, kind: 'payment_due', priority: covered <= 7 ? 'high' : 'normal',
+          title: `Rent covered for ${covered} more day${covered === 1 ? '' : 's'}`,
+          body: `${clientOf(b.clientId)} at ${nameOf(b.propertyId)} is paid through ${b.paidThrough}. Collect the next month before it lapses.`,
+          createdAt: dayOffset(-1), read: chance(0.4), entity: { type: 'booking', id: b.id }, actionLabel: 'Request rent',
+        })
+      }
+    }
+
+    if (b.mode === 'long_term' && b.status === 'in_progress' && b.end) {
       const expiry = daysBetween(today, b.end)
       if (expiry >= 0 && expiry <= reminders.leaseExpiryLeadDays) {
         out.push({
@@ -629,7 +747,7 @@ export function buildNotifications(
       if (vacantFor >= reminders.vacancyAlertDays) {
         out.push({
           id: `n-vac-${p.id}`, kind: 'vacancy', priority: vacantFor > 30 ? 'high' : 'normal',
-          title: `Vacant ${vacantFor} days · ${formatMoney(p.mode === 'long_term' ? p.price : p.price * 30)} monthly exposure`,
+          title: `Vacant ${vacantFor} days · ${formatMoney(p.mode === 'short_stay' ? p.price * 30 : p.price)} monthly exposure`,
           body: `${p.name} in ${p.address.district} has had no booking since ${p.availableFrom}.`,
           createdAt: dayOffset(-1), read: chance(0.4), entity: { type: 'property', id: p.id }, actionLabel: 'Review listing',
         })
@@ -668,11 +786,13 @@ export function buildNotifications(
 }
 
 /* ------------------------------ helpers --------------------------- */
-export function formatMoney(n: number, currency = 'EUR', compact = false) {
-  return new Intl.NumberFormat('en-GB', {
+/** Notification copy is built from the same presentation settings as the
+ *  rest of the UI, so a currency change reaches the alerts too. */
+export function formatMoney(n: number) {
+  const value = n * presentation.rate
+  return new Intl.NumberFormat(presentation.locale, {
     style: 'currency',
-    currency,
-    maximumFractionDigits: compact && Math.abs(n) >= 10000 ? 1 : 0,
-    notation: compact && Math.abs(n) >= 10000 ? 'compact' : 'standard',
-  }).format(n)
+    currency: presentation.currency,
+    maximumFractionDigits: 0,
+  }).format(value)
 }

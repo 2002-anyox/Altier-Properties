@@ -148,7 +148,7 @@ export default function Payments() {
           <div className="pt-2">
             <BarList
               items={ageing.map((b) => ({ label: b.label, value: b.amount, note: `· ${b.count}` }))}
-              format={(n) => money(n, 'EUR', true)}
+              format={(n) => money(n, true)}
               color={VIZ[4]}
             />
           </div>

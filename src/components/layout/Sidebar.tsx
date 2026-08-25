@@ -6,6 +6,7 @@ import { NAV } from './nav'
 import { Wordmark } from './Wordmark'
 import { useStore } from '../../lib/store'
 import { can, roleLabel } from '../../lib/rbac'
+import { t } from '../../lib/strings'
 import { Avatar, IconButton } from '../ui'
 import { spring } from '../../lib/motion'
 
@@ -31,9 +32,9 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           const items = group.items.filter((i) => can(state.role, i.permission))
           if (!items.length) return null
           return (
-            <div key={group.section} className="mb-5">
+            <div key={group.sectionKey} className="mb-5">
               <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--c-text-onrail-muted))]">
-                {group.section}
+                {t(group.sectionKey)}
               </p>
               <ul className="space-y-0.5">
                 {items.map((item) => {
@@ -68,7 +69,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                           />
                         )}
                         <Icon size={17} className={clsx('relative z-10 shrink-0 transition-colors', active ? 'text-gold' : 'text-current')} />
-                        <span className="relative z-10 flex-1 truncate">{item.label}</span>
+                        <span className="relative z-10 flex-1 truncate">{t(item.labelKey)}</span>
                         {badge > 0 && (
                           <span
                             className={clsx(
@@ -121,7 +122,7 @@ export function MobileSidebar({ open, onClose }: { open: boolean; onClose: () =>
       >
         <SidebarContent onNavigate={onClose} />
         <div className="absolute right-3 top-4">
-          <IconButton label="Close navigation" onClick={onClose} className="text-[rgb(var(--c-text-onrail-muted))] hover:bg-white/10 hover:text-white">
+          <IconButton label={t('action.closeNav')} onClick={onClose} className="text-[rgb(var(--c-text-onrail-muted))] hover:bg-white/10 hover:text-white">
             <X size={18} />
           </IconButton>
         </div>
