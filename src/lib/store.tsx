@@ -192,9 +192,17 @@ const THEME_KEY = 'altier.theme'
 const PREFS_KEY = 'altier.prefs'
 
 function readStoredTheme(): Theme {
+  /* Precedence: what this viewer last chose, then a theme the host document
+     has already stamped on <html>, then the operating system. */
   try {
     const v = localStorage.getItem(THEME_KEY)
     if (v === 'light' || v === 'dark') return v
+  } catch {
+    /* storage unavailable — fall through */
+  }
+  const stamped = document.documentElement.getAttribute('data-theme')
+  if (stamped === 'light' || stamped === 'dark') return stamped
+  try {
     return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   } catch {
     return 'light'
