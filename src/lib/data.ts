@@ -300,18 +300,19 @@ export const BOOKINGS: Booking[] = (() => {
     }
 
     if (p.mode === 'long_term') {
-      // Current or most recent lease
+      // The live lease must actually cover today, or the calendar contradicts the status
       if (p.status === 'occupied' || p.status === 'maintenance') {
         const c = attach(pi)
-        const start = dayOffset(-intBetween(60, 600))
         const months = pick([12, 12, 18, 24, 36])
+        const elapsed = intBetween(30, months * 30 - 45)
+        const start = dayOffset(-elapsed)
         const end = iso(addDays(start, months * 30))
         out.push({
           id: `b-${++n}`, reference: `LSE-${2600 + n}`, propertyId: p.id, clientId: c.id,
-          mode: 'long_term', status: new Date(end) < TODAY ? 'completed' : 'in_progress',
+          mode: 'long_term', status: 'in_progress',
           start, end, rate: p.price, deposit: p.price * 2, guests: Math.max(1, p.bedrooms),
           source: pick(['direct', 'agency', 'corporate']), checkIn: '14:00', checkOut: '11:00',
-          notes: 'Standard 60-day renewal notice window.', createdAt: dayOffset(-intBetween(610, 700)),
+          notes: 'Standard 60-day renewal notice window.', createdAt: dayOffset(-(elapsed + intBetween(14, 60))),
         })
       }
       if (p.status === 'reserved') {
@@ -326,31 +327,55 @@ export const BOOKINGS: Booking[] = (() => {
         })
       }
     } else {
-      // Short stays: a spread of past, live and forward bookings
-      const count = p.status === 'inactive' ? 1 : intBetween(4, 8)
-      let cursor = -intBetween(70, 110)
-      for (let k = 0; k < count; k++) {
-        const nights = intBetween(2, p.type === 'villa' ? 12 : 7)
-        const start = cursor
-        const end = start + nights
-        cursor = end + intBetween(2, 14)
+      /* Short stays: a run of completed stays, then the live one the status
+         promises, then forward bookings — so the calendar always agrees with
+         the property's status. */
+      const windows: Array<{ from: number; to: number; state: Booking['status'] }> = []
+      let cursor = -intBetween(80, 120)
+      const pastCount = p.status === 'inactive' ? 2 : intBetween(2, 4)
+      for (let k = 0; k < pastCount; k++) {
+        const nights = intBetween(2, p.type === 'villa' ? 10 : 6)
+        if (cursor + nights >= -3) break
+        windows.push({ from: cursor, to: cursor + nights, state: 'completed' })
+        cursor = cursor + nights + intBetween(3, 12)
+      }
+      if (p.status === 'occupied') {
+        const nights = intBetween(3, p.type === 'villa' ? 12 : 8)
+        const from = -intBetween(1, Math.max(1, nights - 2))
+        windows.push({ from, to: from + nights, state: 'in_progress' })
+        cursor = from + nights + intBetween(2, 6)
+      } else if (p.status === 'reserved') {
+        const from = intBetween(3, 14)
+        windows.push({ from, to: from + intBetween(3, 9), state: 'upcoming' })
+        cursor = from + 12
+      } else {
+        cursor = Math.max(cursor, intBetween(4, 20))
+      }
+      if (p.status !== 'inactive' && p.status !== 'maintenance') {
+        const forward = intBetween(2, 4)
+        for (let k = 0; k < forward; k++) {
+          const nights = intBetween(2, p.type === 'villa' ? 10 : 6)
+          const from = Math.max(cursor, 2)
+          windows.push({ from, to: from + nights, state: chance(0.15) ? 'pending' : 'upcoming' })
+          cursor = from + nights + intBetween(3, 16)
+        }
+      }
+      windows.forEach((w, k) => {
         const c = attach(pi + k * 3)
-        const status: Booking['status'] =
-          end < 0 ? 'completed' : start <= 0 && end >= 0 ? 'in_progress' : chance(0.12) ? 'pending' : 'upcoming'
-        if (p.status === 'inactive' && status !== 'completed') continue
         out.push({
           id: `b-${++n}`, reference: `STY-${7100 + n}`, propertyId: p.id, clientId: c.id,
-          mode: 'short_stay', status, start: dayOffset(start), end: dayOffset(end),
+          mode: 'short_stay', status: w.state, start: dayOffset(w.from), end: dayOffset(w.to),
           rate: p.price, deposit: Math.round(p.price * 1.5), guests: intBetween(1, Math.max(2, p.bedrooms * 2)),
           source: pick(SOURCES), checkIn: '15:00', checkOut: '11:00',
           notes: pick(['Self check-in via smart lock.', 'Early check-in requested.', 'Cot requested for infant.', 'Airport transfer arranged.', 'Late checkout approved (13:00).']),
-          createdAt: dayOffset(start - intBetween(8, 60)),
+          createdAt: dayOffset(w.from - intBetween(8, 60)),
         })
-      }
+      })
     }
   })
-  // A cancelled booking makes the pipeline believable
-  if (out.length) out[6] = { ...out[6], status: 'cancelled', notes: 'Guest cancelled — within free-cancellation window.' }
+  // One cancellation makes the pipeline believable — never a live or past stay
+  const cancellable = out.findIndex((b) => b.status === 'upcoming' && b.mode === 'short_stay')
+  if (cancellable >= 0) out[cancellable] = { ...out[cancellable], status: 'cancelled', notes: 'Guest cancelled — within the free-cancellation window.' }
   return out
 })()
 
@@ -437,6 +462,15 @@ export const INVOICES: Invoice[] = (() => {
     })
   }
 
+  /* Anything falling due inside the next week is "pending", not merely
+     "upcoming" — that is the bucket a manager actually works from. */
+  const today = iso(TODAY)
+  out.forEach((inv) => {
+    if (inv.status !== 'upcoming') return
+    const gap = daysBetween(today, inv.dueOn)
+    if (gap >= 0 && gap <= 7) inv.status = 'pending'
+  })
+
   return out.sort((a, b) => (a.dueOn < b.dueOn ? 1 : -1))
 })()
 
@@ -467,7 +501,7 @@ export const MAINTENANCE: MaintenanceRequest[] = (() => {
     const priority = t.cat === 'safety' ? (chance(0.6) ? 'urgent' : 'high') : pick(['low', 'medium', 'medium', 'high', 'urgent'] as const)
     const status: MaintenanceRequest['status'] =
       dueOffset < -3 ? (chance(0.75) ? 'completed' : 'awaiting_parts')
-        : pick(['reported', 'scheduled', 'in_progress', 'awaiting_parts', 'completed'] as const)
+        : pick(['reported', 'scheduled', 'scheduled', 'in_progress', 'in_progress', 'awaiting_parts', 'completed'] as const)
     const estimated = intBetween(90, 3400)
     const completed = status === 'completed'
     const reportedOn = dayOffset(reportedOffset)

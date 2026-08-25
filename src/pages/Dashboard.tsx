@@ -104,7 +104,7 @@ export default function Dashboard() {
       <motion.div variants={listVariants} initial="initial" animate="animate" className="grid gap-4 lg:grid-cols-3">
         {showMoney && (
           <motion.div variants={listVariants} className="lg:col-span-1">
-            <div className="card relative h-full overflow-hidden bg-navy-900 p-6 text-[rgb(var(--c-text-onrail))] dark:bg-surface-card">
+            <div className="card relative h-full overflow-hidden bg-navy-900 p-6 text-[rgb(var(--c-text-onrail))] dark:bg-surface-card dark:ring-1 dark:ring-inset dark:ring-gold/25">
               <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-gold/10 blur-3xl" aria-hidden />
               <div className="relative">
                 <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">

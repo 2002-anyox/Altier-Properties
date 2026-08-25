@@ -113,6 +113,11 @@
 
   h1, h2, h3, h4 { @apply font-display; letter-spacing: -0.015em; }
 
+  /* Grid children default to min-width:auto, so one long email or property
+     name can widen a whole track. Nothing here needs that behaviour — every
+     long string is truncated or wrapped deliberately. */
+  .grid > * { min-width: 0; }
+
   /* Focus: a single, unmistakable ring everywhere */
   :focus-visible {
     outline: 2px solid rgb(var(--c-accent));

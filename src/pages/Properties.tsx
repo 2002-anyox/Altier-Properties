@@ -238,7 +238,7 @@ function PropertyCard({ property: p, managerName }: { property: Property; manage
         <div className="h-full transition-transform duration-500 ease-premium group-hover:scale-[1.04]">
           <PropertyImage seed={p.photoSeed} type={p.type} className="h-full" rounded="" />
         </div>
-        <div className="absolute left-3 top-3"><StatusChip status={p.status} /></div>
+        <div className="absolute left-3 top-3"><StatusChip status={p.status} onImage /></div>
         <div className="absolute bottom-3 right-3">
           <Chip className="bg-navy-950/70 text-white backdrop-blur-sm">
             <Star size={11} className="fill-gold text-gold" /> {p.rating.toFixed(1)}

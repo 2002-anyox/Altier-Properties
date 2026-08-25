@@ -83,7 +83,14 @@ export default function Settings() {
               </div>
               <dl className="mt-5 space-y-3 border-t border-line pt-4 text-[12.5px]">
                 <div className="flex justify-between gap-3"><dt className="text-ink-muted">With Altier since</dt><dd className="text-ink-secondary">{mediumDate(me.since)}</dd></div>
-                <div className="flex justify-between gap-3"><dt className="text-ink-muted">Properties managed</dt><dd className="text-ink-secondary">{state.properties.filter((p) => p.managerId === me.id).length}</dd></div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-ink-muted">{state.role === 'owner' ? 'Properties overseen' : 'Properties managed'}</dt>
+                  <dd className="text-ink-secondary">
+                    {state.role === 'owner'
+                      ? state.properties.length
+                      : state.properties.filter((p) => p.managerId === me.id).length}
+                  </dd>
+                </div>
                 <div className="flex justify-between gap-3"><dt className="text-ink-muted">Access level</dt><dd className="text-ink-secondary">{roleLabel(state.role)}</dd></div>
               </dl>
               <Button

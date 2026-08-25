@@ -77,7 +77,7 @@ export function ChartFrame({
         </ul>
       )}
 
-      <div className="min-w-0 flex-1 px-2 pb-4 pt-3 sm:px-3">
+      <div className="flex min-w-0 flex-1 flex-col justify-center px-2 pb-4 pt-3 sm:px-3">
         {view === 'chart' ? children : <div className="scroll-x px-3 sm:px-3">{table}</div>}
       </div>
     </section>
@@ -105,7 +105,7 @@ export function AreaTrendChart<T extends Record<string, any>>({
 
   const W = 720
   const H = height
-  const pad = { top: 14, right: 58, bottom: 26, left: 8 }
+  const pad = { top: 14, right: 58, bottom: 26, left: 16 }
   const plotW = W - pad.left - pad.right
   const plotH = H - pad.top - pad.bottom
 
@@ -197,7 +197,7 @@ export function AreaTrendChart<T extends Record<string, any>>({
             x={x(i)}
             y={H - 8}
             fontSize="10.5"
-            textAnchor="middle"
+            textAnchor={i === 0 ? 'start' : i === data.length - 1 ? 'end' : 'middle'}
             fill="var(--viz-axis)"
             opacity={data.length > 8 && i % 2 === 1 ? 0 : 1}
           >
@@ -262,7 +262,7 @@ export function DonutChart({
   let offset = 0
 
   return (
-    <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:justify-center sm:gap-7">
+    <div className="flex flex-col items-center gap-5">
       <div className="relative shrink-0" style={{ width: size, height: size }}>
         <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size} role="img" aria-label={`${centerLabel}: ${centerValue}`}>
           <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={GRID} strokeWidth={thickness} />
@@ -301,19 +301,19 @@ export function DonutChart({
         </div>
       </div>
 
-      <ul className="w-full min-w-0 space-y-2 sm:w-auto">
+      <ul className="w-full min-w-0 max-w-[280px] space-y-1.5">
         {segments.map((s, i) => (
           <li
             key={s.label}
             onMouseEnter={() => setActive(i)}
             onMouseLeave={() => setActive(null)}
-            className="flex items-center justify-between gap-6 rounded-lg px-2 py-1 transition-colors hover:bg-surface-inset"
+            className="flex min-w-0 items-center justify-between gap-4 rounded-lg px-2 py-1 transition-colors hover:bg-surface-inset"
           >
-            <span className="inline-flex items-center gap-2 text-[13px] text-ink-secondary">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} aria-hidden />
-              {s.label}
+            <span className="inline-flex min-w-0 items-center gap-2 text-[13px] text-ink-secondary">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: s.color }} aria-hidden />
+              <span className="truncate">{s.label}</span>
             </span>
-            <span className="tnum text-[13px] font-semibold text-ink">
+            <span className="tnum shrink-0 text-[13px] font-semibold text-ink">
               {s.value}
               <span className="ml-1.5 font-normal text-ink-muted">{Math.round((s.value / total) * 100)}%</span>
             </span>

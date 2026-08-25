@@ -114,8 +114,8 @@ export default function PropertyDetail() {
           <div className="relative h-56 sm:h-72">
             <PropertyImage seed={property.photoSeed} type={property.type} className="h-full" rounded="" />
             <div className="absolute left-4 top-4 flex flex-wrap gap-2">
-              <StatusChip status={property.status} />
-              <Chip className="bg-navy-950/70 text-white backdrop-blur-sm">
+              <StatusChip status={property.status} onImage />
+              <Chip className="bg-navy-950/75 text-white ring-1 ring-white/15 backdrop-blur-sm">
                 {property.mode === 'short_stay' ? 'Short stay' : 'Long term'}
               </Chip>
             </div>
@@ -169,12 +169,14 @@ export default function PropertyDetail() {
                 <div className="mt-4 space-y-3 border-t border-line pt-4">
                   <div className="flex justify-between text-[12.5px]">
                     <span className="text-ink-muted">Term</span>
-                    <span className="text-ink-secondary">{shortDate(current.start)} – {shortDate(current.end)}</span>
+                    <span className="text-ink-secondary">{mediumDate(current.start)} – {mediumDate(current.end)}</span>
                   </div>
                   <div>
                     <div className="mb-1.5 flex justify-between text-[12.5px]">
                       <span className="text-ink-muted">Term elapsed</span>
-                      <span className="text-ink-secondary">{relativeDay(current.end)} remaining</span>
+                      <span className="text-ink-secondary">
+                        {Math.max(0, daysBetween(iso(TODAY), current.end))} days remaining
+                      </span>
                     </div>
                     <Meter
                       value={Math.max(0, daysBetween(current.start, iso(TODAY)))}

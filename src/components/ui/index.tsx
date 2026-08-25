@@ -126,9 +126,14 @@ export function Chip({ className, children, dot }: { className?: string; childre
   )
 }
 
-export const StatusChip = ({ status }: { status: PropertyStatus }) => {
+/** `onImage` swaps to a legible dark pill for use over photography. */
+export const StatusChip = ({ status, onImage }: { status: PropertyStatus; onImage?: boolean }) => {
   const m = PROPERTY_STATUS_META[status]
-  return <Chip className={m.chip} dot={m.dot}>{m.label}</Chip>
+  return (
+    <Chip className={onImage ? 'bg-navy-950/75 text-white ring-1 ring-white/15 backdrop-blur-sm' : m.chip} dot={m.dot}>
+      {m.label}
+    </Chip>
+  )
 }
 
 export const InvoiceChip = ({ status }: { status: InvoiceStatus }) => (
