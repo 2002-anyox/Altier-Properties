@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Bath, BedDouble, Building2, LayoutGrid, List, MapPin, Maximize2, Plus, Search, SlidersHorizontal, Star, X,
 } from 'lucide-react'
@@ -327,6 +327,7 @@ function ListView({ properties, team }: { properties: Property[]; team: Array<{ 
 
 function MapView({ properties }: { properties: Property[] }) {
   const [active, setActive] = useState<Property | null>(null)
+  const navigate = useNavigate()
   return (
     <div className="grid gap-4 lg:grid-cols-3">
       <Card className="relative overflow-hidden lg:col-span-2">
@@ -388,7 +389,7 @@ function MapView({ properties }: { properties: Property[] }) {
               </ul>
             </div>
             <div className="border-t border-line p-4">
-              <Button block variant="primary" onClick={() => { window.location.hash = `#/properties/${active.id}` }}>
+              <Button block variant="primary" onClick={() => navigate(`/properties/${active.id}`)}>
                 Open property
               </Button>
             </div>
