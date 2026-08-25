@@ -58,8 +58,8 @@ const seed = (): State => ({
   team: TEAM,
   role: 'owner',
   currentUserId: 'tm-01',
-  locale: 'en-GB',
-  currency: 'EUR',
+  locale: 'en-UG',
+  currency: 'UGX',
   language: 'en',
 })
 

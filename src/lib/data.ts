@@ -43,25 +43,25 @@ export const daysBetween = (a: string, b: string) =>
 
 /* ------------------------------- team ----------------------------- */
 export const TEAM: TeamMember[] = [
-  { id: 'tm-01', name: 'Amara Vance', role: 'owner', title: 'Founder & Principal', email: 'amara.vance@altier.co', phone: '+351 912 004 118', since: '2018-03-01' },
-  { id: 'tm-02', name: 'Rui Castellan', role: 'manager', title: 'Head of Portfolio', email: 'rui.castellan@altier.co', phone: '+351 912 776 240', since: '2019-06-14' },
-  { id: 'tm-03', name: 'Ines Moreau', role: 'manager', title: 'Short-Stay Manager', email: 'ines.moreau@altier.co', phone: '+351 913 550 907', since: '2021-01-11' },
-  { id: 'tm-04', name: 'Tomas Bekele', role: 'manager', title: 'Commercial Lettings', email: 'tomas.bekele@altier.co', phone: '+351 914 228 601', since: '2020-09-02' },
-  { id: 'tm-05', name: 'Sofia Andrade', role: 'accountant', title: 'Financial Controller', email: 'sofia.andrade@altier.co', phone: '+351 915 331 776', since: '2019-11-25' },
-  { id: 'tm-06', name: 'Nuno Ferreira', role: 'staff', title: 'Operations & Turnover', email: 'nuno.ferreira@altier.co', phone: '+351 916 118 442', since: '2022-04-19' },
-  { id: 'tm-07', name: 'Clara Whitfield', role: 'staff', title: 'Guest Experience', email: 'clara.whitfield@altier.co', phone: '+351 917 640 315', since: '2023-02-06' },
+  { id: 'tm-01', name: 'Nakato Ssemakula', role: 'owner', title: 'Founder & Principal', email: 'nakato.ssemakula@altier.co.ug', phone: '+256 772 400 118', since: '2018-03-01' },
+  { id: 'tm-02', name: 'Brian Kizito', role: 'manager', title: 'Head of Portfolio', email: 'brian.kizito@altier.co.ug', phone: '+256 772 776 240', since: '2019-06-14' },
+  { id: 'tm-03', name: 'Aisha Namutebi', role: 'manager', title: 'Short-Stay Manager', email: 'aisha.namutebi@altier.co.ug', phone: '+256 701 550 907', since: '2021-01-11' },
+  { id: 'tm-04', name: 'Tendo Wasswa', role: 'manager', title: 'Commercial Lettings', email: 'tendo.wasswa@altier.co.ug', phone: '+256 752 228 601', since: '2020-09-02' },
+  { id: 'tm-05', name: 'Sarah Nabbosa', role: 'accountant', title: 'Financial Controller', email: 'sarah.nabbosa@altier.co.ug', phone: '+256 772 331 776', since: '2019-11-25' },
+  { id: 'tm-06', name: 'Ronald Okello', role: 'staff', title: 'Operations & Turnover', email: 'ronald.okello@altier.co.ug', phone: '+256 701 118 442', since: '2022-04-19' },
+  { id: 'tm-07', name: 'Patience Akello', role: 'staff', title: 'Guest Experience', email: 'patience.akello@altier.co.ug', phone: '+256 752 640 315', since: '2023-02-06' },
 ]
 const MANAGERS = TEAM.filter((t) => t.role === 'manager').map((t) => t.id)
 
 /* --------------------------- client names -------------------------- */
 const TENANT_NAMES = [
-  'Helena Duarte', 'Marcus Oyelaran', 'Priya Raghunathan', 'Jonas Lindqvist',
-  'Camille Berger', 'Diego Salazar', 'Aisha Bello', 'Tobias Reuter',
-  'Noor Haddad', 'Elena Petrova', 'Samuel Achterberg', 'Yuki Tanaka',
-  'Rachel Nkemdirim', 'Andrei Munteanu', 'Farah Zaman', 'Lucas Almeida',
-  'Isabel Ferrero', 'Kwame Mensah', 'Greta Solheim', 'Mateo Rinaldi',
-  'Nadia Bouchard', 'Oliver Ashcroft', 'Zoe Karalis', 'Hassan Qureshi',
-  'Marta Kowalska', 'Daniel Osei', 'Chloe Marchetti', 'Ravi Deshmukh',
+  'Miriam Nakabugo', 'David Ssentongo', 'Grace Atim', 'Joseph Mukasa',
+  'Sanyu Nabirye', 'Ibrahim Kagwa', 'Rebecca Auma', 'Peter Wanyama',
+  'Esther Nalubega', 'Samuel Odongo', 'Winnie Kyomuhendo', 'Julius Bwire',
+  'Claire Nassuna', 'Emmanuel Okot', 'Diana Namara', 'Ronald Tumusiime',
+  'Lars Henriksen', 'Priya Raghunathan', 'Camille Berger', 'Tobias Reuter',
+  'Yuki Tanaka', 'Rachel Whitfield', 'Marcus Oyelaran', 'Noor Haddad',
+  'Andrei Munteanu', 'Chloe Marchetti', 'Hassan Qureshi', 'Greta Solheim',
 ]
 
 /* ---------------------------- portfolio --------------------------- */
@@ -72,50 +72,52 @@ type Seed = {
 }
 
 const SEEDS: Seed[] = [
-  { name: 'Chiado Atelier 4B', type: 'apartment', mode: 'long_term', status: 'occupied', district: 'Chiado', beds: 2, baths: 2, sqm: 96, price: 2450, x: 0.44, y: 0.52 },
-  { name: 'Príncipe Real Townhouse', type: 'house', mode: 'long_term', status: 'occupied', district: 'Príncipe Real', beds: 4, baths: 3, sqm: 218, price: 4800, x: 0.40, y: 0.41 },
-  { name: 'Alcântara Loft 12', type: 'apartment', mode: 'short_stay', status: 'occupied', district: 'Alcântara', beds: 1, baths: 1, sqm: 64, price: 185, x: 0.24, y: 0.66 },
-  { name: 'Belém Riverside 07', type: 'apartment', mode: 'short_stay', status: 'available', district: 'Belém', beds: 2, baths: 2, sqm: 88, price: 240, x: 0.12, y: 0.71 },
-  { name: 'Avenida Penthouse', type: 'apartment', mode: 'long_term', status: 'occupied', district: 'Avenida da Liberdade', beds: 3, baths: 3, sqm: 176, price: 6200, x: 0.48, y: 0.34 },
-  { name: 'Estrela Garden Flat', type: 'apartment', mode: 'rental', status: 'available', district: 'Estrela', beds: 2, baths: 1, sqm: 82, price: 1950, x: 0.34, y: 0.58 },
-  { name: 'Parque das Nações Tower 21F', type: 'apartment', mode: 'rental', status: 'reserved', district: 'Parque das Nações', beds: 3, baths: 2, sqm: 132, price: 3100, x: 0.88, y: 0.22 },
-  { name: 'Cascais Ocean Villa', type: 'villa', mode: 'short_stay', status: 'occupied', district: 'Cascais', beds: 5, baths: 4, sqm: 340, price: 720, x: 0.06, y: 0.84 },
-  { name: 'Sintra Hill House', type: 'villa', mode: 'short_stay', status: 'maintenance', district: 'Sintra', beds: 4, baths: 3, sqm: 265, price: 480, x: 0.02, y: 0.46 },
-  { name: 'Baixa Commercial Suite 300', type: 'commercial', mode: 'long_term', status: 'occupied', district: 'Baixa', beds: 0, baths: 2, sqm: 410, price: 7400, x: 0.52, y: 0.48 },
-  { name: 'Santos Design Studio', type: 'commercial', mode: 'long_term', status: 'available', district: 'Santos', beds: 0, baths: 1, sqm: 180, price: 3250, x: 0.30, y: 0.68 },
-  { name: 'Graça Serviced Residence 2A', type: 'serviced', mode: 'short_stay', status: 'occupied', district: 'Graça', beds: 2, baths: 2, sqm: 104, price: 210, x: 0.62, y: 0.38 },
-  { name: 'Graça Serviced Residence 2B', type: 'serviced', mode: 'short_stay', status: 'available', district: 'Graça', beds: 2, baths: 2, sqm: 104, price: 210, x: 0.63, y: 0.36 },
-  { name: 'Alfama Stone Apartment', type: 'apartment', mode: 'short_stay', status: 'occupied', district: 'Alfama', beds: 1, baths: 1, sqm: 52, price: 165, x: 0.58, y: 0.50 },
-  { name: 'Campo de Ourique 3D', type: 'apartment', mode: 'rental', status: 'occupied', district: 'Campo de Ourique', beds: 3, baths: 2, sqm: 118, price: 2280, x: 0.28, y: 0.52 },
-  { name: 'Lapa Consulate House', type: 'house', mode: 'long_term', status: 'occupied', district: 'Lapa', beds: 5, baths: 4, sqm: 302, price: 8900, x: 0.30, y: 0.62 },
-  { name: 'Marvila Warehouse Unit 4', type: 'commercial', mode: 'long_term', status: 'reserved', district: 'Marvila', beds: 0, baths: 2, sqm: 620, price: 5600, x: 0.78, y: 0.30 },
-  { name: 'Bairro Alto Duplex', type: 'apartment', mode: 'short_stay', status: 'occupied', district: 'Bairro Alto', beds: 2, baths: 1, sqm: 74, price: 195, x: 0.42, y: 0.46 },
-  { name: 'Restelo Family Home', type: 'house', mode: 'rental', status: 'available', district: 'Restelo', beds: 4, baths: 3, sqm: 240, price: 3950, x: 0.10, y: 0.62 },
-  { name: 'Saldanha Corporate 9C', type: 'apartment', mode: 'rental', status: 'occupied', district: 'Saldanha', beds: 2, baths: 2, sqm: 98, price: 2650, x: 0.56, y: 0.26 },
-  { name: 'Anjos Micro-Loft 5', type: 'apartment', mode: 'short_stay', status: 'inactive', district: 'Anjos', beds: 1, baths: 1, sqm: 38, price: 120, x: 0.60, y: 0.30 },
-  { name: 'Estoril Sea Terrace', type: 'apartment', mode: 'short_stay', status: 'reserved', district: 'Estoril', beds: 3, baths: 2, sqm: 142, price: 395, x: 0.04, y: 0.78 },
-  { name: 'Areeiro Residence 11', type: 'apartment', mode: 'rental', status: 'maintenance', district: 'Areeiro', beds: 2, baths: 1, sqm: 86, price: 1780, x: 0.70, y: 0.26 },
-  { name: 'Comércio Retail Front', type: 'commercial', mode: 'long_term', status: 'occupied', district: 'Baixa', beds: 0, baths: 1, sqm: 155, price: 6100, x: 0.54, y: 0.54 },
+  { name: 'Kololo Terrace 4B', type: 'apartment', mode: 'long_term', status: 'occupied', district: 'Kololo', beds: 3, baths: 3, sqm: 180, price: 6_500_000, x: 0.48, y: 0.38 },
+  { name: 'Nakasero Hill Residence', type: 'house', mode: 'long_term', status: 'occupied', district: 'Nakasero', beds: 4, baths: 4, sqm: 320, price: 12_000_000, x: 0.44, y: 0.44 },
+  { name: 'Bugolobi Serviced Flat 12', type: 'serviced', mode: 'short_stay', status: 'occupied', district: 'Bugolobi', beds: 2, baths: 2, sqm: 110, price: 320_000, x: 0.64, y: 0.52 },
+  { name: 'Kololo Skyline 07', type: 'apartment', mode: 'short_stay', status: 'available', district: 'Kololo', beds: 2, baths: 2, sqm: 95, price: 380_000, x: 0.50, y: 0.34 },
+  { name: 'Acacia Avenue Penthouse', type: 'apartment', mode: 'long_term', status: 'occupied', district: 'Kololo', beds: 3, baths: 3, sqm: 210, price: 9_500_000, x: 0.52, y: 0.40 },
+  { name: 'Ntinda Garden Flat', type: 'apartment', mode: 'rental', status: 'available', district: 'Ntinda', beds: 2, baths: 1, sqm: 78, price: 1_300_000, x: 0.70, y: 0.30 },
+  { name: 'Naguru Heights 9F', type: 'apartment', mode: 'rental', status: 'reserved', district: 'Naguru', beds: 3, baths: 2, sqm: 130, price: 3_200_000, x: 0.64, y: 0.36 },
+  { name: 'Entebbe Lakeside Villa', type: 'villa', mode: 'short_stay', status: 'occupied', district: 'Entebbe', beds: 5, baths: 4, sqm: 380, price: 1_200_000, x: 0.06, y: 0.90 },
+  { name: 'Munyonyo Bay House', type: 'villa', mode: 'short_stay', status: 'maintenance', district: 'Munyonyo', beds: 4, baths: 3, sqm: 290, price: 850_000, x: 0.58, y: 0.84 },
+  { name: 'Nakasero Office Suite 300', type: 'commercial', mode: 'long_term', status: 'occupied', district: 'Nakasero', beds: 0, baths: 2, sqm: 420, price: 18_000_000, x: 0.46, y: 0.46 },
+  { name: 'Bukoto Design Studio', type: 'commercial', mode: 'long_term', status: 'available', district: 'Bukoto', beds: 0, baths: 1, sqm: 165, price: 5_800_000, x: 0.62, y: 0.30 },
+  { name: 'Muyenga Serviced Residence 2A', type: 'serviced', mode: 'short_stay', status: 'occupied', district: 'Muyenga', beds: 2, baths: 2, sqm: 105, price: 300_000, x: 0.56, y: 0.72 },
+  { name: 'Muyenga Serviced Residence 2B', type: 'serviced', mode: 'short_stay', status: 'available', district: 'Muyenga', beds: 2, baths: 2, sqm: 105, price: 300_000, x: 0.57, y: 0.70 },
+  { name: 'Old Kampala Stone Apartment', type: 'apartment', mode: 'short_stay', status: 'occupied', district: 'Old Kampala', beds: 1, baths: 1, sqm: 55, price: 210_000, x: 0.38, y: 0.48 },
+  { name: 'Kansanga Family Unit 3D', type: 'apartment', mode: 'rental', status: 'occupied', district: 'Kansanga', beds: 3, baths: 2, sqm: 120, price: 1_800_000, x: 0.60, y: 0.66 },
+  { name: 'Mbuya Hill Diplomat House', type: 'house', mode: 'long_term', status: 'occupied', district: 'Mbuya', beds: 5, baths: 4, sqm: 340, price: 14_000_000, x: 0.68, y: 0.50 },
+  { name: 'Namanve Warehouse Unit 4', type: 'commercial', mode: 'long_term', status: 'reserved', district: 'Namanve', beds: 0, baths: 2, sqm: 640, price: 9_500_000, x: 0.90, y: 0.44 },
+  { name: 'Kololo Duplex 5', type: 'apartment', mode: 'short_stay', status: 'occupied', district: 'Kololo', beds: 2, baths: 1, sqm: 80, price: 290_000, x: 0.46, y: 0.36 },
+  { name: 'Najjera Family Home', type: 'house', mode: 'rental', status: 'available', district: 'Najjera', beds: 4, baths: 3, sqm: 230, price: 2_400_000, x: 0.80, y: 0.20 },
+  { name: 'Nsambya Corporate 9C', type: 'apartment', mode: 'rental', status: 'occupied', district: 'Nsambya', beds: 2, baths: 2, sqm: 96, price: 2_600_000, x: 0.50, y: 0.60 },
+  { name: 'Kyanja Micro-Unit 5', type: 'apartment', mode: 'short_stay', status: 'inactive', district: 'Kyanja', beds: 1, baths: 1, sqm: 40, price: 130_000, x: 0.74, y: 0.22 },
+  { name: 'Lubowa Ridge Terrace', type: 'apartment', mode: 'short_stay', status: 'reserved', district: 'Lubowa', beds: 3, baths: 2, sqm: 145, price: 520_000, x: 0.30, y: 0.80 },
+  { name: 'Kira Residence 11', type: 'apartment', mode: 'rental', status: 'maintenance', district: 'Kira', beds: 2, baths: 1, sqm: 84, price: 950_000, x: 0.86, y: 0.26 },
+  { name: 'Kampala Road Retail Front', type: 'commercial', mode: 'long_term', status: 'occupied', district: 'Central', beds: 0, baths: 1, sqm: 150, price: 11_000_000, x: 0.44, y: 0.50 },
 ]
 
 const AMENITY_POOL = [
-  'Air conditioning', 'Private terrace', 'Concierge', 'Secure parking', 'River view',
-  'Fibre internet', 'Fitted kitchen', 'Dishwasher', 'In-unit laundry', 'Lift access',
-  'Pet friendly', 'Furnished', 'Solar hot water', 'Roof garden', 'Gym access',
-  'Smart locks', 'Fireplace', 'Storage unit', 'Wheelchair accessible', 'Pool',
+  'Standby generator', 'Borehole water', 'Water storage tank', 'Solar backup',
+  '24-hour security', 'Gated compound', 'Perimeter wall', 'Servants quarters',
+  'Air conditioning', 'Fitted kitchen', 'Fibre internet', 'DSTV connection',
+  'Secure parking', 'Private garden', 'Balcony', 'Swimming pool',
+  'Gym access', 'Lift access', 'Furnished', 'Mosquito screens',
 ]
 const COMMERCIAL_AMENITIES = [
-  'Loading bay', '3-phase power', 'Fibre internet', 'Secure parking', 'Alarm system',
-  'Air conditioning', 'Meeting rooms', 'Street frontage', 'Goods lift', 'CCTV',
+  'Loading bay', '3-phase power', 'Standby generator', 'Fibre internet',
+  'Secure parking', 'CCTV', 'Air conditioning', 'Meeting rooms',
+  'Street frontage', 'Goods lift', '24-hour security',
 ]
 
 const DOC_NAMES: Array<[PropertyDocument['category'], string]> = [
-  ['title', 'Title deed & registry extract.pdf'],
-  ['insurance', 'Buildings insurance 2026.pdf'],
-  ['compliance', 'Energy certificate (EPC).pdf'],
+  ['title', 'Land title (Mailo) — certified copy.pdf'],
+  ['insurance', 'Property insurance 2026.pdf'],
+  ['compliance', 'KCCA trading licence.pdf'],
   ['inspection', 'Annual condition survey.pdf'],
-  ['lease', 'Executed lease agreement.pdf'],
-  ['compliance', 'Short-stay licence AL.pdf'],
+  ['lease', 'Signed tenancy agreement.pdf'],
+  ['compliance', 'URA rental income tax clearance.pdf'],
 ]
 
 function makeDocs(prefix: string, count: number): PropertyDocument[] {
@@ -134,14 +136,49 @@ function makeDocs(prefix: string, count: number): PropertyDocument[] {
   return out
 }
 
+/** Roads that actually run through each area, so an address never places a
+ *  Kololo avenue in Ntinda. */
+/** Not everything Altier manages is inside Kampala — Entebbe is its own
+ *  municipality, and the northern suburbs fall under Wakiso district. */
+const CITIES: Record<string, string> = {
+  Entebbe: 'Entebbe',
+  Lubowa: 'Wakiso',
+  Najjera: 'Wakiso',
+  Kira: 'Wakiso',
+  Kyanja: 'Wakiso',
+  Namanve: 'Mukono',
+}
+
+const ROADS: Record<string, string[]> = {
+  Kololo: ['Acacia Avenue', 'Lower Kololo Terrace', 'Prince Charles Drive', 'John Babiiha Avenue', 'Wampewo Avenue'],
+  Nakasero: ['Nakasero Road', 'Kyadondo Road', 'Nakasero Hill Road', 'Kitante Road'],
+  Central: ['Kampala Road', 'Ben Kiwanuka Street', 'William Street'],
+  'Old Kampala': ['Old Kampala Road', 'Mengo Hill Road', 'Namirembe Road'],
+  Bugolobi: ['Luthuli Avenue', 'Bandali Rise', 'Spring Road'],
+  Muyenga: ['Tank Hill Road', 'Muyenga Ring Road'],
+  Kansanga: ['Ggaba Road', 'Kansanga Ring Road'],
+  Munyonyo: ['Ggaba Road', 'Munyonyo Road'],
+  Ntinda: ['Ntinda Road', 'Kiwatule Road', 'Stretcher Road'],
+  Naguru: ['Naguru Hill Drive', 'Bukoto–Naguru Road'],
+  Bukoto: ['Bukoto Street', 'Kisaasi Road'],
+  Nsambya: ['Nsambya Road', 'Gaba Road', 'Queens Way'],
+  Mbuya: ['Mbuya Hill Road', 'Old Portbell Road'],
+  Najjera: ['Najjera Road', 'Buwate Road'],
+  Kira: ['Kira Road', 'Bulindo Road'],
+  Kyanja: ['Kyanja Road', 'Kungu Road'],
+  Entebbe: ['Circular Road', 'Berkeley Road', 'Nsamizi Road'],
+  Lubowa: ['Entebbe Road', 'Lubowa Estate Road'],
+  Namanve: ['Jinja Road', 'Namanve Industrial Park Road'],
+}
+
 const MAINT_NOTES = [
-  'Boiler serviced — next due in 11 months.',
-  'Balcony sealant reapplied after winter storms.',
+  'Water tank cleaned and chlorinated — next due in six months.',
+  'Generator serviced; oil and filters replaced.',
+  'Repainted the compound wall after the rains.',
+  'Gate motor lubricated; monitor after the next tenant change.',
   'Kitchen extractor replaced; receipt filed under documents.',
-  'Intercom handset intermittent — monitor after tenant change.',
-  'Repainted hallway and stairwell during last turnover.',
-  'Water pressure regulator adjusted on the riser.',
-  'Roof tiles inspected after high winds — no action needed.',
+  'Roof gutters cleared ahead of the rainy season.',
+  'Borehole yield tested — within normal range.',
 ]
 
 export const PROPERTIES: Property[] = SEEDS.map((s, i) => {
@@ -183,10 +220,10 @@ export const PROPERTIES: Property[] = SEEDS.map((s, i) => {
     mode: s.mode,
     status: s.status,
     address: {
-      line1: `${intBetween(2, 180)} Rua ${pick(['do Alecrim', 'da Rosa', 'Nova do Carvalho', 'de São Bento', 'das Janelas Verdes', 'do Século', 'Garrett', 'da Prata'])}`,
+      line1: `Plot ${intBetween(2, 180)}, ${pick(ROADS[s.district] ?? [`${s.district} Road`])}`,
       district: s.district,
-      city: 'Lisbon',
-      country: 'Portugal',
+      city: CITIES[s.district] ?? 'Kampala',
+      country: 'Uganda',
       x: s.x,
       y: s.y,
     },
@@ -195,19 +232,19 @@ export const PROPERTIES: Property[] = SEEDS.map((s, i) => {
     sizeSqm: s.sqm,
     amenities,
     price: s.price,
-    currency: 'EUR',
+    currency: 'UGX',
     managerId: s.mode === 'short_stay' ? 'tm-03' : commercial ? 'tm-04' : MANAGERS[i % MANAGERS.length],
     rating: Number(between(4.1, 5).toFixed(1)),
     availableFrom,
     acquiredOn: dayOffset(-intBetween(400, 2600)),
     yieldPct: Number(between(3.8, 9.4).toFixed(1)),
     notes: pick([
-      'Long-standing corporate demand in this block — renewals rarely lapse.',
+      'Long-standing NGO and mission demand in this block — renewals rarely lapse.',
       'Highest review scores in the portfolio; protect the turnover window.',
       'Owner prefers 24 months minimum on any new lease.',
       'Consider a rent review at renewal — currently 8% under market.',
-      'Short-stay licence renews annually; diary reminder set.',
-      'Street-level unit: footfall data supports a premium at renewal.',
+      'Tenant pays six months up front; diary the next collection early.',
+      'Street-level unit: footfall supports a premium at renewal.',
     ]),
     photoSeed: i * 37 + 11,
     documents: makeDocs(id, intBetween(3, 6)),
@@ -218,20 +255,20 @@ export const PROPERTIES: Property[] = SEEDS.map((s, i) => {
 
 /* ------------------------------ clients --------------------------- */
 const CORPORATES = [
-  'Lumina Capital Partners', 'Northmark Consulting', 'Cielo Studios',
-  'Verdant Logistics BV', 'Atlas Semiconductor', 'Praxis Legal LLP',
+  'Nile Capital Partners', 'Rwenzori Consulting Group', 'Pearl Logistics Uganda',
+  'Kampala Impact Foundation', 'Equator Semiconductor', 'Ssebugwawo & Co. Advocates',
 ]
-const NATIONALITIES = ['Portuguese', 'British', 'German', 'Brazilian', 'Nigerian', 'French', 'Indian', 'Swedish', 'American', 'Dutch', 'Kenyan', 'Japanese']
+const NATIONALITIES = ['Ugandan', 'Ugandan', 'Ugandan', 'Kenyan', 'Rwandan', 'Tanzanian', 'British', 'German', 'Indian', 'Dutch', 'American', 'Norwegian', 'Nigerian', 'South Sudanese']
 
 const COMM_SUBJECTS: Array<[string, string]> = [
-  ['Rent confirmation for this month', 'Transfer sent this morning, reference ends 4471. Could you confirm receipt?'],
-  ['Request to renew lease', 'We would like to extend for a further 12 months on the same terms if possible.'],
-  ['Heating not reaching the back bedroom', 'It runs warm in the living room but the far radiator stays cold.'],
-  ['Early check-in possible?', 'Our flight lands 09:40 — any chance of dropping bags before the room is ready?'],
-  ['Parking access card', 'The card stopped working at the barrier yesterday evening.'],
+  ['Rent confirmation for this month', 'Sent by mobile money this morning, reference ends 4471. Could you confirm receipt?'],
+  ['Request to extend the tenancy', 'We would like to continue on the same terms if possible.'],
+  ['Water not reaching the upstairs tank', 'It runs fine downstairs but the upper floor is dry by midday.'],
+  ['Early check-in possible?', 'Our flight lands at Entebbe 09:40 — any chance of dropping bags before the room is ready?'],
+  ['Gate remote not working', 'The remote stopped opening the gate yesterday evening.'],
   ['Notice of departure', 'Giving formal notice as agreed — happy to allow viewings from next week.'],
-  ['Deposit return timeline', 'Just checking when the deposit is scheduled to be released.'],
-  ['Thank you — wonderful stay', 'The apartment was immaculate and Clara was incredibly helpful throughout.'],
+  ['Deposit refund timeline', 'Just checking when the deposit is scheduled to be released.'],
+  ['Thank you — wonderful stay', 'The apartment was immaculate and Patience was incredibly helpful throughout.'],
 ]
 
 export const CLIENTS: Client[] = (() => {
@@ -258,7 +295,7 @@ export const CLIENTS: Client[] = (() => {
       name: display,
       kind,
       email: `${display.toLowerCase().replace(/[^a-z ]/g, '').split(' ').slice(0, 2).join('.')}@${kind === 'corporate' ? 'corp.example.com' : 'mail.example.com'}`,
-      phone: `+351 9${intBetween(10, 29)} ${intBetween(100, 999)} ${intBetween(100, 999)}`,
+      phone: `+256 7${pick(['0', '5', '7'])}${intBetween(1, 9)} ${intBetween(100, 999)} ${intBetween(100, 999)}`,
       nationality: pick(NATIONALITIES),
       since: dayOffset(-intBetween(40, 1400)),
       status: i > 23 ? 'past' : i === 22 ? 'prospect' : 'active',
@@ -266,19 +303,19 @@ export const CLIENTS: Client[] = (() => {
       idDocuments: makeDocs(id, intBetween(1, 3)).map((d) => ({
         ...d,
         category: 'id' as const,
-        name: pick(['Passport scan.pdf', 'National ID card.jpg', 'Proof of address.pdf', 'Employment reference.pdf', 'Company registration.pdf']),
+        name: pick(['National ID (NIN) scan.pdf', 'Passport scan.pdf', 'Proof of address — utility bill.pdf', 'Employment letter.pdf', 'Company registration (URSB).pdf']),
       })),
       notes: pick([
         'Prefers written communication; responds quickly by email.',
         'Excellent payment record across three tenancies.',
         'Relocation package handled by employer — invoices go to accounts payable.',
-        'Requested quiet unit away from the street.',
-        'Has a small dog; pet addendum signed and on file.',
+        'Requested a unit away from the main road.',
+        'Pays six months in advance each cycle without prompting.',
         'Repeat guest — fourth stay with Altier.',
       ]),
-      emergencyContact: `${pick(TENANT_NAMES)} · +351 9${intBetween(10, 29)} ${intBetween(100, 999)} ${intBetween(100, 999)}`,
+      emergencyContact: `${pick(TENANT_NAMES)} · +256 7${pick(['0', '5', '7'])}${intBetween(1, 9)} ${intBetween(100, 999)} ${intBetween(100, 999)}`,
       communications: comms,
-      lifetimeValue: intBetween(3200, 96000),
+      lifetimeValue: intBetween(12_000_000, 420_000_000),
       rating: Number(between(3.9, 5).toFixed(1)),
     })
   })
@@ -542,7 +579,7 @@ export const INVOICES: Invoice[] = (() => {
     const type = pick(['utilities', 'service_fee', 'late_fee', 'maintenance_recharge'] as const)
     const offset = intBetween(-45, 30)
     const due = dayOffset(offset)
-    const amount = type === 'late_fee' ? intBetween(45, 160) : intBetween(80, 940)
+    const amount = type === 'late_fee' ? intBetween(100_000, 500_000) : intBetween(150_000, 2_500_000)
     const status: Invoice['status'] = offset > 0 ? 'upcoming' : rnd() < 0.25 ? 'overdue' : 'paid'
     push({
       propertyId: p.id, clientId: c.id, bookingId: null, type,
@@ -559,9 +596,23 @@ export const INVOICES: Invoice[] = (() => {
     })
   }
 
+  const today = iso(TODAY)
+
+  /* Nothing can be settled on a date that has not happened yet. An advance
+     or deposit attached to an agreement that starts next month is money
+     still to collect, not revenue — otherwise it inflates this month's
+     collections and the month-on-month comparison with it. */
+  out.forEach((inv) => {
+    if (inv.paidOn && inv.paidOn > today) {
+      inv.status = daysBetween(today, inv.dueOn) <= 7 ? 'pending' : 'upcoming'
+      inv.paidAmount = 0
+      inv.paidOn = null
+      inv.method = null
+    }
+  })
+
   /* Anything falling due inside the next week is "pending", not merely
      "upcoming" — that is the bucket a manager actually works from. */
-  const today = iso(TODAY)
   out.forEach((inv) => {
     if (inv.status !== 'upcoming') return
     const gap = daysBetween(today, inv.dueOn)
@@ -573,20 +624,24 @@ export const INVOICES: Invoice[] = (() => {
 
 /* --------------------------- maintenance -------------------------- */
 const MAINT_TEMPLATES: Array<{ title: string; cat: MaintenanceRequest['category']; desc: string; trade: string }> = [
-  { title: 'Water ingress at bathroom ceiling', cat: 'plumbing', desc: 'Staining and active drip below the flat above. Needs a leak trace before making good.', trade: 'Plumbing' },
-  { title: 'Boiler losing pressure overnight', cat: 'hvac', desc: 'Pressure drops from 1.4 to 0.6 bar within 12 hours. Suspect expansion vessel.', trade: 'Heating' },
-  { title: 'Consumer unit tripping on kettle load', cat: 'electrical', desc: 'RCD trips intermittently on kitchen ring. Full circuit test required.', trade: 'Electrical' },
-  { title: 'Dishwasher not draining', cat: 'appliance', desc: 'Standing water at end of cycle. Under warranty until next March.', trade: 'Appliance' },
+  { title: 'Water not reaching the roof tank', cat: 'plumbing', desc: 'Booster pump cutting out; the upper floor is dry by mid-morning.', trade: 'Plumbing' },
+  { title: 'Standby generator failing to start', cat: 'electrical', desc: 'Does not crank during load-shedding. Battery and fuel solenoid to be checked.', trade: 'Generator' },
+  { title: 'Consumer unit tripping on the kitchen ring', cat: 'electrical', desc: 'RCD trips intermittently. Full circuit test required.', trade: 'Electrical' },
+  { title: 'Water heater not heating', cat: 'appliance', desc: 'Element suspected. Unit is four years old and out of warranty.', trade: 'Appliance' },
   { title: 'Balcony railing loose at fixing', cat: 'safety', desc: 'Two anchor bolts have worked loose. Safety priority — restrict access until fixed.', trade: 'Metalwork' },
   { title: 'Deep clean before next check-in', cat: 'cleaning', desc: 'Standard turnover plus oven and grout treatment. Linen refresh included.', trade: 'Housekeeping' },
-  { title: 'Damp patch on north gable wall', cat: 'structural', desc: 'Likely failed pointing. Scaffold quote requested from two contractors.', trade: 'Building' },
-  { title: 'Garden overgrown before viewing', cat: 'grounds', desc: 'Hedge cut back, lawn cut, path cleared ahead of Thursday viewings.', trade: 'Grounds' },
-  { title: 'Air-conditioning service overdue', cat: 'hvac', desc: 'Annual service and filter change across three split units.', trade: 'Heating' },
-  { title: 'Entrance door closer failing', cat: 'safety', desc: 'Door slams; closer needs replacing to meet fire-door compliance.', trade: 'Building' },
-  { title: 'Kitchen extractor motor noisy', cat: 'appliance', desc: 'Bearing noise at speed 3. Replacement unit sourced.', trade: 'Appliance' },
-  { title: 'Lift annual inspection due', cat: 'safety', desc: 'Statutory LOLER inspection window opens in three weeks.', trade: 'Lift services' },
+  { title: 'Roof leak above the back bedroom', cat: 'structural', desc: 'Appeared with the March rains. Iron sheets and flashing to be inspected.', trade: 'Roofing' },
+  { title: 'Compound overgrown before viewing', cat: 'grounds', desc: 'Hedge cut back, lawn cut and drive cleared ahead of Thursday viewings.', trade: 'Grounds' },
+  { title: 'Split AC units due for service', cat: 'hvac', desc: 'Annual service, gas top-up and filter change across three units.', trade: 'Air conditioning' },
+  { title: 'Automatic gate motor failing', cat: 'safety', desc: 'Sticking halfway. Security risk overnight — treat as priority.', trade: 'Gate automation' },
+  { title: 'Septic tank due for emptying', cat: 'structural', desc: 'Last emptied eleven months ago. Cesspool truck to be booked.', trade: 'Sanitation' },
+  { title: 'Borehole pump losing pressure', cat: 'plumbing', desc: 'Yield down noticeably since last month. Pump and pressure switch to check.', trade: 'Borehole' },
 ]
-const VENDORS = ['Marques & Filhos', 'Tejo Building Services', 'Halcyon Facilities', 'Nordeste Electrical', 'Casa Clean Lisboa', 'Vertex Lift Care', 'Aguas Rapidas', 'Verde Grounds']
+const VENDORS = [
+  'Kizza & Sons Contractors', 'Nile Facilities Services', 'Bwaise Electrical Works',
+  'Pearl Clean Kampala', 'Rwenzori Plumbing', 'Kampala Lift & Gate Care',
+  'Bugolobi Generator Services', 'Green Compound Landscaping',
+]
 
 export const MAINTENANCE: MaintenanceRequest[] = (() => {
   const out: MaintenanceRequest[] = []
@@ -599,7 +654,7 @@ export const MAINTENANCE: MaintenanceRequest[] = (() => {
     const status: MaintenanceRequest['status'] =
       dueOffset < -3 ? (chance(0.75) ? 'completed' : 'awaiting_parts')
         : pick(['reported', 'scheduled', 'scheduled', 'in_progress', 'in_progress', 'awaiting_parts', 'completed'] as const)
-    const estimated = intBetween(90, 3400)
+    const estimated = intBetween(200_000, 8_000_000)
     const completed = status === 'completed'
     const reportedOn = dayOffset(reportedOffset)
     const timeline: MaintenanceRequest['timeline'] = [
@@ -771,8 +826,8 @@ export function buildNotifications(
 
   out.push({
     id: 'n-doc-1', kind: 'document', priority: 'normal',
-    title: 'Short-stay licence renewal in 21 days',
-    body: 'Alfama Stone Apartment — AL registration must be renewed before it lapses.',
+    title: 'KCCA trading licence renewal in 21 days',
+    body: 'Old Kampala Stone Apartment — the short-stay trading licence must be renewed before it lapses.',
     createdAt: dayOffset(-3), read: false, entity: { type: 'property', id: 'p-14' }, actionLabel: 'Upload renewal',
   })
   out.push({

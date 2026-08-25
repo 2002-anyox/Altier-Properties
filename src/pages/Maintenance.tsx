@@ -26,7 +26,7 @@ export default function Maintenance() {
   const [propertyId, setPropertyId] = useState('all')
   const [open, setOpen] = useState<MaintenanceRequest | null>(null)
   const [creating, setCreating] = useState(false)
-  const [draft, setDraft] = useState({ title: '', propertyId: state.properties[0]?.id ?? '', priority: 'medium' as MaintenancePriority, description: '', vendor: 'Tejo Building Services', dueOn: dayOffset(7) })
+  const [draft, setDraft] = useState({ title: '', propertyId: state.properties[0]?.id ?? '', priority: 'medium' as MaintenancePriority, description: '', vendor: 'Kizza & Sons Contractors', dueOn: dayOffset(7) })
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()

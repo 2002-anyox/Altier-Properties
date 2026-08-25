@@ -9,7 +9,7 @@ import { ReminderModal } from './Notifications'
 import { useStore } from '../lib/store'
 import { ROLES, can, roleLabel, type Permission } from '../lib/rbac'
 import { mediumDate, money, num } from '../lib/format'
-import { CURRENCIES, REGIONS, currencyDef, regionDef } from '../lib/money'
+import { BASE_CURRENCY, CURRENCIES, REGIONS, currencyDef, regionDef } from '../lib/money'
 import { LANGUAGES, type Language } from '../lib/strings'
 import type { Role } from '../lib/types'
 
@@ -166,11 +166,11 @@ export default function Settings() {
                 <dl className="mt-3 grid gap-3 text-[13px] sm:grid-cols-3">
                   <div>
                     <dt className="text-ink-muted">Monthly rent</dt>
-                    <dd className="tnum mt-0.5 text-[15px] font-semibold text-ink">{money(2450)}</dd>
+                    <dd className="tnum mt-0.5 text-[15px] font-semibold text-ink">{money(3_500_000)}</dd>
                   </div>
                   <div>
                     <dt className="text-ink-muted">Portfolio revenue</dt>
-                    <dd className="tnum mt-0.5 text-[15px] font-semibold text-ink">{money(487_500, true)}</dd>
+                    <dd className="tnum mt-0.5 text-[15px] font-semibold text-ink">{money(842_000_000, true)}</dd>
                   </div>
                   <div>
                     <dt className="text-ink-muted">Today</dt>
@@ -185,13 +185,13 @@ export default function Settings() {
                 <Coins size={16} className="text-gold" /> Conversion
               </h3>
               <p className="mt-2 text-[13px] leading-relaxed text-ink-secondary">
-                The sample portfolio is priced in euros. Amounts are converted for display only — switching
-                currency never rewrites a stored figure.
+                The portfolio is priced in Ugandan shillings. Amounts are converted for display only —
+                switching currency never rewrites a stored figure.
               </p>
               <dl className="mt-4 space-y-2.5 border-t border-line pt-4 text-[13px]">
                 <div className="flex justify-between gap-3">
                   <dt className="text-ink-muted">Base currency</dt>
-                  <dd className="text-ink-secondary">EUR</dd>
+                  <dd className="text-ink-secondary">{BASE_CURRENCY}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-ink-muted">Showing</dt>
@@ -199,7 +199,11 @@ export default function Settings() {
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-ink-muted">Rate applied</dt>
-                  <dd className="tnum text-ink-secondary">1 EUR = {num(currencyDef(state.currency).rate, currencyDef(state.currency).rate < 10 ? 2 : 0)}</dd>
+                  <dd className="tnum text-ink-secondary">
+                    {state.currency === BASE_CURRENCY
+                      ? 'None — shown as held'
+                      : `1 ${state.currency} = ${num(currencyDef(state.currency).ugxPerUnit, currencyDef(state.currency).ugxPerUnit < 10 ? 2 : 0)} UGX`}
+                  </dd>
                 </div>
               </dl>
               <p className="mt-4 rounded-lg border border-gold/40 bg-gold-soft/40 p-3 text-[11.5px] leading-relaxed text-gold-ink">

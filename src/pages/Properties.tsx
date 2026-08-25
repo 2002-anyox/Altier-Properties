@@ -86,7 +86,7 @@ export default function Properties() {
       <PageHeader
         eyebrow="Portfolio"
         title="Properties"
-        description="Every unit Altier manages — long lets, serviced residences, short stays and commercial space in one list."
+        description="Every unit Altier manages across Kampala and Entebbe — leases, open-ended rentals, serviced residences, short stays and commercial space in one list."
         actions={
           <>
             <SegmentedControl<View>
@@ -341,9 +341,9 @@ function MapView({ properties }: { properties: Property[] }) {
               </pattern>
             </defs>
             <rect width="100" height="70" fill="url(#grid-map)" />
-            <path d="M0 54 Q22 48 44 53 T100 50 L100 70 L0 70 Z" fill="var(--viz-1)" opacity="0.10" />
-            <path d="M0 54 Q22 48 44 53 T100 50" fill="none" stroke="var(--viz-1)" strokeWidth="0.4" opacity="0.5" />
-            <text x="4" y="66" fontSize="2.6" fill="var(--viz-axis)">Tagus estuary</text>
+            <path d="M0 58 Q26 52 52 57 T100 54 L100 70 L0 70 Z" fill="var(--viz-1)" opacity="0.10" />
+            <path d="M0 58 Q26 52 52 57 T100 54" fill="none" stroke="var(--viz-1)" strokeWidth="0.4" opacity="0.5" />
+            <text x="4" y="67" fontSize="2.6" fill="var(--viz-axis)">Lake Victoria</text>
           </svg>
 
           {properties.map((p) => {

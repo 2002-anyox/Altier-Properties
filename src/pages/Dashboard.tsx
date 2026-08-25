@@ -87,7 +87,7 @@ export default function Dashboard() {
       <PageHeader
         eyebrow={new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
         title={`${greeting}, ${me.name.split(' ')[0]}`}
-        description={`${kpis.totalProperties} properties across Lisbon and the coast. ${kpis.overdueCount > 0 ? `${kpis.overdueCount} payments need chasing today.` : 'Collections are clean today.'}`}
+        description={`${kpis.totalProperties} properties across Kampala and Entebbe. ${kpis.overdueCount > 0 ? `${kpis.overdueCount} payments need chasing today.` : 'Collections are clean today.'}`}
         actions={
           <>
             <Button variant="secondary" icon={<CalendarClock size={15} />} onClick={() => navigate('/availability')}>
@@ -112,8 +112,11 @@ export default function Dashboard() {
                 <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">
                   <Sparkles size={12} /> This month
                 </p>
-                <p className="mt-4 text-[44px] font-semibold leading-none tracking-[-0.03em] text-white dark:text-ink">
-                  {money(kpis.monthlyRevenue)}
+                <p
+                  className="mt-4 text-[clamp(34px,3.4vw,44px)] font-semibold leading-none tracking-[-0.03em] text-white dark:text-ink"
+                  title={money(kpis.monthlyRevenue)}
+                >
+                  {money(kpis.monthlyRevenue, true)}
                 </p>
                 <p className="mt-2.5 text-[13px] text-[rgb(var(--c-text-onrail-muted))] dark:text-ink-muted">
                   Collected revenue ·{' '}

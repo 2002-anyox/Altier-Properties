@@ -239,7 +239,7 @@ export default function PropertyDetail() {
                         ? 'Off the market while maintenance work completes.'
                         : 'Currently inactive and excluded from availability.'}
                 </p>
-                {property.availableFrom && (
+                {property.availableFrom && daysBetween(iso(TODAY), property.availableFrom) > 0 && (
                   <Chip className="bg-gold-soft text-gold-ink">Available from {shortDate(property.availableFrom)}</Chip>
                 )}
               </div>
@@ -278,7 +278,7 @@ export default function PropertyDetail() {
               <dl className="mt-4 divide-y divide-[rgb(var(--c-border))] text-[13px]">
                 {[
                   ['Reference', property.code],
-                  ['Type', property.type.replace(/_/g, ' ')],
+                  ['Type', { apartment: 'Apartment', house: 'House', villa: 'Villa', serviced: 'Serviced apartment', short_stay: 'Short-stay listing', commercial: 'Commercial' }[property.type]],
                   ['Letting model', property.mode === 'short_stay' ? 'Short stay' : property.mode === 'rental' ? 'Open-ended rental' : 'Fixed-term lease'],
                   ['District', property.address.district],
                   ['Acquired', mediumDate(property.acquiredOn)],
@@ -287,7 +287,7 @@ export default function PropertyDetail() {
                 ].map(([k, v]) => (
                   <div key={k} className="flex items-center justify-between gap-3 py-2.5">
                     <dt className="text-ink-muted">{k}</dt>
-                    <dd className="text-right capitalize text-ink-secondary">{v}</dd>
+                    <dd className="text-right text-ink-secondary">{v}</dd>
                   </div>
                 ))}
               </dl>

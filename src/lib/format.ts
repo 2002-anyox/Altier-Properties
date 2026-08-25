@@ -2,19 +2,19 @@ import { TODAY, daysBetween, iso } from './data'
 import { presentation } from './money'
 
 /**
- * Amounts are held in EUR and presented in the chosen currency.
- * `compact` switches to 1.2M / 4.5K once the number stops being readable —
- * which happens far sooner in shilling-denominated currencies.
+ * Amounts are held in shillings and presented in the chosen currency.
+ * `compact` switches to 1.2M / 4.5K once the number stops being readable,
+ * which happens at a very different magnitude in each currency.
  */
 export const money = (n: number, compact = false) => {
   const value = n * presentation.rate
-  const threshold = presentation.rate >= 100 ? 1_000_000 : 10_000
+  const useCompact = compact && Math.abs(value) >= presentation.compactFrom
   return new Intl.NumberFormat(presentation.locale, {
     style: 'currency',
     currency: presentation.currency,
-    maximumFractionDigits: compact && Math.abs(value) >= threshold ? 1 : presentation.decimals,
+    maximumFractionDigits: useCompact ? 1 : 0,
     minimumFractionDigits: 0,
-    notation: compact && Math.abs(value) >= threshold ? 'compact' : 'standard',
+    notation: useCompact ? 'compact' : 'standard',
   }).format(value)
 }
 

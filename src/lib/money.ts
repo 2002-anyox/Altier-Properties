@@ -1,36 +1,38 @@
 /* ------------------------------------------------------------------ *
  * Currency and region
  *
- * The sample portfolio is priced in EUR. Everything on screen is
+ * The portfolio is priced in Ugandan shillings. Everything on screen is
  * converted at display time, so switching currency never rewrites the
  * underlying figures — the same way a real system holds one booking
  * currency and presents another.
  *
  * Rates are indicative demo values, not live FX. A production build
  * would read them from a rates provider and stamp each invoice with the
- * rate used at the time it was raised.
+ * rate used at the time it was raised, so historic figures never drift.
  * ------------------------------------------------------------------ */
+
+export const BASE_CURRENCY = 'UGX'
 
 export interface CurrencyDef {
   code: string
   label: string
-  /** Units per 1 EUR. */
-  rate: number
-  /** Currencies with no minor unit in daily use are shown whole. */
-  decimals: number
+  /** Shillings one unit of this currency is worth. */
+  ugxPerUnit: number
+  /** Above this displayed value, switch to compact form (1.2M, 4.5K). */
+  compactFrom: number
 }
 
 export const CURRENCIES: CurrencyDef[] = [
-  { code: 'UGX', label: 'Ugandan shilling', rate: 4000, decimals: 0 },
-  { code: 'KES', label: 'Kenyan shilling', rate: 140, decimals: 0 },
-  { code: 'TZS', label: 'Tanzanian shilling', rate: 2800, decimals: 0 },
-  { code: 'RWF', label: 'Rwandan franc', rate: 1400, decimals: 0 },
-  { code: 'NGN', label: 'Nigerian naira', rate: 1700, decimals: 0 },
-  { code: 'GHS', label: 'Ghanaian cedi', rate: 16, decimals: 0 },
-  { code: 'ZAR', label: 'South African rand', rate: 20, decimals: 0 },
-  { code: 'USD', label: 'US dollar', rate: 1.08, decimals: 0 },
-  { code: 'GBP', label: 'Pound sterling', rate: 0.85, decimals: 0 },
-  { code: 'EUR', label: 'Euro', rate: 1, decimals: 0 },
+  { code: 'UGX', label: 'Ugandan shilling', ugxPerUnit: 1, compactFrom: 1_000_000 },
+  { code: 'KES', label: 'Kenyan shilling', ugxPerUnit: 28.5, compactFrom: 100_000 },
+  { code: 'TZS', label: 'Tanzanian shilling', ugxPerUnit: 1.42, compactFrom: 1_000_000 },
+  { code: 'RWF', label: 'Rwandan franc', ugxPerUnit: 2.85, compactFrom: 1_000_000 },
+  { code: 'NGN', label: 'Nigerian naira', ugxPerUnit: 2.39, compactFrom: 100_000 },
+  { code: 'GHS', label: 'Ghanaian cedi', ugxPerUnit: 239, compactFrom: 100_000 },
+  { code: 'ZAR', label: 'South African rand', ugxPerUnit: 200, compactFrom: 100_000 },
+  { code: 'USD', label: 'US dollar', ugxPerUnit: 3700, compactFrom: 10_000 },
+  { code: 'GBP', label: 'Pound sterling', ugxPerUnit: 4700, compactFrom: 10_000 },
+  { code: 'EUR', label: 'Euro', ugxPerUnit: 4000, compactFrom: 10_000 },
 ]
 
 export interface RegionDef {
@@ -54,26 +56,27 @@ export const REGIONS: RegionDef[] = [
 ]
 
 export const currencyDef = (code: string) =>
-  CURRENCIES.find((c) => c.code === code) ?? CURRENCIES[CURRENCIES.length - 1]
+  CURRENCIES.find((c) => c.code === code) ?? CURRENCIES[0]
 
 export const regionDef = (locale: string) =>
-  REGIONS.find((r) => r.locale === locale) ?? REGIONS[REGIONS.length - 1]
+  REGIONS.find((r) => r.locale === locale) ?? REGIONS[0]
 
 /* The active presentation settings. Read during render by the format
    helpers so call sites stay `money(n)` rather than threading context
    through every component. Written by the store before it renders its
    children, so a change is visible on the very next render. */
 export const presentation = {
-  locale: 'en-GB',
-  currency: 'EUR',
+  locale: 'en-UG',
+  currency: 'UGX',
+  /** Multiplier from the base currency to the displayed one. */
   rate: 1,
-  decimals: 0,
+  compactFrom: 1_000_000,
 }
 
 export function setPresentation(locale: string, currency: string) {
   const def = currencyDef(currency)
   presentation.locale = locale
   presentation.currency = def.code
-  presentation.rate = def.rate
-  presentation.decimals = def.decimals
+  presentation.rate = 1 / def.ugxPerUnit
+  presentation.compactFrom = def.compactFrom
 }

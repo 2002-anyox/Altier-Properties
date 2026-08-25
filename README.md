@@ -54,9 +54,9 @@ thread across email, calls, SMS, portal messages and internal notes.
   fire as that date approaches and again once it lapses.
 - *Short stay* — nightly, Airbnb-style.
 
-**Region, currency and language** — figures are held in one base currency and presented in another,
-so switching never rewrites a stored amount. Ten currencies including the Ugandan, Kenyan and
-Tanzanian shilling, region-aware date and number formatting, and an interface language setting.
+**Region, currency and language** — figures are held in shillings and presented in whatever currency
+you choose, so switching never rewrites a stored amount. Ten currencies, region-aware date and number
+formatting, and an interface language setting.
 
 **Payments and invoices** — rent, advances, deposits, bookings and ancillary charges; paid, pending,
 part paid, overdue and upcoming; overdue ageing; inline *record payment* and *send reminder*; an
@@ -98,8 +98,9 @@ npm run preview    # serve the production build
 npm run typecheck  # TypeScript, no emit
 ```
 
-Requires Node 18 or newer. There is no backend: the sample portfolio is generated deterministically
-at load and anchored to today's date, so due dates, arrivals and overdue balances are always live.
+Requires Node 18 or newer. There is no backend: the sample portfolio — 24 properties across Kampala,
+Wakiso and Entebbe, priced in Ugandan shillings — is generated deterministically at load and anchored
+to today's date, so due dates, arrivals and overdue balances are always live.
 Role and reminder preferences persist in `localStorage`; **Settings → Profile → Reset demo data**
 restores everything.
 

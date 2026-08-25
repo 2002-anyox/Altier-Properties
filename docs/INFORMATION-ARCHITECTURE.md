@@ -67,9 +67,13 @@ product surveyed. It has no expiry to count down to, so the thing that matters i
 platform warns as it approaches and again once it lapses into arrears. On the timeline these
 agreements are drawn without a right-hand edge, because they have no scheduled end.
 
-**Presentation** is separate from data. Amounts are stored in one base currency and converted at
+**Presentation** is separate from data. Amounts are stored in Ugandan shillings and converted at
 display time; region controls date and number formatting; language controls the interface chrome.
 None of the three rewrites a stored figure.
+
+The demo portfolio is 24 properties across Kampala, Wakiso and Entebbe: prime lettings in Kololo and
+Nakasero, open-ended rentals in Ntinda, Najjera, Kansanga and Kira, short stays in Bugolobi, Muyenga
+and on the Entebbe lakeshore, and commercial space in Nakasero, on Kampala Road and at Namanve.
 
 **Property status** is a five-state system used consistently across every surface, always paired with
 a label so colour never carries the meaning alone:

@@ -55,7 +55,7 @@ export default function Availability() {
       <PageHeader
         eyebrow="Overview"
         title="Availability"
-        description="One timeline for the whole portfolio. Leases run as continuous bars, short stays as blocks — the same grid, whatever the letting model."
+        description="One timeline for the whole portfolio. Leases and open-ended rentals run as continuous bars, short stays as blocks — the same grid, whatever the letting model."
         actions={
           <SegmentedControl<View>
             ariaLabel="Change availability view"
