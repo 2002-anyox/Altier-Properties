@@ -37,6 +37,7 @@ export default function Settings() {
   const [tab, setTab] = useState<Tab>('profile')
   const [tuning, setTuning] = useState(false)
   const me = state.team.find((t) => t.id === state.currentUserId) ?? state.team[0]
+  const live = state.source === 'database'
 
   return (
     <>
@@ -95,15 +96,33 @@ export default function Settings() {
                   </dd>
                 </div>
                 <div className="flex justify-between gap-3"><dt className="text-ink-muted">Access level</dt><dd className="text-ink-secondary">{roleLabel(state.role)}</dd></div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-ink-muted">Data source</dt>
+                  <dd>
+                    {live
+                      ? <Chip className="bg-[rgb(var(--c-status-good)/0.12)] text-[rgb(var(--c-status-good))]" dot="bg-status-good">Live database</Chip>
+                      : <Chip className="bg-surface-inset text-ink-secondary" dot="bg-ink-muted">Sample data</Chip>}
+                  </dd>
+                </div>
               </dl>
+              <p className="mt-4 text-[12px] leading-relaxed text-ink-muted">
+                {live
+                  ? 'Changes are written to the database and shared with everyone on this portfolio.'
+                  : 'No database is connected, so this is the bundled sample portfolio. Changes stay in this browser tab.'}
+              </p>
               <Button
                 variant="secondary"
                 block
-                className="mt-5"
+                className="mt-4"
                 icon={<RotateCcw size={14} />}
-                onClick={() => { dispatch({ type: 'reset' }); toast({ title: 'Demo data reset', body: 'The sample portfolio has been restored to its original state.', tone: 'default' }) }}
+                onClick={() => {
+                  dispatch({ type: 'reset' })
+                  toast(live
+                    ? { title: 'Reloaded', body: 'The portfolio has been re-read from the database.', tone: 'default' }
+                    : { title: 'Demo data reset', body: 'The sample portfolio has been restored to its original state.', tone: 'default' })
+                }}
               >
-                Reset demo data
+                {live ? 'Reload from database' : 'Reset demo data'}
               </Button>
             </Card>
           </div>

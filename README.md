@@ -108,12 +108,46 @@ npm run typecheck  # TypeScript, no emit
 npm run check:accounting  # revenue-recognition invariants
 ```
 
-CI runs typecheck, the accounting invariants, the database round trip and the production build on
-every pull request and on every push to `main` (`.github/workflows/ci.yml`).
+That runs against the bundled demo portfolio, entirely in the browser. To run it against a real
+database instead, seed one and start the API alongside the dev server:
+
+```bash
+npm run db:seed    # loads the demo portfolio into Postgres (or PGlite)
+npm run api        # http://localhost:5174
+npm run dev        # in a second terminal
+```
+
+The dev server proxies `/api` to the API process, so nothing needs configuring. Settings → Profile
+says which of the two is in play — **Live database** or **Sample data** — and every change is
+written through. If the API is not running the app falls back to the bundled portfolio rather than
+failing, which is exactly how the published single-file build works.
+
+### How it fits together
+
+The client holds the whole portfolio in one store and every selector reads plain arrays, so the
+database changed nothing about how the pages are written. `src/lib/api.ts` loads the portfolio once
+at boot; the store applies each change locally for an instant response, writes it through, and then
+adopts the server's copy — so the two cannot drift, and a rejected write re-reads rather than
+guessing. Every mutation endpoint answers with the refreshed portfolio for that reason.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/portfolio` | the bootstrap payload: properties, clients, bookings, invoices, maintenance, team, reminder settings |
+| `POST /api/invoices/:id/payment` | record a payment in full |
+| `POST /api/invoices/:id/reminder` | log a payment reminder against the client |
+| `PATCH /api/properties/:id/status` | move a property between the five states |
+| `PATCH /api/maintenance/:id/status` | advance a maintenance request |
+| `POST /api/maintenance` | raise a new request |
+| `POST /api/clients/:id/notes` | append to a client's communication history |
+| `PUT /api/settings/reminders` | change reminder timing |
+
+CI runs typecheck, the accounting invariants, the database round trip against both drivers, the API
+smoke test and the production build on every pull request and on every push to `main`
+(`.github/workflows/ci.yml`).
 
 ## Database
 
-The app currently runs entirely in the browser off a generated portfolio. `server/db/` adds the
+The app runs off the bundled generated portfolio unless an API is reachable. `server/db/` is the
 persistence layer beneath it: a Postgres schema, migrations, and a seeder that loads the demo
 portfolio using the very generator the UI runs on — so the seeded database holds exactly the data
 the interface shows, anchored to today.
@@ -123,11 +157,13 @@ npm run db:generate   # regenerate migrations after changing the schema
 npm run db:migrate    # apply pending migrations
 npm run db:seed       # truncate and load the demo portfolio
 npm run db:check      # migrate, seed, then verify the round trip
+npm run smoke:api     # boot the API and exercise a read, a write and two errors
 ```
 
 Set `DATABASE_URL` to point at Postgres (see `.env.example`). Without one, everything falls back to
 **PGlite** — Postgres compiled to WebAssembly — so the schema and seeder can be exercised with no
-server running. Same SQL either way; CI runs the round trip against both.
+server running. PGlite persists at `.pglite`, so a seed survives between commands. Same SQL either
+way; CI runs the round trip against both.
 
 `db:check` is the one to trust. It migrates, seeds, reads the portfolio back out, and asserts:
 

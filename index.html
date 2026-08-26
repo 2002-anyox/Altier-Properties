@@ -8,10 +8,21 @@
     <title>Altier Properties</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Loaded without blocking the first paint: the interface renders in the
+         fallback stack and swaps when the webfonts arrive, so a slow or
+         unreachable font host delays nothing. -->
     <link
       href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
     />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230F1620'/%3E%3Cpath d='M16 7l7 18h-3.4l-1.4-3.9h-4.4L12.4 25H9l7-18zm0 5.6l-1.5 6.4h3z' fill='%23CBA85F'/%3E%3C/svg%3E" />
   </head>
   <body>

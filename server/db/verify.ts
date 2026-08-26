@@ -13,7 +13,8 @@ import { sql } from 'drizzle-orm'
 import { INVOICES, TODAY, iso } from '../../src/lib/data.ts'
 import { chargeClass, deferredPortion, earnedInMonth } from '../../src/lib/derive.ts'
 import type { Invoice } from '../../src/lib/types.ts'
-import { connect } from './client.ts'
+import { MEMORY, connect } from './client.ts'
+import { readPortfolio } from './read.ts'
 import * as t from './schema.ts'
 import { seed } from './seed.ts'
 
@@ -27,8 +28,12 @@ const shift = (key: string, n: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
+/* The check owns its database from scratch every run, so without a real
+   Postgres behind it PGlite stays in memory rather than touching .pglite. */
+process.env.PGLITE_PATH ??= MEMORY
+
 const { db, driver, migrate, close } = await connect()
-console.log(`verifying via ${driver}`)
+console.log(`verifying via ${driver}${driver === 'pglite' ? ' (in memory)' : ''}`)
 await migrate()
 await seed(db)
 
@@ -141,6 +146,63 @@ const badBooking = async () => {
 }
 await badBooking()
 console.log(`constraint check: 5 invalid rows offered, all refused`)
+
+/* 9. The reader is the exact inverse of the seeder. A mis-mapped column
+      would not fail any constraint — it would just quietly show the wrong
+      thing on every page — so compare what comes back to what went in. */
+const portfolio = await readPortfolio(db)
+const data = await import('../../src/lib/data.ts')
+
+/** Order is cosmetic for these, so compare them as sets. */
+const normalise = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(normalise)
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = (k === 'amenities' || k === 'propertyIds')
+        ? [...(v as string[])].sort()
+        : normalise(v)
+    }
+    return out
+  }
+  return value
+}
+
+const diff = (a: unknown, b: unknown, path = ''): string | null => {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return `${path}: ${a.length} vs ${b.length} items`
+    for (let i = 0; i < a.length; i++) {
+      const d = diff(a[i], b[i], `${path}[${i}]`)
+      if (d) return d
+    }
+    return null
+  }
+  if (a && b && typeof a === 'object' && typeof b === 'object') {
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)])
+    for (const k of keys) {
+      const d = diff((a as any)[k], (b as any)[k], path ? `${path}.${k}` : k)
+      if (d) return d
+    }
+    return null
+  }
+  return Object.is(a, b) ? null : `${path}: ${JSON.stringify(a)} vs ${JSON.stringify(b)}`
+}
+
+for (const [name, fromDb, fromMemory] of [
+  ['properties', portfolio.properties, data.PROPERTIES],
+  ['clients', portfolio.clients, data.CLIENTS],
+  ['bookings', portfolio.bookings, data.BOOKINGS],
+  ['invoices', portfolio.invoices, data.INVOICES],
+  ['maintenance', portfolio.maintenance, data.MAINTENANCE],
+  ['team', portfolio.team, data.TEAM],
+] as const) {
+  const sortById = (xs: readonly any[]) => [...xs].sort((x, y) => (x.id < y.id ? -1 : 1))
+  const d = diff(normalise(sortById(fromDb)), normalise(sortById(fromMemory)))
+  ok(!d, `${name} differ after the round trip — ${d}`)
+}
+const rd = diff(normalise(portfolio.reminders), normalise(data.DEFAULT_REMINDERS))
+ok(!rd, `reminder settings differ after the round trip — ${rd}`)
+console.log(`reader check: 6 collections + settings identical to the generator`)
 
 await close()
 

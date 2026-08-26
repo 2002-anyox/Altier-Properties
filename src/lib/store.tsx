@@ -1,13 +1,14 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import {
   BOOKINGS, CLIENTS, DEFAULT_REMINDERS, INVOICES, MAINTENANCE, PROPERTIES, TEAM, TODAY,
   buildNotifications, dayOffset, iso,
 } from './data'
+import { api, demoPortfolio, loadPortfolio, type DataSource } from './api'
 import { REGIONS, currencyDef, setPresentation } from './money'
 import { setLanguage, type Language } from './strings'
 import type {
   AppNotification, Booking, Client, Invoice, MaintenanceRequest, MaintenanceStatus,
-  Property, PropertyStatus, ReminderSettings, Role, TeamMember,
+  Portfolio, Property, PropertyStatus, ReminderSettings, Role, TeamMember,
 } from './types'
 
 type Theme = 'light' | 'dark'
@@ -27,6 +28,9 @@ interface State {
   locale: string
   currency: string
   language: Language
+  /** Where the portfolio came from, and whether it has arrived yet. */
+  source: DataSource
+  hydrated: boolean
 }
 
 type Action =
@@ -45,23 +49,33 @@ type Action =
   | { type: 'set-region'; locale: string }
   | { type: 'set-currency'; currency: string }
   | { type: 'set-language'; language: Language }
+  /** Replaces the portfolio with the server's authoritative copy. */
+  | { type: 'sync'; portfolio: Portfolio; source?: DataSource }
   | { type: 'reset' }
 
-const seed = (): State => ({
-  properties: PROPERTIES,
-  clients: CLIENTS,
-  bookings: BOOKINGS,
-  invoices: INVOICES,
-  maintenance: MAINTENANCE,
-  notifications: buildNotifications(PROPERTIES, INVOICES, BOOKINGS, MAINTENANCE, CLIENTS, DEFAULT_REMINDERS),
-  reminders: DEFAULT_REMINDERS,
-  team: TEAM,
+/** Notifications are derived, never stored, so they are rebuilt on every load. */
+const notificationsFor = (p: Portfolio) =>
+  buildNotifications(p.properties, p.invoices, p.bookings, p.maintenance, p.clients, p.reminders)
+
+const stateFrom = (p: Portfolio, source: DataSource, hydrated: boolean): State => ({
+  properties: p.properties,
+  clients: p.clients,
+  bookings: p.bookings,
+  invoices: p.invoices,
+  maintenance: p.maintenance,
+  notifications: notificationsFor(p),
+  reminders: p.reminders,
+  team: p.team,
   role: 'owner',
   currentUserId: 'tm-01',
   locale: 'en-UG',
   currency: 'UGX',
   language: 'en',
+  source,
+  hydrated,
 })
+
+const seed = (): State => stateFrom(demoPortfolio(), 'demo', false)
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -182,8 +196,24 @@ function reducer(state: State, action: Action): State {
       return { ...state, currency: currencyDef(action.currency).code }
     case 'set-language':
       return { ...state, language: action.language }
+    case 'sync': {
+      const fresh = stateFrom(action.portfolio, action.source ?? state.source, true)
+      // Read state lives only in this tab; a refresh must not mark everything unread.
+      const read = new Set(state.notifications.filter((n) => n.read).map((n) => n.id))
+      return {
+        ...fresh,
+        notifications: fresh.notifications.map((n) => (read.has(n.id) ? { ...n, read: true } : n)),
+        // Preferences belong to the person, not the portfolio.
+        role: state.role,
+        currentUserId: state.currentUserId,
+        locale: state.locale,
+        currency: state.currency,
+        language: state.language,
+      }
+    }
     case 'reset':
-      return seed()
+      return { ...seed(), hydrated: true, role: state.role, currentUserId: state.currentUserId,
+               locale: state.locale, currency: state.currency, language: state.language }
     default:
       return state
   }
@@ -260,6 +290,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return base
   })
 
+  const stateRef = useRef(state)
+  stateRef.current = state
+
   const [theme, setTheme] = useState<Theme>(readStoredTheme)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -297,10 +330,67 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const dismissToast = useCallback((id: number) => setToasts((prev) => prev.filter((x) => x.id !== id)), [])
 
+  /* Load the portfolio once. Without an API this resolves to the bundled
+     demo data, so the published build works with no server at all. */
+  useEffect(() => {
+    let cancelled = false
+    loadPortfolio().then(({ portfolio, source }) => {
+      if (!cancelled) dispatch({ type: 'sync', portfolio, source })
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  /* Which actions have to reach the server, and how. Anything absent here
+     is a preference or a view concern and stays in the tab. */
+  const requestFor = useCallback((action: Action): (() => Promise<Portfolio>) | null => {
+    switch (action.type) {
+      case 'record-payment': return () => api.recordPayment(action.invoiceId)
+      case 'send-reminder': return () => api.sendReminder(action.invoiceId)
+      case 'set-property-status': return () => api.setPropertyStatus(action.id, action.status)
+      case 'set-maintenance-status': return () => api.setMaintenanceStatus(action.id, action.status)
+      case 'add-note': return () => api.addNote(action.clientId, action.text)
+      case 'update-reminders': return () => api.updateReminders(action.reminders as Record<string, unknown>)
+      case 'add-maintenance': {
+        const r = action.request
+        return () => api.addMaintenance({
+          propertyId: r.propertyId, title: r.title, description: r.description,
+          priority: r.priority, vendor: r.vendor, dueOn: r.dueOn,
+        })
+      }
+      // Re-reading is the only sensible "reset" once a database is behind it.
+      case 'reset': return () => api.reload()
+      default: return null
+    }
+  }, [])
+
+  /* Applies every action locally first so the interface stays instant, then
+     writes it through and adopts the server's copy. On failure the server is
+     re-read rather than guessed at, so a rejected write cannot leave the
+     screen showing something that never happened. */
+  const dispatchWithSync = useCallback<React.Dispatch<Action>>((action) => {
+    const live = stateRef.current.source === 'database'
+    /* With a database behind it, "reset" means re-reading the server rather
+       than restoring the bundled demo, so the local reducer is skipped. */
+    if (!(live && action.type === 'reset')) dispatch(action)
+    if (!live) return
+    const call = requestFor(action)
+    if (!call) return
+    call().then(
+      (portfolio) => dispatch({ type: 'sync', portfolio }),
+      (error: Error) => {
+        toast({ title: 'Change not saved', body: error.message, tone: 'critical' })
+        api.reload().then(
+          (portfolio) => dispatch({ type: 'sync', portfolio }),
+          () => { /* the server is unreachable; the optimistic state stands */ },
+        )
+      },
+    )
+  }, [requestFor, toast])
+
   const value = useMemo<Ctx>(
     () => ({
       state,
-      dispatch,
+      dispatch: dispatchWithSync,
       theme,
       toggleTheme: () => setTheme((t) => (t === 'dark' ? 'light' : 'dark')),
       toasts,
@@ -309,7 +399,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       paletteOpen,
       setPaletteOpen,
     }),
-    [state, theme, toasts, toast, dismissToast, paletteOpen],
+    [state, theme, toasts, toast, dismissToast, paletteOpen, dispatchWithSync],
   )
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

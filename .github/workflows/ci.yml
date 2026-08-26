@@ -66,5 +66,14 @@ jobs:
       - name: Database round trip (PGlite)
         run: npm run db:check
 
+      # The round trip never starts a server. This boots the real API against
+      # the seeded database and exercises a read, a write and two error paths,
+      # so a broken route or a mis-mapped status code fails here rather than
+      # in the browser.
+      - name: API smoke test
+        run: npm run db:seed && npm run smoke:api
+        env:
+          DATABASE_URL: postgres://altier:altier@localhost:5432/altier
+
       - name: Build
         run: npm run build

@@ -15,11 +15,16 @@
     "db:migrate": "npm run --silent db:build && node node_modules/.cache/db/migrate.mjs",
     "db:seed": "npm run --silent db:build && node node_modules/.cache/db/seed-cli.mjs",
     "db:build": "esbuild server/db/seed-cli.ts server/db/migrate.ts server/db/verify.ts --bundle --platform=node --format=esm --packages=external --outdir=node_modules/.cache/db --out-extension:.js=.mjs --log-level=warning",
-    "db:check": "npm run --silent db:build && node node_modules/.cache/db/verify.mjs"
+    "db:check": "npm run --silent db:build && node node_modules/.cache/db/verify.mjs",
+    "api:build": "esbuild server/api.ts --bundle --platform=node --format=esm --packages=external --outfile=node_modules/.cache/db/api.mjs --log-level=warning",
+    "api": "npm run --silent api:build && node node_modules/.cache/db/api.mjs",
+    "smoke:api": "npm run --silent api:build && node scripts/smoke-api.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
+    "cors": "^2.8.6",
     "drizzle-orm": "^0.45.2",
+    "express": "^5.2.1",
     "framer-motion": "^11.18.2",
     "lucide-react": "^0.460.0",
     "pg": "^8.23.0",
@@ -29,6 +34,8 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.7",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/node": "^26.3.0",
     "@types/pg": "^8.23.1",
     "@types/react": "^18.3.12",

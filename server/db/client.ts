@@ -20,6 +20,10 @@ import * as schema from './schema.ts'
 const MIGRATIONS = process.env.MIGRATIONS_DIR
   ?? new URL('server/db/migrations', `file://${process.cwd()}/`).pathname
 
+/** Where PGlite keeps its data when DATABASE_URL is not set. */
+export const PGLITE_DEFAULT = '.pglite'
+export const MEMORY = 'memory://'
+
 export type Db = Awaited<ReturnType<typeof connect>>['db']
 
 export async function connect(url = process.env.DATABASE_URL) {
@@ -36,8 +40,11 @@ export async function connect(url = process.env.DATABASE_URL) {
   }
 
   const { PGlite } = await import('@electric-sql/pglite')
-  // A path in PGLITE_PATH persists between runs; otherwise it is in-memory.
-  const pglite = new PGlite(process.env.PGLITE_PATH)
+  /* Persisted at .pglite by default, so `npm run db:seed` and `npm run api`
+     share one database without any environment set up. PGLITE_PATH=memory://
+     makes the run throwaway — what the round-trip check uses. */
+  const path = process.env.PGLITE_PATH ?? PGLITE_DEFAULT
+  const pglite = new PGlite(path === MEMORY ? undefined : path)
   const db = drizzlePglite(pglite, { schema })
   return {
     db,
