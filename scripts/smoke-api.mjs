@@ -134,6 +134,70 @@ try {
 
   const malformed = await get('/properties', json({ id: 'x', name: '' }))
   ok(malformed.status === 400, `a property with no name answers 400 (got ${malformed.status})`)
+
+  /* ------------------------ editing and removal ---------------------- */
+  const put = (body) => ({
+    method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  })
+
+  const renamed = await get(`/clients/${client.id}`, put({ ...client, name: 'Renamed Tenant', status: 'active' }))
+    .then((r) => r.json())
+  ok(renamed.clients?.find((c) => c.id === client.id)?.name === 'Renamed Tenant', 'client edit persisted')
+
+  /* A client with charges behind them must not be deletable — that history
+     is the record of what was owed and paid. */
+  const refused = await get(`/clients/${client.id}`, { method: 'DELETE' })
+  ok(refused.status === 409, `a client with history refuses deletion as 409 (got ${refused.status})`)
+  const stillThere = await get('/portfolio').then((r) => r.json())
+  ok(!!stillThere.clients.find((c) => c.id === client.id), 'the refused client is still there')
+
+  /* An end date on or before the start is not a period; the schema refuses
+     one, so the API has to refuse it first with a reason worth reading. */
+  const badRange = await get(`/bookings/${booking.id}`, put({ ...booking, status: 'completed', end: booking.start }))
+  ok(badRange.status === 409, `ending on the start date is refused as 409 (got ${badRange.status})`)
+
+  /* Which is why an agreement closed before it ran is cancelled, keeping its
+     dates — exactly what endBooking() produces. Either way the unit frees. */
+  const ended = await get(`/bookings/${booking.id}`, put({ ...booking, status: 'cancelled' }))
+    .then((r) => r.json())
+  ok(ended.properties?.find((p) => p.id === property.id)?.status === 'available',
+     'closing an agreement freed the unit')
+
+  const orphaned = await get(`/bookings/${booking.id}`, { method: 'DELETE' }).then((r) => r.json())
+  ok(!orphaned.bookings?.find((b) => b.id === booking.id), 'agreement deleted')
+  // The charge was never paid, so it went with the agreement that raised it.
+  ok(!orphaned.invoices?.find((i) => i.id === charge.id),
+     'its unpaid charge went with it, leaving no phantom arrears')
+
+  /* Now that nothing references them, the client can go. */
+  const gone = await get(`/clients/${client.id}`, { method: 'DELETE' })
+  ok(gone.status === 200, `a client with no history deletes (got ${gone.status})`)
+
+  const propGone = await get(`/properties/${property.id}`, { method: 'DELETE' })
+  ok(propGone.status === 200, `property deleted (got ${propGone.status})`)
+
+  /* -------------------------------- team ----------------------------- */
+  const member = {
+    id: `tm-smoke-${stamp}`, name: 'Smoke Manager', role: 'manager',
+    title: 'Property Manager', email: `smoke-${stamp}@altier.co.ug`,
+    phone: '+256 700 111 222', since: today,
+  }
+  const added = await get('/team', json(member)).then((r) => r.json())
+  ok(!!added.team?.find((m) => m.id === member.id), 'team member added')
+
+  const promoted = await get(`/team/${member.id}`, put({ ...member, role: 'accountant' })).then((r) => r.json())
+  ok(promoted.team?.find((m) => m.id === member.id)?.role === 'accountant', 'team member role changed')
+
+  /* Someone holding properties cannot simply be removed — the properties
+     would be left without a manager. */
+  const holder = added.team.find((m) => portfolio.properties.some((p) => p.managerId === m.id))
+  if (holder) {
+    const blocked = await get(`/team/${holder.id}`, { method: 'DELETE' })
+    ok(blocked.status === 409, `a member managing properties refuses removal as 409 (got ${blocked.status})`)
+  }
+
+  const removed = await get(`/team/${member.id}`, { method: 'DELETE' })
+  ok(removed.status === 200, `an unencumbered team member is removed (got ${removed.status})`)
 } finally {
   api.kill('SIGINT')
   await sleep(1500)

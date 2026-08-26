@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { UserPlus } from 'lucide-react'
 import { Button, Checkbox, Field, Input, Modal, Select, Textarea } from '../ui'
 import { useStore } from '../../lib/store'
-import { emptyClientDraft, newClient, type ClientDraft } from '../../lib/create'
+import {
+  clientDraftFrom, editClient, emptyClientDraft, newClient, type ClientDraft,
+} from '../../lib/create'
 import type { Client, ClientKind } from '../../lib/types'
 
 const KINDS: Array<[ClientKind, string]> = [
@@ -18,11 +20,18 @@ const STATUSES: Array<[Client['status'], string, string]> = [
   ['past', 'Past', 'Has left, kept for history.'],
 ]
 
-export function ClientFormModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** One form for both intake and editing, as with properties. */
+export function ClientFormModal({
+  open, onClose, client,
+}: { open: boolean; onClose: () => void; client?: Client }) {
   const { state, dispatch, toast } = useStore()
-  const [draft, setDraft] = useState<ClientDraft>(emptyClientDraft)
+  const editing = !!client
+  const [draft, setDraft] = useState<ClientDraft>(() =>
+    client ? clientDraftFrom(client) : emptyClientDraft())
 
-  useEffect(() => { if (open) setDraft(emptyClientDraft()) }, [open])
+  useEffect(() => {
+    if (open) setDraft(client ? clientDraftFrom(client) : emptyClientDraft())
+  }, [open, client])
 
   const set = <K extends keyof ClientDraft>(key: K, value: ClientDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }))
@@ -31,13 +40,18 @@ export function ClientFormModal({ open, onClose }: { open: boolean; onClose: () 
 
   const submit = () => {
     if (!nameGiven) return
-    const created = newClient(draft)
-    dispatch({ type: 'add-client', client: created })
-    toast({
-      title: 'Client added',
-      body: `${created.name} is on file. Create an agreement to place them in a unit.`,
-      tone: 'success',
-    })
+    if (client) {
+      dispatch({ type: 'update-client', client: editClient(client, draft) })
+      toast({ title: 'Client updated', body: `${draft.name.trim()} saved.`, tone: 'success' })
+    } else {
+      const created = newClient(draft)
+      dispatch({ type: 'add-client', client: created })
+      toast({
+        title: 'Client added',
+        body: `${created.name} is on file. Create an agreement to place them in a unit.`,
+        tone: 'success',
+      })
+    }
     onClose()
   }
 
@@ -46,13 +60,15 @@ export function ClientFormModal({ open, onClose }: { open: boolean; onClose: () 
       open={open}
       onClose={onClose}
       size="lg"
-      title="Add a client"
-      subtitle="Only the name is required. Identity documents can be attached from their profile."
+      title={editing ? `Edit ${client.name}` : 'Add a client'}
+      subtitle={editing
+        ? 'Documents, payment history and communications are unaffected.'
+        : 'Only the name is required. Identity documents can be attached from their profile.'}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
           <Button variant="primary" icon={<UserPlus size={14} />} onClick={submit} disabled={!nameGiven}>
-            Add client
+            {editing ? 'Save changes' : 'Add client'}
           </Button>
         </>
       }

@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   pull_request:
+  # A run you can start by hand, from the Actions tab or the API. Without
+  # one there is no way to tell a queue that is merely slow from a run
+  # that will never start, which is exactly the question worth answering
+  # when nothing appears to be happening.
+  workflow_dispatch:
 
 # A newer push to the same branch makes an in-flight run irrelevant.
 concurrency:
@@ -65,6 +70,13 @@ jobs:
       # no-server path cannot rot unnoticed.
       - name: Database round trip (PGlite)
         run: npm run db:check
+
+      # docs/setup.sql is generated from the migrations and pasted into a
+      # hosted database's SQL editor. If it drifts from the schema it stops
+      # producing a working database, silently, for anyone following the
+      # deployment guide.
+      - name: Setup SQL is current
+        run: npm run db:sql -- --check
 
       # The path a real deployment takes: an empty database that still has to
       # serve a portfolio. It has its own failure mode — the reminder settings

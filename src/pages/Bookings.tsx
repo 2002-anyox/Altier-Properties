@@ -1,13 +1,17 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
-import { CalendarPlus, ClipboardList, Globe, Search, Users } from 'lucide-react'
+import {
+  CalendarPlus, ClipboardList, DoorOpen, Globe, Pencil, Search, Trash2, Users,
+} from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import {
   Avatar, Button, Card, Chip, Drawer, EmptyState, SearchInput, SegmentedControl, Select, cx,
 } from '../components/ui'
 import { useStore } from '../lib/store'
 import { BookingFormModal } from '../components/forms/BookingFormModal'
+import { ConfirmDelete } from '../components/forms/ConfirmDelete'
+import { endBooking } from '../lib/create'
 import { can } from '../lib/rbac'
 import { TODAY, daysBetween, iso } from '../lib/data'
 import { mediumDate, money, relativeDay, shortDate } from '../lib/format'
@@ -34,13 +38,18 @@ const STATUS_CHIP: Record<BookingStatus, string> = {
 }
 
 export default function Bookings() {
-  const { state, toast } = useStore()
+  const { state, dispatch, toast } = useStore()
   const [status, setStatus] = useState<'all' | BookingStatus>('all')
   const [mode, setMode] = useState<'all' | TenancyMode>('all')
   const [source, setSource] = useState<'all' | BookingSource>('all')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<Booking | null>(null)
   const [creating, setCreating] = useState(false)
+  const [editing, setEditing] = useState<Booking | null>(null)
+  const [ending, setEnding] = useState<Booking | null>(null)
+  const [removing, setRemoving] = useState<Booking | null>(null)
+
+  const property = (b: Booking | null) => state.properties.find((p) => p.id === b?.propertyId)
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -211,10 +220,16 @@ export default function Bookings() {
         footer={
           <>
             <Button variant="secondary" onClick={() => setSelected(null)}>Close</Button>
-            {can(state.role, 'edit:bookings') && (
-              <Button variant="primary" onClick={() => { toast({ title: 'Agreement updated', body: `${selected?.reference} would be edited here.`, tone: 'success' }); setSelected(null) }}>
-                Edit agreement
-              </Button>
+            {can(state.role, 'edit:bookings') && selected && (
+              <>
+                <Button variant="secondary" icon={<Trash2 size={14} />} onClick={() => setRemoving(selected)}>Delete</Button>
+                {selected.status !== 'completed' && selected.status !== 'cancelled' && (
+                  <Button variant="secondary" icon={<DoorOpen size={14} />} onClick={() => setEnding(selected)}>End</Button>
+                )}
+                <Button variant="primary" icon={<Pencil size={14} />} onClick={() => { setEditing(selected); setSelected(null) }}>
+                  Edit
+                </Button>
+              </>
             )}
           </>
         }
@@ -294,6 +309,37 @@ export default function Bookings() {
       </Drawer>
 
       <BookingFormModal open={creating} onClose={() => setCreating(false)} />
+      <BookingFormModal open={!!editing} onClose={() => setEditing(null)} booking={editing ?? undefined} />
+
+      <ConfirmDelete
+        open={!!ending}
+        onClose={() => setEnding(null)}
+        title="End this agreement"
+        subject={`${ending?.reference} closes today and ${property(ending)?.name ?? 'the unit'} becomes available.`}
+        consequences={['Charges already raised stay on the ledger']}
+        confirmLabel="End agreement"
+        onConfirm={() => {
+          if (!ending) return
+          dispatch({ type: 'end-booking', booking: endBooking(ending, iso(TODAY)) })
+          toast({ title: `${ending.reference} ended`, body: 'The unit is now available.', tone: 'success' })
+          setSelected(null)
+        }}
+      />
+
+      <ConfirmDelete
+        open={!!removing}
+        onClose={() => setRemoving(null)}
+        title="Delete this agreement"
+        subject={`${removing?.reference} will be removed entirely, as though it had never been made.`}
+        consequences={['Its charges stay on the ledger, no longer linked to an agreement']}
+        confirmLabel="Delete agreement"
+        onConfirm={() => {
+          if (!removing) return
+          dispatch({ type: 'delete-booking', id: removing.id })
+          toast({ title: `${removing.reference} deleted`, tone: 'default' })
+          setSelected(null)
+        }}
+      />
     </>
   )
 }

@@ -14,7 +14,7 @@
 import { AMENITY_POOL, COMMERCIAL_AMENITIES, TODAY, addDays, iso } from './data'
 import type {
   Booking, BookingSource, Client, ClientKind, Invoice, Property,
-  PropertyStatus, PropertyType, TenancyMode,
+  PropertyStatus, PropertyType, Role, TeamMember, TenancyMode,
 } from './types'
 
 const addMonths = (from: string, months: number) => {
@@ -362,3 +362,144 @@ export function openingCharges(booking: Booking, existing: Invoice[]): Invoice[]
 /** The status a property takes once an agreement is committed against it. */
 export const statusForBooking = (booking: Booking): PropertyStatus =>
   booking.status === 'upcoming' ? 'reserved' : 'occupied'
+
+/* ------------------------------ editing ---------------------------- *
+ * Editing mirrors creation: a draft the form owns, and a function that
+ * folds it back onto the record without touching anything the form does
+ * not show. History, documents and identifiers survive an edit.
+ * ------------------------------------------------------------------- */
+
+export const clientDraftFrom = (c: Client): ClientDraft => ({
+  name: c.name,
+  kind: c.kind,
+  email: c.email,
+  phone: c.phone,
+  nationality: c.nationality,
+  status: c.status,
+  emergencyContact: c.emergencyContact,
+  notes: c.notes,
+  propertyIds: c.propertyIds,
+})
+
+export function editClient(existing: Client, draft: ClientDraft): Client {
+  return {
+    ...existing,
+    name: draft.name.trim(),
+    kind: draft.kind,
+    email: draft.email.trim(),
+    phone: draft.phone.trim(),
+    nationality: draft.nationality.trim() || 'Ugandan',
+    status: draft.status,
+    propertyIds: [...new Set(draft.propertyIds)],
+    notes: draft.notes.trim(),
+    emergencyContact: draft.emergencyContact.trim(),
+  }
+}
+
+export const bookingDraftFrom = (b: Booking): BookingDraft => ({
+  propertyId: b.propertyId,
+  clientId: b.clientId,
+  mode: b.mode,
+  start: b.start,
+  end: b.end ?? '',
+  rate: b.rate,
+  deposit: b.deposit,
+  advanceMonths: b.advanceMonths,
+  noticeDays: b.noticeDays,
+  guests: b.guests,
+  source: b.source,
+  notes: b.notes,
+})
+
+/**
+ * An edit cannot change which unit or which client an agreement is for,
+ * nor its kind — those decide what charges were already raised against
+ * it. Ending it early is a separate act, not an edit.
+ */
+export function editBooking(existing: Booking, draft: BookingDraft): Booking {
+  return {
+    ...existing,
+    start: draft.start,
+    end: existing.mode === 'rental' ? null : draft.end,
+    rate: Math.max(0, Math.round(draft.rate)),
+    deposit: Math.max(0, Math.round(draft.deposit)),
+    advanceMonths: Math.max(advanceFloor(existing.mode), Math.round(draft.advanceMonths)),
+    noticeDays: Math.max(0, Math.round(draft.noticeDays)),
+    guests: Math.max(1, Math.round(draft.guests)),
+    source: draft.source,
+    notes: draft.notes.trim(),
+  }
+}
+
+/**
+ * Closing an agreement: the tenancy ends, so the unit comes free.
+ *
+ * An agreement closed on or before the day it began never ran, so it is
+ * cancelled rather than completed and keeps its dates — an end date on or
+ * before the start is not a period, and the schema rightly refuses one.
+ */
+export function endBooking(existing: Booking, on: string): Booking {
+  const ranAtAll = on > existing.start
+  return {
+    ...existing,
+    status: ranAtAll ? 'completed' : 'cancelled',
+    end: ranAtAll ? on : existing.end,
+  }
+}
+
+/* ------------------------------- team ------------------------------ */
+
+export interface MemberDraft {
+  name: string
+  role: Role
+  title: string
+  email: string
+  phone: string
+}
+
+export const emptyMemberDraft = (): MemberDraft => ({
+  name: '',
+  role: 'staff',
+  title: '',
+  email: '',
+  phone: '',
+})
+
+export const memberDraftFrom = (m: TeamMember): MemberDraft => ({
+  name: m.name,
+  role: m.role,
+  title: m.title,
+  email: m.email,
+  phone: m.phone,
+})
+
+export function newMember(draft: MemberDraft): TeamMember {
+  return {
+    id: uid('tm'),
+    name: draft.name.trim(),
+    role: draft.role,
+    title: draft.title.trim() || roleTitle(draft.role),
+    email: draft.email.trim(),
+    phone: draft.phone.trim(),
+    since: iso(TODAY),
+  }
+}
+
+export function editMember(existing: TeamMember, draft: MemberDraft): TeamMember {
+  return {
+    ...existing,
+    name: draft.name.trim(),
+    role: draft.role,
+    title: draft.title.trim() || roleTitle(draft.role),
+    email: draft.email.trim(),
+    phone: draft.phone.trim(),
+  }
+}
+
+/** A sensible job title when someone does not supply one. */
+const roleTitle = (role: Role) => ({
+  owner: 'Principal',
+  manager: 'Property Manager',
+  staff: 'Portfolio Assistant',
+  accountant: 'Accountant',
+}[role])

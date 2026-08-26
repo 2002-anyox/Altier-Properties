@@ -1,17 +1,21 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, Coins, Globe2, Moon, Palette, RotateCcw, ShieldCheck, Sun, Users2 } from 'lucide-react'
+import {
+  Check, Coins, Globe2, Moon, Palette, Pencil, RotateCcw, ShieldCheck, Sun, Trash2, UserPlus, Users2,
+} from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import {
   Avatar, Button, Card, CardHeader, Chip, Field, Input, Select, Tabs, Toggle, cx,
 } from '../components/ui'
 import { ReminderModal } from './Notifications'
+import { MemberFormModal } from '../components/forms/MemberFormModal'
+import { ConfirmDelete } from '../components/forms/ConfirmDelete'
 import { useStore } from '../lib/store'
 import { ROLES, can, roleLabel, type Permission } from '../lib/rbac'
 import { mediumDate, money, num } from '../lib/format'
 import { BASE_CURRENCY, CURRENCIES, REGIONS, currencyDef, regionDef } from '../lib/money'
 import { LANGUAGES, type Language } from '../lib/strings'
-import type { Role } from '../lib/types'
+import type { Role, TeamMember } from '../lib/types'
 
 type Tab = 'profile' | 'localisation' | 'team' | 'roles' | 'reminders' | 'appearance'
 
@@ -38,6 +42,19 @@ export default function Settings() {
   const [tuning, setTuning] = useState(false)
   const me = state.team.find((t) => t.id === state.currentUserId) ?? state.team[0]
   const live = state.source === 'database'
+  const [memberOpen, setMemberOpen] = useState(false)
+  const [member, setMember] = useState<TeamMember | undefined>()
+  const [removing, setRemoving] = useState<TeamMember | null>(null)
+
+  /* Naming what stands in the way beats a refusal after the fact. */
+  const blockers = removing
+    ? [
+        state.properties.filter((p) => p.managerId === removing.id).length
+          && `${state.properties.filter((p) => p.managerId === removing.id).length} properties to reassign`,
+        state.maintenance.filter((m) => m.assigneeId === removing.id).length
+          && `${state.maintenance.filter((m) => m.assigneeId === removing.id).length} maintenance jobs to reassign`,
+      ].filter(Boolean) as string[]
+    : []
 
   return (
     <>
@@ -235,7 +252,15 @@ export default function Settings() {
 
         {tab === 'team' && (
           <Card className="overflow-hidden">
-            <CardHeader title="Team" subtitle={`${state.team.length} people with access to this portfolio`} />
+            <CardHeader
+              title="Team"
+              subtitle={`${state.team.length} people with access to this portfolio`}
+              action={can(state.role, 'manage:team') && (
+                <Button variant="primary" size="sm" icon={<UserPlus size={14} />} onClick={() => { setMember(undefined); setMemberOpen(true) }}>
+                  Add member
+                </Button>
+              )}
+            />
             <div className="scroll-x mt-3">
               <table className="w-full min-w-[720px] text-left text-[13px]">
                 <thead className="text-ink-muted">
@@ -244,7 +269,8 @@ export default function Settings() {
                     <th scope="col" className="px-4 py-2.5 font-medium">Title</th>
                     <th scope="col" className="px-4 py-2.5 font-medium">Role</th>
                     <th scope="col" className="px-4 py-2.5 font-medium">Contact</th>
-                    <th scope="col" className="px-5 py-2.5 text-right font-medium sm:px-6">Properties</th>
+                    <th scope="col" className="px-4 py-2.5 text-right font-medium">Properties</th>
+                    {can(state.role, 'manage:team') && <th scope="col" className="px-5 py-2.5 text-right font-medium sm:px-6"><span className="sr-only">Actions</span></th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[rgb(var(--c-border))]">
@@ -262,9 +288,21 @@ export default function Settings() {
                         <span className="block text-ink-secondary">{t.email}</span>
                         <span className="block text-[11.5px] text-ink-muted">{t.phone}</span>
                       </td>
-                      <td className="tnum px-5 py-3 text-right text-ink-secondary sm:px-6">
+                      <td className="tnum px-4 py-3 text-right text-ink-secondary">
                         {state.properties.filter((p) => p.managerId === t.id).length}
                       </td>
+                      {can(state.role, 'manage:team') && (
+                        <td className="px-5 py-3 text-right sm:px-6">
+                          <span className="inline-flex gap-1">
+                            <Button size="sm" variant="ghost" onClick={() => { setMember(t); setMemberOpen(true) }}>
+                              <Pencil size={14} /><span className="sr-only">Edit {t.name}</span>
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setRemoving(t)}>
+                              <Trash2 size={14} /><span className="sr-only">Remove {t.name}</span>
+                            </Button>
+                          </span>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -451,6 +489,20 @@ export default function Settings() {
           </div>
         )}
       </motion.div>
+
+      <MemberFormModal open={memberOpen} onClose={() => setMemberOpen(false)} member={member} />
+
+      <ConfirmDelete
+        open={!!removing}
+        onClose={() => setRemoving(null)}
+        title="Remove from the team"
+        subject={blockers.length
+          ? `${removing?.name} still has work assigned to them, so they cannot be removed yet.`
+          : `${removing?.name} will lose access to this portfolio.`}
+        consequences={blockers}
+        confirmLabel={blockers.length ? 'Try anyway' : 'Remove'}
+        onConfirm={() => removing && dispatch({ type: 'delete-member', id: removing.id })}
+      />
 
       <ReminderModal open={tuning} onClose={() => setTuning(false)} />
     </>

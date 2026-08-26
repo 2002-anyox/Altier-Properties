@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  BadgeCheck, Building2, Download, FileText, Mail, MessageSquare, NotebookPen, Phone,
-  Receipt, Send, Star, Users,
+  BadgeCheck, Building2, Download, FileText, Mail, MessageSquare, NotebookPen, Pencil,
+  Phone, Receipt, Send, Star, Trash2, Users,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import {
@@ -11,6 +11,8 @@ import {
   Textarea, cx,
 } from '../components/ui'
 import { useStore } from '../lib/store'
+import { ClientFormModal } from '../components/forms/ClientFormModal'
+import { ConfirmDelete } from '../components/forms/ConfirmDelete'
 import { can } from '../lib/rbac'
 import { mediumDate, money, relativeDay, shortDate } from '../lib/format'
 import { itemVariants, listVariants } from '../lib/motion'
@@ -19,9 +21,12 @@ type Tab = 'overview' | 'agreements' | 'payments' | 'documents' | 'communication
 
 export default function ClientDetail() {
   const { id = '' } = useParams()
+  const navigate = useNavigate()
   const { state, dispatch, toast } = useStore()
   const [tab, setTab] = useState<Tab>('overview')
   const [note, setNote] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [removing, setRemoving] = useState(false)
 
   const client = state.clients.find((c) => c.id === id)
   const bookings = useMemo(
@@ -71,6 +76,12 @@ export default function ClientDetail() {
         description={`${client.kind === 'corporate' ? 'Corporate account' : client.kind === 'guest' ? 'Short-stay guest' : 'Tenant'} · client since ${mediumDate(client.since)} · ${client.nationality}`}
         actions={
           <>
+            {can(state.role, 'edit:clients') && (
+              <>
+                <Button variant="secondary" icon={<Pencil size={15} />} onClick={() => setEditing(true)}>Edit</Button>
+                <Button variant="secondary" icon={<Trash2 size={15} />} onClick={() => setRemoving(true)}>Delete</Button>
+              </>
+            )}
             <Button variant="secondary" icon={<Phone size={15} />}>Call</Button>
             <Button variant="primary" icon={<Mail size={15} />} onClick={() => toast({ title: 'Composer opened', body: `A message to ${client.name} would be drafted here.` })}>
               Message
@@ -297,6 +308,23 @@ export default function ClientDetail() {
           </Card>
         )}
       </motion.div>
+      <ClientFormModal open={editing} onClose={() => setEditing(false)} client={client} />
+
+      <ConfirmDelete
+        open={removing}
+        onClose={() => setRemoving(false)}
+        title="Delete this client"
+        subject={bookings.length || invoices.length
+          ? `${client.name} has history on this portfolio, so the record is kept rather than deleted.`
+          : `${client.name} will be removed from the portfolio.`}
+        consequences={[
+          bookings.length && `${bookings.length} agreements reference them`,
+          invoices.length && `${invoices.length} charges reference them`,
+        ].filter(Boolean) as string[]}
+        confirmLabel={bookings.length || invoices.length ? 'Try anyway' : 'Delete client'}
+        onConfirm={() => { dispatch({ type: 'delete-client', id: client.id }); navigate('/clients') }}
+      />
+
     </>
   )
 }
