@@ -66,6 +66,13 @@ jobs:
       - name: Database round trip (PGlite)
         run: npm run db:check
 
+      # docs/setup.sql is generated from the migrations and pasted into a
+      # hosted database's SQL editor. If it drifts from the schema it stops
+      # producing a working database, silently, for anyone following the
+      # deployment guide.
+      - name: Setup SQL is current
+        run: npm run db:sql -- --check
+
       # The path a real deployment takes: an empty database that still has to
       # serve a portfolio. It has its own failure mode — the reminder settings
       # singleton and the team are not optional, and nothing else notices.
