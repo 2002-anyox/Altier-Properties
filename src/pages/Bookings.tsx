@@ -161,7 +161,7 @@ export default function Bookings() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[rgb(var(--c-border))]">
-                {rows.map((b) => {
+                {rows.slice(0, 60).map((b) => {
                   const p = state.properties.find((x) => x.id === b.propertyId)
                   const c = state.clients.find((x) => x.id === b.clientId)
                   const nights = Math.max(1, daysBetween(b.start, b.end ?? b.start))
@@ -193,6 +193,11 @@ export default function Bookings() {
               </tbody>
             </table>
           </div>
+          {rows.length > 60 && (
+            <p className="border-t border-line px-5 py-3 text-[12px] text-ink-muted sm:px-6">
+              Showing the first 60 of {rows.length} matching agreements — narrow the filters to see the rest.
+            </p>
+          )}
         </Card>
       )}
 

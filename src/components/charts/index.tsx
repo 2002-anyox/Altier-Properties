@@ -1,4 +1,4 @@
-import React, { useId, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { BarChart3, Table2 } from 'lucide-react'
 import clsx from 'clsx'
@@ -84,6 +84,28 @@ export function ChartFrame({
   )
 }
 
+/**
+ * Charts draw in a coordinate space the width of their container, so 1 unit
+ * is 1 pixel. A fixed viewBox scaled to fit would shrink axis labels along
+ * with the marks — at a third of the page width the type halves and stops
+ * being readable.
+ */
+function useMeasuredWidth(fallback = 720) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [width, setWidth] = useState(fallback)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width
+      if (w) setWidth(Math.max(240, Math.round(w)))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  return [ref, width] as const
+}
+
 /* ------------------------------------------------------------------ *
  * Area / line chart with a crosshair tooltip
  * ------------------------------------------------------------------ */
@@ -101,11 +123,10 @@ export function AreaTrendChart<T extends Record<string, any>>({
 }) {
   const gid = useId().replace(/:/g, '')
   const [hover, setHover] = useState<number | null>(null)
-  const wrapRef = useRef<HTMLDivElement>(null)
+  const [wrapRef, W] = useMeasuredWidth()
 
-  const W = 720
   const H = height
-  const pad = { top: 14, right: 58, bottom: 26, left: 16 }
+  const pad = { top: 14, right: 72, bottom: 26, left: 16 }
   const plotW = W - pad.left - pad.right
   const plotH = H - pad.top - pad.bottom
 
@@ -375,9 +396,9 @@ export function ColumnChart({
   height?: number
 }) {
   const [hover, setHover] = useState<number | null>(null)
-  const W = 720
+  const [wrapRef, W] = useMeasuredWidth()
   const H = height
-  const pad = { top: 12, right: 56, bottom: 28, left: 8 }
+  const pad = { top: 12, right: 72, bottom: 28, left: 8 }
   const plotW = W - pad.left - pad.right
   const plotH = H - pad.top - pad.bottom
   const max = Math.max(...data.flatMap((d) => series.map((s) => Number(d[s.key]) || 0)), 1)
@@ -385,7 +406,7 @@ export function ColumnChart({
   const barW = Math.min(24, (band - 12) / series.length - 2)
 
   return (
-    <div className="relative">
+    <div ref={wrapRef} className="relative">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} role="img" aria-label={series.map((s) => s.label).join(' and ')}>
         {[0, 0.5, 1].map((f) => (
           <g key={f}>

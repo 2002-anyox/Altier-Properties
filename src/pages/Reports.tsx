@@ -10,7 +10,7 @@ import {
 import { useStore } from '../lib/store'
 import { money, pct } from '../lib/format'
 import {
-  ageingBuckets, computeKpis, occupancyMix, propertyPerformance, revenueSeries,
+  ageingBuckets, chargeClass, computeKpis, occupancyMix, propertyPerformance, revenueSeries,
 } from '../lib/derive'
 import { itemVariants, listVariants } from '../lib/motion'
 
@@ -63,6 +63,18 @@ export default function Reports() {
       }
     })
   }, [performance])
+
+  const revenueMix = useMemo(() => {
+    const month = new Date().toISOString().slice(0, 7)
+    const paid = state.invoices.filter((i) => i.paidOn?.slice(0, 7) === month)
+    const by = (cls: 'recurring' | 'advance' | 'deposit') =>
+      paid.filter((i) => chargeClass(i.type) === cls).reduce((a, i) => a + i.paidAmount, 0)
+    return [
+      { label: 'Recurring', value: by('recurring'), note: 'earned this month' },
+      { label: 'Advances', value: by('advance'), note: 'for future months' },
+      { label: 'Deposits held', value: by('deposit'), note: 'refundable' },
+    ]
+  }, [state.invoices])
 
   const clientActivity = useMemo(() => {
     return state.clients
@@ -133,7 +145,7 @@ export default function Reports() {
         <ChartFrame
           className="xl:col-span-2"
           title="Revenue performance"
-          subtitle={`Collected against billed over the last ${range === '6m' ? 'six' : 'twelve'} months`}
+          subtitle={`Collected against billed over the last ${range === '6m' ? 'six' : 'twelve'} months. Refundable deposits are excluded from both.`}
           legend={[{ label: 'Collected', color: VIZ[0] }, { label: 'Billed', color: VIZ[1] }]}
           table={
             <table className="w-full text-left text-[12.5px]">
@@ -188,6 +200,37 @@ export default function Reports() {
 
       <div className="mt-4 grid gap-4 xl:grid-cols-3">
         <ChartFrame
+          title="What this month's cash actually is"
+          subtitle="Rent taken up front lifts one month; it does not lift the run rate"
+          table={
+            <table className="w-full text-left text-[12.5px]">
+              <thead className="text-ink-muted">
+                <tr className="border-b border-line">
+                  <th scope="col" className="py-2 pr-4 font-medium">Class</th>
+                  <th scope="col" className="py-2 text-right font-medium">Collected</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[rgb(var(--c-border))]">
+                {revenueMix.map((r) => (
+                  <tr key={r.label}>
+                    <td className="py-2 pr-4 text-ink-secondary">{r.label}</td>
+                    <td className="tnum py-2 text-right text-ink">{money(r.value)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          }
+        >
+          <div className="pt-2">
+            <BarList items={revenueMix} format={(n) => money(n, true)} color={VIZ[0]} />
+          </div>
+          <p className="mt-4 px-3 text-[11.5px] leading-relaxed text-ink-muted">
+            Only the first line is revenue earned in the period. Advances are rent for months still to
+            come, and deposits are the tenant's money held on their behalf.
+          </p>
+        </ChartFrame>
+
+        <ChartFrame
           title="Revenue by district"
           subtitle="Collected to date, top eight districts"
           table={
@@ -203,7 +246,6 @@ export default function Reports() {
         </ChartFrame>
 
         <ChartFrame
-          className="xl:col-span-2"
           title="Letting model comparison"
           subtitle="Revenue against maintenance cost by model"
           legend={[{ label: 'Revenue', color: VIZ[0] }, { label: 'Maintenance', color: VIZ[4] }]}
@@ -275,6 +317,10 @@ export default function Reports() {
             </tbody>
           </table>
         </div>
+        <p className="border-t border-line px-5 py-3 text-[11.5px] text-ink-muted sm:px-6">
+          Revenue counts rent, bookings and fees collected, plus advances. Refundable deposits are
+          excluded — they are held on the tenant's behalf, not earned.
+        </p>
       </Card>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">

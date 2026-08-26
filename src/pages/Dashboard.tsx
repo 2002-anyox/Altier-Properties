@@ -114,21 +114,39 @@ export default function Dashboard() {
                 </p>
                 <p
                   className="mt-4 text-[clamp(34px,3.4vw,44px)] font-semibold leading-none tracking-[-0.03em] text-white dark:text-ink"
-                  title={money(kpis.monthlyRevenue)}
+                  title={money(kpis.recurringRevenue)}
                 >
-                  {money(kpis.monthlyRevenue, true)}
+                  {money(kpis.recurringRevenue, true)}
                 </p>
                 <p className="mt-2.5 text-[13px] text-[rgb(var(--c-text-onrail-muted))] dark:text-ink-muted">
-                  Collected revenue ·{' '}
-                  <span className={cx('font-medium', kpis.monthlyRevenueDelta >= 0 ? 'text-[#7BD88F]' : 'text-[#F0A9A9]')}>
-                    {kpis.monthlyRevenueDelta >= 0 ? '+' : ''}{kpis.monthlyRevenueDelta.toFixed(1)}%
+                  Recurring revenue ·{' '}
+                  <span className={cx('font-medium', kpis.recurringDelta >= 0 ? 'text-[#7BD88F]' : 'text-[#F0A9A9]')}>
+                    {kpis.recurringDelta >= 0 ? '+' : ''}{kpis.recurringDelta.toFixed(1)}%
                   </span>{' '}
-                  vs last month
+                  vs the same days last month
                 </p>
 
+                {/* Lump money is shown beside the headline, never inside it: a
+                    single six-month advance would otherwise read as growth. */}
                 <div className="mt-6 space-y-3.5 border-t border-white/10 pt-5 dark:border-line">
+                  <Row
+                    label="Advances collected"
+                    value={money(kpis.advanceCollected, true)}
+                    note="rent for months still to come"
+                  />
+                  <Row
+                    label="Deposits held"
+                    value={money(kpis.depositsCollected, true)}
+                    note="refundable — not revenue"
+                  />
+                  <div className="border-t border-white/10 pt-3.5 dark:border-line">
+                    <Row
+                      label="Total cash collected"
+                      value={money(kpis.monthlyRevenue, true)}
+                      note={`${kpis.monthlyRevenueDelta >= 0 ? '+' : ''}${kpis.monthlyRevenueDelta.toFixed(1)}% vs last month, advances included`}
+                    />
+                  </div>
                   <Row label="Collection rate" value={`${kpis.collectionRate.toFixed(1)}%`} meter={kpis.collectionRate} />
-                  <Row label="Upcoming (30 days)" value={money(kpis.upcomingAmount, true)} />
                   <Row label="Overdue balance" value={money(kpis.overdueAmount, true)} tone="critical" />
                 </div>
               </div>
@@ -195,27 +213,29 @@ export default function Dashboard() {
         {showMoney && (
           <ChartFrame
             className="xl:col-span-2"
-            title="Revenue collected vs billed"
-            subtitle="Rolling twelve months across the whole portfolio"
+            title="Recurring revenue vs advances"
+            subtitle="Rolling twelve months — advances lift one month, not the run rate"
             legend={[
-              { label: 'Collected', color: VIZ[0] },
-              { label: 'Billed', color: VIZ[1] },
+              { label: 'Recurring', color: VIZ[0] },
+              { label: 'Advances', color: VIZ[1] },
             ]}
             table={
               <table className="w-full text-left text-[12.5px]">
                 <thead className="text-ink-muted">
                   <tr className="border-b border-line">
                     <th scope="col" className="py-2 pr-4 font-medium">Month</th>
-                    <th scope="col" className="py-2 pr-4 text-right font-medium">Collected</th>
-                    <th scope="col" className="py-2 text-right font-medium">Billed</th>
+                    <th scope="col" className="py-2 pr-4 text-right font-medium">Recurring</th>
+                    <th scope="col" className="py-2 pr-4 text-right font-medium">Advances</th>
+                    <th scope="col" className="py-2 text-right font-medium">Total</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[rgb(var(--c-border))]">
                   {revenue.map((r) => (
                     <tr key={r.key}>
                       <td className="py-2 pr-4 text-ink-secondary">{r.key}</td>
-                      <td className="tnum py-2 pr-4 text-right text-ink">{money(r.collected)}</td>
-                      <td className="tnum py-2 text-right text-ink-secondary">{money(r.billed)}</td>
+                      <td className="tnum py-2 pr-4 text-right text-ink">{money(r.recurring)}</td>
+                      <td className="tnum py-2 pr-4 text-right text-ink-secondary">{money(r.advance)}</td>
+                      <td className="tnum py-2 text-right text-ink-secondary">{money(r.collected)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -226,8 +246,8 @@ export default function Dashboard() {
               data={revenue}
               xKey="label"
               series={[
-                { key: 'collected', label: 'Collected', color: VIZ[0] },
-                { key: 'billed', label: 'Billed', color: VIZ[1], dashed: true },
+                { key: 'recurring', label: 'Recurring', color: VIZ[0] },
+                { key: 'advance', label: 'Advances', color: VIZ[1], dashed: true },
               ]}
               format={(n) => money(n, true)}
               height={244}
@@ -450,13 +470,18 @@ export default function Dashboard() {
   )
 }
 
-function Row({ label, value, meter, tone }: { label: string; value: string; meter?: number; tone?: 'critical' }) {
+function Row({
+  label, value, meter, tone, note,
+}: { label: string; value: string; meter?: number; tone?: 'critical'; note?: string }) {
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-[12.5px] text-[rgb(var(--c-text-onrail-muted))] dark:text-ink-muted">{label}</span>
         <span className={cx('tnum text-[13.5px] font-semibold', tone === 'critical' ? 'text-[#F0A9A9]' : 'text-white dark:text-ink')}>{value}</span>
       </div>
+      {note && (
+        <p className="mt-0.5 text-[11px] leading-snug text-[rgb(var(--c-text-onrail-muted))] opacity-80 dark:text-ink-muted">{note}</p>
+      )}
       {meter !== undefined && (
         <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-white/10 dark:bg-surface-inset">
           <motion.div

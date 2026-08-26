@@ -72,6 +72,11 @@ levels, read state and configurable reminder timing.
 **Reports** — occupancy and vacancy rates, revenue performance, collection rate, overdue exposure and
 ageing, revenue by district, letting-model comparison, per-property performance and client activity.
 
+**Revenue that tells the truth** — cash collected is split into recurring revenue (rent, bookings and
+fees earned in the period), advances (rent taken up front for months still to come) and deposits
+(refundable, never counted as revenue). The dashboard leads with recurring and its like-for-like
+change, so a single six-month advance cannot masquerade as growth.
+
 **Role-based access** for Owner, Property Manager, Staff and Accountant, enforced in the navigation,
 at the route and on individual actions and figures. Switch role from the avatar menu to see it.
 

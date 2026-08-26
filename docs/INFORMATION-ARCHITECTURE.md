@@ -67,6 +67,21 @@ product surveyed. It has no expiry to count down to, so the thing that matters i
 platform warns as it approaches and again once it lapses into arrears. On the timeline these
 agreements are drawn without a right-hand edge, because they have no scheduled end.
 
+**Cash collected is classified, not totalled.** Treating every shilling that arrives as one number
+makes a month look transformed when a single tenant simply paid six months up front, which is exactly
+what the open-ended rental model encourages. Three classes:
+
+| Class | What it is | Counts as revenue |
+|---|---|---|
+| **Recurring** | rent for the period, short-stay bookings, utilities, service and late fees | yes |
+| **Advance** | rent collected now for months still to come | cash now, revenue later |
+| **Deposit** | refundable, held on the tenant's behalf | never — it is a liability |
+
+The dashboard therefore leads with **recurring revenue** and its like-for-like change against the same
+days of last month, and shows advances, deposits and total cash beneath it. A month can show total
+cash flat while recurring has fallen — that gap is the number worth acting on, and no product in the
+survey surfaces it.
+
 **Presentation** is separate from data. Amounts are stored in Ugandan shillings and converted at
 display time; region controls date and number formatting; language controls the interface chrome.
 None of the three rewrites a stored figure.

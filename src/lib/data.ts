@@ -380,11 +380,12 @@ export const BOOKINGS: Booking[] = (() => {
       if (p.status === 'occupied' || p.status === 'maintenance') {
         const c = attach(pi)
         const advanceMonths = pick([3, 3, 3, 4, 6, 12])
-        const elapsed = intBetween(45, 900)
+        /* A quarter of tenancies are recent, so advances appear in the window. */
+        const elapsed = chance(0.35) ? intBetween(6, 26) : intBetween(60, 640)
         const start = dayOffset(-elapsed)
         /* Rent is covered to a date the advance and every monthly payment
            since have pushed forward; a date in the past means arrears. */
-        const paidThrough = dayOffset(intBetween(-6, 52))
+        const paidThrough = chance(0.25) ? dayOffset(intBetween(-24, -1)) : dayOffset(intBetween(3, 52))
         out.push({
           id: `b-${++n}`, reference: `RNT-${4800 + n}`, propertyId: p.id, clientId: c.id,
           mode: 'rental', status: 'in_progress', start, end: null,
@@ -415,13 +416,15 @@ export const BOOKINGS: Booking[] = (() => {
 
     /* ---------------- Short stays: nightly, in and out ----------------- */
     const windows: Array<{ from: number; to: number; state: Booking['status'] }> = []
-    let cursor = -intBetween(80, 120)
-    const pastCount = p.status === 'inactive' ? 2 : intBetween(2, 4)
+    /* A year of completed stays, so a twelve-month revenue chart is not
+       measuring how recently the data was generated. */
+    let cursor = -intBetween(330, 370)
+    const pastCount = p.status === 'inactive' ? 4 : intBetween(14, 22)
     for (let k = 0; k < pastCount; k++) {
       const nights = intBetween(2, p.type === 'villa' ? 10 : 6)
       if (cursor + nights >= -3) break
       windows.push({ from: cursor, to: cursor + nights, state: 'completed' })
-      cursor = cursor + nights + intBetween(3, 12)
+      cursor = cursor + nights + intBetween(4, 18)
     }
     if (p.status === 'occupied') {
       const nights = intBetween(3, p.type === 'villa' ? 12 : 8)
@@ -520,7 +523,7 @@ export const INVOICES: Invoice[] = (() => {
           issuedOn: iso(addDays(due, -10)), dueOn: due, amount: p.price,
           paidAmount: status === 'paid' ? p.price : 0, status,
           method: status === 'paid' ? pick(['mobile_money', 'mobile_money', 'bank_transfer', 'cash']) : null,
-          paidOn: status === 'paid' ? iso(addDays(due, -intBetween(0, 5))) : null,
+          paidOn: status === 'paid' ? iso(addDays(due, intBetween(0, 5))) : null,
           memo: `Monthly rent — ${new Date(due + 'T00:00:00').toLocaleString('en-GB', { month: 'long', year: 'numeric' })}`,
         })
       }
@@ -534,15 +537,18 @@ export const INVOICES: Invoice[] = (() => {
         if (due < b.start || due > b.end) continue
         const overdueRoll = rnd()
         const isFuture = due > iso(TODAY)
+        const recent = m >= -2
         const status: Invoice['status'] = isFuture
           ? m === 0 ? 'pending' : 'upcoming'
-          : overdueRoll < 0.09 ? 'overdue' : overdueRoll < 0.13 ? 'partial' : 'paid'
+          : recent && overdueRoll < 0.16 ? 'overdue'
+            : recent && overdueRoll < 0.22 ? 'partial'
+              : 'paid'
         const paidAmount = status === 'paid' ? p.price : status === 'partial' ? Math.round(p.price * 0.45) : 0
         push({
           propertyId: p.id, clientId: b.clientId, bookingId: b.id, type: 'rent',
           issuedOn: iso(addDays(due, -10)), dueOn: due, amount: p.price, paidAmount, status,
           method: paidAmount ? pick(['bank_transfer', 'bank_transfer', 'card', 'mobile_money']) : null,
-          paidOn: status === 'paid' ? iso(addDays(due, -intBetween(0, 4))) : status === 'partial' ? iso(addDays(due, 2)) : null,
+          paidOn: status === 'paid' ? iso(addDays(due, intBetween(0, 6))) : status === 'partial' ? iso(addDays(due, 3)) : null,
           memo: `Monthly rent — ${new Date(due + 'T00:00:00').toLocaleString('en-GB', { month: 'long', year: 'numeric' })}`,
         })
       }
@@ -580,13 +586,13 @@ export const INVOICES: Invoice[] = (() => {
     const offset = intBetween(-45, 30)
     const due = dayOffset(offset)
     const amount = type === 'late_fee' ? intBetween(100_000, 500_000) : intBetween(150_000, 2_500_000)
-    const status: Invoice['status'] = offset > 0 ? 'upcoming' : rnd() < 0.25 ? 'overdue' : 'paid'
+    const status: Invoice['status'] = offset > 0 ? 'upcoming' : offset > -50 && rnd() < 0.3 ? 'overdue' : 'paid'
     push({
       propertyId: p.id, clientId: c.id, bookingId: null, type,
       issuedOn: dayOffset(offset - 12), dueOn: due, amount,
       paidAmount: status === 'paid' ? amount : 0, status,
       method: status === 'paid' ? pick(['bank_transfer', 'card', 'cash']) : null,
-      paidOn: status === 'paid' ? dayOffset(offset - 1) : null,
+      paidOn: status === 'paid' ? dayOffset(offset + intBetween(0, 5)) : null,
       memo: {
         utilities: 'Utilities recharge — water & common area electricity',
         service_fee: 'Management service fee',
@@ -595,6 +601,34 @@ export const INVOICES: Invoice[] = (() => {
       }[type],
     })
   }
+
+  /* A property does not begin earning the day its current tenant moved in.
+     Fill the months before that with the previous tenancy's rent, so a
+     twelve-month chart shows the portfolio's shape rather than the age of
+     its newest agreements. */
+  const pastClients = CLIENTS.filter((c) => c.status === 'past')
+  PROPERTIES.forEach((p, pi) => {
+    if (p.mode === 'short_stay' || p.status === 'inactive') return
+    const live = BOOKINGS.find(
+      (b) => b.propertyId === p.id && (b.status === 'in_progress' || b.status === 'upcoming'),
+    )
+    const earningUntil = live ? live.start : p.availableFrom ?? iso(TODAY)
+    const priorClient = pastClients[pi % Math.max(1, pastClients.length)]
+    if (!priorClient) return
+    const priorRent = Math.round(p.price * 0.92)
+    for (let m = -11; m <= 0; m++) {
+      const due = iso(new Date(TODAY.getFullYear(), TODAY.getMonth() + m, 1))
+      if (due >= earningUntil) continue
+      push({
+        propertyId: p.id, clientId: priorClient.id, bookingId: null, type: 'rent',
+        issuedOn: iso(addDays(due, -10)), dueOn: due, amount: priorRent,
+        paidAmount: priorRent, status: 'paid',
+        method: pick(['mobile_money', 'bank_transfer', 'cash']),
+        paidOn: iso(addDays(due, intBetween(0, 5))),
+        memo: `Monthly rent — ${new Date(due + 'T00:00:00').toLocaleString('en-GB', { month: 'long', year: 'numeric' })} · previous tenancy`,
+      })
+    }
+  })
 
   const today = iso(TODAY)
 

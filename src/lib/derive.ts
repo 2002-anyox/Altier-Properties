@@ -1,7 +1,28 @@
 import { TODAY, addDays, daysBetween, iso } from './data'
+import { presentation } from './money'
 import type {
-  Booking, Client, Invoice, MaintenanceRequest, Property, PropertyStatus,
+  Booking, ChargeType, Client, Invoice, MaintenanceRequest, Property, PropertyStatus,
 } from './types'
+
+/**
+ * Cash collected is not all the same thing, and treating it as one number
+ * makes a month look transformed when a single tenant simply paid six
+ * months up front.
+ *
+ *  - `recurring` money earned for the period: rent, short-stay bookings,
+ *               utilities, service and late fees
+ *  - `advance`   rent collected now for months still to come — cash today,
+ *               revenue later
+ *  - `deposit`   refundable and held on the tenant's behalf; a liability,
+ *               never revenue
+ */
+export type ChargeClass = 'recurring' | 'advance' | 'deposit'
+
+export const chargeClass = (type: ChargeType): ChargeClass =>
+  type === 'advance' ? 'advance' : type === 'deposit' ? 'deposit' : 'recurring'
+
+const sumBy = (invoices: Invoice[], cls: ChargeClass) =>
+  invoices.filter((i) => chargeClass(i.type) === cls).reduce((a, i) => a + i.paidAmount, 0)
 
 /** An open-ended rental has no end date; for range maths treat it as running
  *  indefinitely, and render it as "open-ended" rather than as a date. */
@@ -18,8 +39,18 @@ export interface Kpis {
   inactiveUnits: number
   occupancyRate: number
   vacancyRate: number
+  /** Recurring plus advances. Deposits are excluded — they are not revenue. */
   monthlyRevenue: number
   monthlyRevenueDelta: number
+  /** Earned this month: rent, bookings and fees, without lump advances. */
+  recurringRevenue: number
+  /** Like-for-like against the same span of last month. */
+  recurringDelta: number
+  /** Rent taken this month for months still to come. */
+  advanceCollected: number
+  advanceDelta: number
+  /** Refundable money taken in this month and held on the tenant's behalf. */
+  depositsCollected: number
   upcomingAmount: number
   upcomingCount: number
   overdueAmount: number
@@ -60,8 +91,15 @@ export function computeKpis(
   const paidLastMonth = invoices.filter(
     (i) => i.paidOn && inMonth(i.paidOn, -1) && Number(i.paidOn.slice(8, 10)) <= dayOfMonth,
   )
-  const monthlyRevenue = paidThisMonth.reduce((a, i) => a + i.paidAmount, 0)
-  const lastRevenue = paidLastMonth.reduce((a, i) => a + i.paidAmount, 0)
+  const recurringRevenue = sumBy(paidThisMonth, 'recurring')
+  const advanceCollected = sumBy(paidThisMonth, 'advance')
+  const depositsCollected = sumBy(paidThisMonth, 'deposit')
+  const lastRecurring = sumBy(paidLastMonth, 'recurring')
+  const lastAdvance = sumBy(paidLastMonth, 'advance')
+
+  const monthlyRevenue = recurringRevenue + advanceCollected
+  const lastRevenue = lastRecurring + lastAdvance
+  const delta = (now: number, before: number) => (before ? ((now - before) / before) * 100 : 0)
 
   const today = iso(TODAY)
   const upcoming = invoices.filter(
@@ -86,7 +124,12 @@ export function computeKpis(
     occupancyRate: lettable ? ((occupied + reserved) / lettable) * 100 : 0,
     vacancyRate: lettable ? (vacant / lettable) * 100 : 0,
     monthlyRevenue,
-    monthlyRevenueDelta: lastRevenue ? ((monthlyRevenue - lastRevenue) / lastRevenue) * 100 : 0,
+    monthlyRevenueDelta: delta(monthlyRevenue, lastRevenue),
+    recurringRevenue,
+    recurringDelta: delta(recurringRevenue, lastRecurring),
+    advanceCollected,
+    advanceDelta: delta(advanceCollected, lastAdvance),
+    depositsCollected,
     upcomingAmount: upcoming.reduce((a, i) => a + (i.amount - i.paidAmount), 0),
     upcomingCount: upcoming.length,
     overdueAmount: overdue.reduce((a, i) => a + (i.amount - i.paidAmount), 0),
@@ -103,13 +146,28 @@ export function computeKpis(
 
 /** Twelve months of collected vs billed, for the dashboard revenue chart. */
 export function revenueSeries(invoices: Invoice[], months = 12) {
-  const out: Array<{ key: string; label: string; collected: number; billed: number }> = []
+  const out: Array<{
+    key: string; label: string
+    collected: number; billed: number
+    recurring: number; advance: number
+  }> = []
   for (let m = months - 1; m >= 0; m--) {
     const ref = new Date(TODAY.getFullYear(), TODAY.getMonth() - m, 1)
     const key = iso(ref).slice(0, 7)
-    const collected = invoices.filter((i) => i.paidOn?.slice(0, 7) === key).reduce((a, i) => a + i.paidAmount, 0)
-    const billed = invoices.filter((i) => i.dueOn.slice(0, 7) === key).reduce((a, i) => a + i.amount, 0)
-    out.push({ key, label: ref.toLocaleDateString('en-GB', { month: 'short' }), collected, billed })
+    const paid = invoices.filter((i) => i.paidOn?.slice(0, 7) === key)
+    const recurring = sumBy(paid, 'recurring')
+    const advance = sumBy(paid, 'advance')
+    const billed = invoices
+      .filter((i) => i.dueOn.slice(0, 7) === key && chargeClass(i.type) !== 'deposit')
+      .reduce((a, i) => a + i.amount, 0)
+    out.push({
+      key,
+      label: ref.toLocaleDateString(presentation.locale, { month: 'short' }),
+      collected: recurring + advance,
+      billed,
+      recurring,
+      advance,
+    })
   }
   return out
 }
@@ -153,9 +211,13 @@ export function propertyPerformance(
 ) {
   return properties.map((p) => {
     const inv = invoices.filter((i) => i.propertyId === p.id)
-    const revenue = inv.reduce((a, i) => a + i.paidAmount, 0)
-    const billed = inv.reduce((a, i) => a + i.amount, 0)
-    const outstanding = inv.reduce((a, i) => a + (i.amount - i.paidAmount), 0)
+    /* Deposits are held, not earned, so they stay out of revenue entirely. */
+    const earning = inv.filter((i) => chargeClass(i.type) !== 'deposit')
+    const revenue = earning.reduce((a, i) => a + i.paidAmount, 0)
+    const recurring = sumBy(earning, 'recurring')
+    const advances = sumBy(earning, 'advance')
+    const billed = earning.reduce((a, i) => a + i.amount, 0)
+    const outstanding = earning.reduce((a, i) => a + (i.amount - i.paidAmount), 0)
     const costs = maintenance.filter((m) => m.propertyId === p.id).reduce((a, m) => a + (m.actualCost ?? m.estimatedCost * 0.5), 0)
     /* An open-ended rental is counted to today, not to a fabricated end. */
     const nights = bookings
@@ -164,6 +226,8 @@ export function propertyPerformance(
     return {
       property: p,
       revenue,
+      recurring,
+      advances,
       billed,
       outstanding,
       costs,
