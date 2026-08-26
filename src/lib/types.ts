@@ -174,11 +174,14 @@ export interface Invoice {
   dueOn: string
   amount: number
   /**
-   * How many months of occupation this charge buys, starting at its due
-   * month. A quarterly advance covers 3, so a third of it is earned in the
-   * month it is paid and the rest is deferred into the two that follow.
+   * The period this charge pays for — inclusive start, exclusive end.
+   * Revenue is recognised across it day by day, so a quarterly advance is
+   * earned over its three months and a stay that runs across a month
+   * boundary lands partly in each. Deposits carry a period but are never
+   * recognised; they are the tenant's money.
    */
-  coversMonths: number
+  earnsFrom: string
+  earnsTo: string
   paidAmount: number
   status: InvoiceStatus
   method: 'bank_transfer' | 'card' | 'mobile_money' | 'cash' | null

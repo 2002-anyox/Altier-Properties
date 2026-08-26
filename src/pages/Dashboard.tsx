@@ -137,7 +137,7 @@ export default function Dashboard() {
                   <Row
                     label="— of which advance"
                     value={money(kpis.advanceCollected, true)}
-                    note="buys months still to come"
+                    note="buys occupancy beyond this month"
                   />
                   <Row
                     label="Deposits held"
@@ -213,10 +213,10 @@ export default function Dashboard() {
           <ChartFrame
             className="xl:col-span-2"
             title="Revenue earned vs advance received"
-            subtitle="Revenue earned each month against the advance cash received that month"
+            subtitle="Revenue earned each month against cash received for occupancy beyond it"
             legend={[
               { label: 'Earned', color: VIZ[0] },
-              { label: 'Advance received', color: VIZ[1] },
+              { label: 'Received in advance', color: VIZ[1] },
             ]}
             table={
               <table className="w-full text-left text-[12.5px]">
@@ -224,7 +224,7 @@ export default function Dashboard() {
                   <tr className="border-b border-line">
                     <th scope="col" className="py-2 pr-4 font-medium">Month</th>
                     <th scope="col" className="py-2 pr-4 text-right font-medium">Earned</th>
-                    <th scope="col" className="py-2 pr-4 text-right font-medium">Advance in</th>
+                    <th scope="col" className="py-2 pr-4 text-right font-medium">In advance</th>
                     <th scope="col" className="py-2 text-right font-medium">Cash in</th>
                   </tr>
                 </thead>
@@ -246,7 +246,7 @@ export default function Dashboard() {
               xKey="label"
               series={[
                 { key: 'recurring', label: 'Earned', color: VIZ[0] },
-                { key: 'advance', label: 'Advance received', color: VIZ[1], dashed: true },
+                { key: 'advance', label: 'Received in advance', color: VIZ[1], dashed: true },
               ]}
               format={(n) => money(n, true)}
               height={244}

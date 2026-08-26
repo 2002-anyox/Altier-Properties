@@ -72,11 +72,12 @@ levels, read state and configurable reminder timing.
 **Reports** — occupancy and vacancy rates, revenue performance, collection rate, overdue exposure and
 ageing, revenue by district, letting-model comparison, per-property performance and client activity.
 
-**Revenue that tells the truth** — open-ended rentals pay a cycle at a time, and each payment is
-recognised across the months it buys rather than banked when it arrives. The dashboard leads with
-revenue *earned* on that accrual basis and shows cash collected, its advance portion and deposits
-separately, so a six-month advance cannot masquerade as growth and a quiet collection month cannot
-masquerade as decline.
+**Revenue that tells the truth** — every charge records the period it pays for, and revenue is
+recognised across that period day by day. A quarterly advance is earned over its three months, a stay
+crossing a month boundary is earned partly in each, and deposits are never earned at all. The
+dashboard leads with revenue *earned* on that accrual basis and shows cash collected, the part of it
+buying time ahead, and deposits separately — so a six-month advance cannot masquerade as growth, and
+a quiet collection month cannot masquerade as decline.
 
 **Role-based access** for Owner, Property Manager, Staff and Accountant, enforced in the navigation,
 at the route and on individual actions and figures. Switch role from the avatar menu to see it.
@@ -102,6 +103,7 @@ npm run dev        # development server
 npm run build      # production build to dist/
 npm run preview    # serve the production build
 npm run typecheck  # TypeScript, no emit
+npm run check:accounting  # revenue-recognition invariants
 ```
 
 Requires Node 18 or newer. There is no backend: the sample portfolio — 24 properties across Kampala,

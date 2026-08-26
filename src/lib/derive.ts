@@ -32,35 +32,59 @@ const shiftMonthKey = (key: string, months: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
+const DAY = 86_400_000
+const asDate = (d: string) => new Date(d + 'T00:00:00').getTime()
+
+/** Days two half-open date ranges have in common. */
+function overlapDays(aFrom: string, aTo: string, bFrom: string, bTo: string) {
+  const from = Math.max(asDate(aFrom), asDate(bFrom))
+  const to = Math.min(asDate(aTo), asDate(bTo))
+  return Math.max(0, (to - from) / DAY)
+}
+
+const spanDays = (inv: Invoice) => Math.max(0, (asDate(inv.earnsTo) - asDate(inv.earnsFrom)) / DAY)
+
+const firstOfMonth = (key: string) => `${key}-01`
+
 /**
- * Revenue earned in a given month, on an accrual basis: a quarterly advance
- * is recognised a third at a time across the three months it buys, not all
- * at once in the month the money arrived. Deposits are never recognised —
- * they are the tenant's money.
+ * Revenue earned in a given month, on an accrual basis: every charge is
+ * spread day by day across the period it pays for. A quarterly advance is
+ * earned over its three months rather than banked when the money arrived,
+ * and a stay running from the 29th to the 3rd is earned partly in each
+ * month rather than wholly in the one it was invoiced. Deposits are never
+ * recognised — they are the tenant's money.
  *
  * This is the number that answers "did the book actually grow", because it
  * is indifferent to when the tenant chose to pay.
  */
 export function earnedInMonth(invoices: Invoice[], key: string) {
+  const monthFrom = firstOfMonth(key)
+  const monthTo = firstOfMonth(shiftMonthKey(key, 1))
   let total = 0
   for (const inv of invoices) {
     if (chargeClass(inv.type) === 'deposit') continue
-    const span = Math.max(1, inv.coversMonths)
-    const from = monthKeyOf(inv.dueOn)
-    for (let k = 0; k < span; k++) {
-      if (shiftMonthKey(from, k) === key) {
-        total += inv.amount / span
-        break
-      }
-    }
+    const span = spanDays(inv)
+    if (span <= 0) continue
+    const share = overlapDays(inv.earnsFrom, inv.earnsTo, monthFrom, monthTo)
+    if (share > 0) total += inv.amount * (share / span)
   }
   return total
 }
 
-/** The part of a payment that buys months still to come. */
-export const deferredPortion = (inv: Invoice) => {
-  const span = Math.max(1, inv.coversMonths)
-  return span <= 1 ? 0 : (inv.paidAmount * (span - 1)) / span
+/**
+ * The part of a payment that buys time beyond the month the money arrived
+ * in — a quarterly advance's later months, or the nights of a stay that
+ * run into next month.
+ */
+export function deferredPortion(inv: Invoice) {
+  if (!inv.paidOn || inv.paidAmount <= 0) return 0
+  /* A deposit is never revenue, so it can never be deferred revenue. */
+  if (chargeClass(inv.type) === 'deposit') return 0
+  const span = spanDays(inv)
+  if (span <= 0) return 0
+  const nextMonth = firstOfMonth(shiftMonthKey(inv.paidOn.slice(0, 7), 1))
+  const beyond = overlapDays(inv.earnsFrom, inv.earnsTo, nextMonth, '2999-12-31')
+  return inv.paidAmount * (beyond / span)
 }
 
 /** An open-ended rental has no end date; for range maths treat it as running

@@ -78,9 +78,17 @@ what the open-ended rental model encourages. Three classes:
 | **Deposit** | refundable, held on the tenant's behalf | never — it is a liability |
 
 An open-ended rental does not pay once at move-in and then monthly — it pays a **cycle at a time**,
-three, six or twelve months, and the cycle repeats for as long as the tenancy runs. Each payment buys
-`coversMonths` of occupation from its own due date, so revenue is recognised across that span rather
-than banked in the month the money landed: a quarterly advance is earned a third at a time.
+three, six or twelve months, and the cycle repeats for as long as the tenancy runs.
+
+Every charge therefore carries the period it pays for (`earnsFrom` / `earnsTo`), and revenue is
+recognised across that period **day by day**. One rule covers everything: a month's rent lands in its
+month, a quarterly advance is earned across its three months rather than banked when the money
+arrived, and a stay running from the 29th to the 3rd is earned partly in each month rather than
+wholly in the one it happened to be invoiced. Deposits carry a period too but are never recognised.
+
+`npm run check:accounting` asserts the invariants that make this trustworthy: every non-deposit
+charge is recognised exactly once in total, deposits never reach revenue or deferred revenue,
+deferred never exceeds what was paid, and a straddling stay splits by nights.
 
 The dashboard therefore leads with **revenue earned** on that accrual basis — indifferent to when the
 tenant chose to pay, which is what makes it answerable to "did the book grow" — and shows cash

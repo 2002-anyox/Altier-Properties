@@ -478,9 +478,14 @@ export const INVOICES: Invoice[] = (() => {
   const out: Invoice[] = []
   let n = 4200
 
-  const push = (v: Omit<Invoice, 'id' | 'number' | 'coversMonths'> & { coversMonths?: number }) => {
+  /* Unless a charge says otherwise it pays for the month it falls due in. */
+  const push = (
+    v: Omit<Invoice, 'id' | 'number' | 'earnsFrom' | 'earnsTo'> & { earnsFrom?: string; earnsTo?: string },
+  ) => {
     n++
-    out.push({ coversMonths: 1, ...v, id: `i-${n}`, number: `ALT-INV-${n}` })
+    const earnsFrom = v.earnsFrom ?? `${v.dueOn.slice(0, 7)}-01`
+    const earnsTo = v.earnsTo ?? addMonths(earnsFrom, 1)
+    out.push({ ...v, earnsFrom, earnsTo, id: `i-${n}`, number: `ALT-INV-${n}` })
   }
 
   const addMonths = (from: string, months: number) => {
@@ -523,7 +528,7 @@ export const INVOICES: Invoice[] = (() => {
         push({
           propertyId: p.id, clientId: b.clientId, bookingId: b.id, type: 'advance',
           issuedOn: iso(addDays(cursor, -12)), dueOn: cursor,
-          amount: p.price * cycle, coversMonths: cycle,
+          amount: p.price * cycle, earnsFrom: cursor, earnsTo: until,
           paidAmount: isPaid ? p.price * cycle : 0, status,
           method: isPaid ? pick(['mobile_money', 'mobile_money', 'bank_transfer', 'cash']) : null,
           paidOn: isPaid ? iso(addDays(cursor, intBetween(0, 4))) : null,
@@ -574,6 +579,7 @@ export const INVOICES: Invoice[] = (() => {
       push({
         propertyId: p.id, clientId: b.clientId, bookingId: b.id, type: 'booking',
         issuedOn: iso(addDays(b.start, -10)), dueOn: due, amount: total,
+        earnsFrom: b.start, earnsTo: b.end ?? iso(addDays(b.start, nights)),
         paidAmount: status === 'paid' ? total : 0, status,
         method: status === 'paid' ? pick(['card', 'card', 'bank_transfer']) : null,
         paidOn: status === 'paid' ? iso(addDays(due, -intBetween(0, 3))) : null,

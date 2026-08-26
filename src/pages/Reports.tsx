@@ -72,7 +72,7 @@ export default function Reports() {
     const deposits = paid.filter((i) => chargeClass(i.type) === 'deposit').reduce((a, i) => a + i.paidAmount, 0)
     return [
       { label: 'Earned', value: earnedInMonth(state.invoices, month), note: 'revenue this month' },
-      { label: 'Advance in', value: deferred, note: 'for months ahead' },
+      { label: 'In advance', value: deferred, note: 'for time ahead' },
       { label: 'Deposits held', value: deposits, note: 'refundable' },
     ]
   }, [state.invoices])
@@ -202,7 +202,7 @@ export default function Reports() {
       <div className="mt-4 grid gap-4 xl:grid-cols-3">
         <ChartFrame
           title="Earned against money received"
-          subtitle="A quarterly advance is earned a month at a time, not all at once"
+          subtitle="Each payment is earned across the period it buys, day by day"
           table={
             <table className="w-full text-left text-[12.5px]">
               <thead className="text-ink-muted">
@@ -226,9 +226,9 @@ export default function Reports() {
             <BarList items={revenueMix} format={(n) => money(n, true)} color={VIZ[0]} />
           </div>
           <p className="mt-4 px-3 text-[11.5px] leading-relaxed text-ink-muted">
-            Only the first line is revenue. A tenant paying three months at once hands over cash that
-            buys two further months — recognised as those months arrive — plus a deposit that is
-            never earned at all.
+            Only the first line is revenue. A tenant paying three months at once, or a guest whose stay
+            runs into next month, hands over cash that buys time still to come — recognised as it
+            arrives — plus a deposit that is never earned at all.
           </p>
         </ChartFrame>
 

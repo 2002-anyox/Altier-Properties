@@ -9,7 +9,8 @@
     "build": "tsc -b --noCheck && vite build",
     "typecheck": "tsc -b",
     "preview": "vite preview",
-    "build:single": "tsc -b --noCheck && vite build --mode single"
+    "build:single": "tsc -b --noCheck && vite build --mode single",
+    "check:accounting": "esbuild scripts/check-accounting.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/check-accounting.mjs --log-level=warning && node node_modules/.cache/check-accounting.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
