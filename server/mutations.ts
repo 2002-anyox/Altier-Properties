@@ -7,12 +7,12 @@
  * portfolio so the two can never drift.
  * ------------------------------------------------------------------ */
 
-import { eq, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import type { Db } from './db/client.ts'
 import * as t from './db/schema.ts'
 import type {
   Booking, Client, Invoice, MaintenancePriority, MaintenanceStatus, Property,
-  PropertyStatus, ReminderSettings,
+  PropertyStatus, ReminderSettings, TeamMember,
 } from '../src/lib/types.ts'
 
 const today = () => new Date().toISOString().slice(0, 10)
@@ -287,3 +287,159 @@ export async function addBooking(db: Db, booking: Booking, invoices: Invoice[]) 
       .onConflictDoNothing()
   })
 }
+
+/* ------------------------ editing and removal ---------------------- *
+ * Removal is where the schema's relationships stop being theoretical.
+ * A client with a tenancy behind them cannot simply vanish — their
+ * charges reference them — so the refusal happens here, with a reason
+ * worth reading, rather than as a foreign-key error from the driver.
+ * ------------------------------------------------------------------- */
+
+/** A refusal the caller can act on, as opposed to a fault. */
+export class Conflict extends Error {}
+
+export async function updateClient(db: Db, id: string, client: Client) {
+  await requireOne(
+    await db.select({ id: t.clients.id }).from(t.clients).where(eq(t.clients.id, id)),
+    `client ${id}`,
+  )
+  await db.update(t.clients).set({
+    name: client.name, kind: client.kind, email: client.email, phone: client.phone,
+    nationality: client.nationality, status: client.status, notes: client.notes,
+    emergencyContact: client.emergencyContact,
+  }).where(eq(t.clients.id, id))
+
+  await db.delete(t.clientProperties).where(eq(t.clientProperties.clientId, id))
+  const links = [...new Set(client.propertyIds)].map((propertyId) => ({ clientId: id, propertyId }))
+  if (links.length) await db.insert(t.clientProperties).values(links)
+}
+
+export async function updateBooking(db: Db, id: string, booking: Booking) {
+  const existing = await requireOne(
+    await db.select().from(t.bookings).where(eq(t.bookings.id, id)),
+    `agreement ${id}`,
+  )
+  /* Which unit and which client an agreement is for decides what was
+     already charged against it, so an edit may not move either. */
+  if (booking.propertyId !== existing.propertyId || booking.clientId !== existing.clientId) {
+    throw new Conflict('An agreement cannot be moved to another property or client. End it and open a new one.')
+  }
+  if (booking.end && booking.end <= booking.start) {
+    throw new Conflict('An agreement cannot end on or before the day it starts. Cancel it instead.')
+  }
+  await db.update(t.bookings).set({
+    status: booking.status, startsOn: booking.start, endsOn: booking.end,
+    rate: booking.rate, deposit: booking.deposit, advanceMonths: booking.advanceMonths,
+    paidThrough: booking.paidThrough, noticeDays: booking.noticeDays,
+    guests: booking.guests, source: booking.source, notes: booking.notes,
+  }).where(eq(t.bookings.id, id))
+
+  // A closed agreement frees its unit; an open one holds it.
+  const closed = booking.status === 'completed' || booking.status === 'cancelled'
+  await db.update(t.properties)
+    .set(closed
+      ? { status: 'available', availableFrom: booking.end }
+      : { status: booking.status === 'upcoming' ? 'reserved' : 'occupied', availableFrom: null })
+    .where(eq(t.properties.id, booking.propertyId))
+}
+
+/** Removing a property takes its agreements, charges and jobs with it. */
+export async function deleteProperty(db: Db, id: string) {
+  await requireOne(
+    await db.select({ id: t.properties.id }).from(t.properties).where(eq(t.properties.id, id)),
+    `property ${id}`,
+  )
+  // invoices reference clients with ON DELETE RESTRICT, so clear them first.
+  await db.delete(t.invoices).where(eq(t.invoices.propertyId, id))
+  await db.delete(t.bookings).where(eq(t.bookings.propertyId, id))
+  await db.delete(t.properties).where(eq(t.properties.id, id))
+}
+
+export async function deleteClient(db: Db, id: string) {
+  await requireOne(
+    await db.select({ id: t.clients.id }).from(t.clients).where(eq(t.clients.id, id)),
+    `client ${id}`,
+  )
+  const [{ n: agreements }] = await db.select({ n: sql<number>`count(*)::int` })
+    .from(t.bookings).where(eq(t.bookings.clientId, id))
+  const [{ n: charges }] = await db.select({ n: sql<number>`count(*)::int` })
+    .from(t.invoices).where(eq(t.invoices.clientId, id))
+
+  /* Their charges are the record of what was owed and paid. Deleting the
+     client would either destroy that or orphan it, so refuse and point
+     at the honest alternative. */
+  if (agreements > 0 || charges > 0) {
+    throw new Conflict(
+      `${describe(agreements, 'agreement')} and ${describe(charges, 'charge')} reference this client, `
+      + 'so removing them would destroy that history. Mark them as past instead.',
+    )
+  }
+  await db.delete(t.clients).where(eq(t.clients.id, id))
+}
+
+export async function deleteBooking(db: Db, id: string) {
+  const booking = await requireOne(
+    await db.select().from(t.bookings).where(eq(t.bookings.id, id)),
+    `agreement ${id}`,
+  )
+  /* A charge that was actually paid is a record of money that moved, so it
+     survives the agreement, unlinked. One that was never paid was only ever
+     an expectation this agreement created, and goes with it — otherwise a
+     mistaken agreement leaves arrears behind that nobody owes. */
+  await db.delete(t.invoices)
+    .where(and(eq(t.invoices.bookingId, id), eq(t.invoices.paidAmount, 0)))
+  await db.update(t.invoices).set({ bookingId: null }).where(eq(t.invoices.bookingId, id))
+  await db.delete(t.bookings).where(eq(t.bookings.id, id))
+  await db.update(t.properties)
+    .set({ status: 'available', availableFrom: null })
+    .where(eq(t.properties.id, booking.propertyId))
+}
+
+/* -------------------------------- team ----------------------------- */
+
+export async function addMember(db: Db, member: TeamMember) {
+  await db.insert(t.teamMembers).values({
+    id: member.id, name: member.name, role: member.role, title: member.title,
+    email: member.email, phone: member.phone, since: member.since,
+  })
+}
+
+export async function updateMember(db: Db, id: string, member: TeamMember) {
+  await requireOne(
+    await db.select({ id: t.teamMembers.id }).from(t.teamMembers).where(eq(t.teamMembers.id, id)),
+    `team member ${id}`,
+  )
+  await db.update(t.teamMembers).set({
+    name: member.name, role: member.role, title: member.title,
+    email: member.email, phone: member.phone,
+  }).where(eq(t.teamMembers.id, id))
+}
+
+export async function deleteMember(db: Db, id: string) {
+  await requireOne(
+    await db.select({ id: t.teamMembers.id }).from(t.teamMembers).where(eq(t.teamMembers.id, id)),
+    `team member ${id}`,
+  )
+  const [{ n: managed }] = await db.select({ n: sql<number>`count(*)::int` })
+    .from(t.properties).where(eq(t.properties.managerId, id))
+  if (managed > 0) {
+    throw new Conflict(
+      `They manage ${describe(managed, 'property', 'properties')}. `
+      + 'Reassign those to someone else before removing them.',
+    )
+  }
+  const [{ n: jobs }] = await db.select({ n: sql<number>`count(*)::int` })
+    .from(t.maintenanceRequests).where(eq(t.maintenanceRequests.assigneeId, id))
+  if (jobs > 0) {
+    throw new Conflict(
+      `They are assigned ${describe(jobs, 'maintenance job')}. Reassign those first.`,
+    )
+  }
+  const [{ n: remaining }] = await db.select({ n: sql<number>`count(*)::int` }).from(t.teamMembers)
+  if (remaining <= 1) throw new Conflict('The last person on the team cannot be removed.')
+
+  await db.delete(t.teamMembers).where(eq(t.teamMembers.id, id))
+}
+
+const describe = (n: number, one: string, many = `${one}s`) =>
+  `${n} ${n === 1 ? one : many}`

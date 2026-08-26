@@ -14,7 +14,7 @@
 import {
   BOOKINGS, CLIENTS, DEFAULT_REMINDERS, INVOICES, MAINTENANCE, PROPERTIES, TEAM,
 } from './data'
-import type { Booking, Client, Invoice, Portfolio, Property } from './types'
+import type { Booking, Client, Invoice, Portfolio, Property, TeamMember } from './types'
 
 export type DataSource = 'database' | 'demo'
 
@@ -77,6 +77,18 @@ export const api = {
     request('/clients', { method: 'POST', body: JSON.stringify(client) }),
   addBooking: (booking: Booking, invoices: Invoice[]) =>
     request('/bookings', { method: 'POST', body: JSON.stringify({ booking, invoices }) }),
+  updateClient: (client: Client) =>
+    request(`/clients/${client.id}`, { method: 'PUT', body: JSON.stringify(client) }),
+  updateBooking: (booking: Booking) =>
+    request(`/bookings/${booking.id}`, { method: 'PUT', body: JSON.stringify(booking) }),
+  deleteProperty: (id: string) => request(`/properties/${id}`, { method: 'DELETE' }),
+  deleteClient: (id: string) => request(`/clients/${id}`, { method: 'DELETE' }),
+  deleteBooking: (id: string) => request(`/bookings/${id}`, { method: 'DELETE' }),
+  addMember: (member: TeamMember) =>
+    request('/team', { method: 'POST', body: JSON.stringify(member) }),
+  updateMember: (member: TeamMember) =>
+    request(`/team/${member.id}`, { method: 'PUT', body: JSON.stringify(member) }),
+  deleteMember: (id: string) => request(`/team/${id}`, { method: 'DELETE' }),
   recordPayment: (invoiceId: string) => request(`/invoices/${invoiceId}/payment`, { method: 'POST' }),
   sendReminder: (invoiceId: string) => request(`/invoices/${invoiceId}/reminder`, { method: 'POST' }),
   setPropertyStatus: (id: string, status: string) =>

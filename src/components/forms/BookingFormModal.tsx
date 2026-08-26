@@ -3,10 +3,11 @@ import { CalendarPlus } from 'lucide-react'
 import { Button, EmptyState, Field, Input, Modal, Select, Textarea } from '../ui'
 import { useStore } from '../../lib/store'
 import {
-  advanceFloor, emptyBookingDraft, newBooking, openingCharges, type BookingDraft,
+  advanceFloor, bookingDraftFrom, editBooking, emptyBookingDraft, newBooking,
+  openingCharges, type BookingDraft,
 } from '../../lib/create'
 import { money } from '../../lib/format'
-import type { BookingSource, TenancyMode } from '../../lib/types'
+import type { Booking, BookingSource, TenancyMode } from '../../lib/types'
 
 const MODES: Array<[TenancyMode, string]> = [
   ['long_term', 'Fixed-term lease'],
@@ -26,9 +27,10 @@ const nightsBetween = (from: string, to: string) =>
   Math.max(1, Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000))
 
 export function BookingFormModal({
-  open, onClose, propertyId,
-}: { open: boolean; onClose: () => void; propertyId?: string }) {
+  open, onClose, propertyId, booking,
+}: { open: boolean; onClose: () => void; propertyId?: string; booking?: Booking }) {
   const { state, dispatch, toast } = useStore()
+  const editing = !!booking
 
   const lettable = useMemo(
     () => state.properties.filter((p) => p.status !== 'inactive'),
@@ -42,6 +44,7 @@ export function BookingFormModal({
      up that unit's own letting mode and rent rather than a stale default. */
   useEffect(() => {
     if (!open) return
+    if (booking) { setDraft(bookingDraftFrom(booking)); return }
     const id = propertyId ?? lettable[0]?.id ?? ''
     const property = state.properties.find((p) => p.id === id)
     const base = emptyBookingDraft(id, state.clients[0]?.id ?? '')
@@ -54,7 +57,7 @@ export function BookingFormModal({
           advanceMonths: advanceFloor(property.mode) || base.advanceMonths,
         }
       : base)
-  }, [open, propertyId, lettable, state.properties, state.clients])
+  }, [open, propertyId, booking, lettable, state.properties, state.clients])
 
   const set = <K extends keyof BookingDraft>(key: K, value: BookingDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }))
@@ -76,12 +79,18 @@ export function BookingFormModal({
 
   const submit = () => {
     if (!ready) return
-    const booking = newBooking(draft, state.bookings)
-    const invoices = openingCharges(booking, state.invoices)
-    dispatch({ type: 'add-booking', booking, invoices })
-    const client = state.clients.find((c) => c.id === booking.clientId)
+    if (booking) {
+      dispatch({ type: 'update-booking', booking: editBooking(booking, draft) })
+      toast({ title: `Agreement ${booking.reference} updated`, tone: 'success' })
+      onClose()
+      return
+    }
+    const created = newBooking(draft, state.bookings)
+    const invoices = openingCharges(created, state.invoices)
+    dispatch({ type: 'add-booking', booking: created, invoices })
+    const client = state.clients.find((c) => c.id === created.clientId)
     toast({
-      title: `Agreement ${booking.reference} created`,
+      title: `Agreement ${created.reference} created`,
       body: invoices.length
         ? `${client?.name ?? 'The client'} owes ${money(opening.total)} to move in.`
         : `${client?.name ?? 'The client'} is committed to the unit.`,
@@ -97,15 +106,17 @@ export function BookingFormModal({
       open={open}
       onClose={onClose}
       size="lg"
-      title="New agreement"
-      subtitle="Commits the unit, links the client and raises the opening charges."
+      title={editing ? `Edit ${booking.reference}` : 'New agreement'}
+      subtitle={editing
+        ? 'Charges already raised are unaffected. The unit and client cannot be changed.'
+        : 'Commits the unit, links the client and raises the opening charges.'}
       footer={blocked ? (
         <Button variant="secondary" onClick={onClose}>Close</Button>
       ) : (
         <>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
           <Button variant="primary" icon={<CalendarPlus size={14} />} onClick={submit} disabled={!ready}>
-            Create agreement
+            {editing ? 'Save changes' : 'Create agreement'}
           </Button>
         </>
       )}
@@ -122,12 +133,12 @@ export function BookingFormModal({
         <div className="grid gap-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Property" id="bf-prop">
-              <Select id="bf-prop" value={draft.propertyId} onChange={(e) => set('propertyId', e.target.value)}>
+              <Select id="bf-prop" value={draft.propertyId} disabled={editing} onChange={(e) => set('propertyId', e.target.value)}>
                 {lettable.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </Select>
             </Field>
             <Field label="Client" id="bf-client">
-              <Select id="bf-client" value={draft.clientId} onChange={(e) => set('clientId', e.target.value)}>
+              <Select id="bf-client" value={draft.clientId} disabled={editing} onChange={(e) => set('clientId', e.target.value)}>
                 {state.clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </Select>
             </Field>
@@ -142,7 +153,7 @@ export function BookingFormModal({
                 ? 'Nightly, with a fixed departure date.'
                 : 'A fixed term with an agreed end date.'}
           >
-            <Select id="bf-mode" value={draft.mode} onChange={(e) => set('mode', e.target.value as TenancyMode)}>
+            <Select id="bf-mode" value={draft.mode} disabled={editing} onChange={(e) => set('mode', e.target.value as TenancyMode)}>
               {MODES.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
             </Select>
           </Field>
@@ -200,6 +211,7 @@ export function BookingFormModal({
             </Field>
           </div>
 
+          {!editing && (
           <div className="rounded-2xl border border-line bg-surface-inset/50 p-4">
             <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-muted">Due to move in</p>
             <dl className="mt-3 space-y-2 text-[13px]">
@@ -226,6 +238,7 @@ export function BookingFormModal({
               Both are raised unpaid — record the payment once the money arrives.
             </p>
           </div>
+          )}
 
           <Field label="Notes" id="bf-notes">
             <Textarea id="bf-notes" value={draft.notes} onChange={(e) => set('notes', e.target.value)} placeholder="Handover arrangements, agreed conditions…" />

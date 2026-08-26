@@ -18,11 +18,12 @@ import { connect, type Db } from './db/client.ts'
 import { properties } from './db/schema.ts'
 import { readPortfolio } from './db/read.ts'
 import {
-  NotFound, addBooking, addClient, addMaintenance, addNote, addProperty,
+  Conflict, NotFound, addBooking, addClient, addMaintenance, addMember, addNote,
+  addProperty, deleteBooking, deleteClient, deleteMember, deleteProperty,
   recordPayment, sendReminder, setMaintenanceStatus, setPropertyStatus,
-  updateProperty, updateReminders,
+  updateBooking, updateClient, updateMember, updateProperty, updateReminders,
 } from './mutations.ts'
-import type { Booking, Client, Invoice, Property } from '../src/lib/types.ts'
+import type { Booking, Client, Invoice, Property, TeamMember } from '../src/lib/types.ts'
 
 export function createApp(db: Db, driver: string) {
   const app = express()
@@ -154,6 +155,57 @@ export function createApp(db: Db, driver: string) {
     return withPortfolio(res)
   }))
 
+  app.put('/api/clients/:id', route(async (req, res) => {
+    const body = req.body as Client
+    requireShape(body, ['name', 'kind', 'status'], 'client')
+    await updateClient(db, param(req, 'id'), body)
+    return withPortfolio(res)
+  }))
+
+  app.put('/api/bookings/:id', route(async (req, res) => {
+    const body = req.body as Booking
+    requireShape(body, ['propertyId', 'clientId', 'mode', 'status', 'start'], 'agreement')
+    if (body.mode !== 'rental' && !body.end) {
+      throw new BadRequest('Only a rental may be open-ended; give the agreement an end date.')
+    }
+    await updateBooking(db, param(req, 'id'), body)
+    return withPortfolio(res)
+  }))
+
+  app.delete('/api/properties/:id', route(async (_req, res) => {
+    await deleteProperty(db, param(_req, 'id'))
+    return withPortfolio(res)
+  }))
+
+  app.delete('/api/clients/:id', route(async (req, res) => {
+    await deleteClient(db, param(req, 'id'))
+    return withPortfolio(res)
+  }))
+
+  app.delete('/api/bookings/:id', route(async (req, res) => {
+    await deleteBooking(db, param(req, 'id'))
+    return withPortfolio(res)
+  }))
+
+  app.post('/api/team', route(async (req, res) => {
+    const body = req.body as TeamMember
+    requireShape(body, ['id', 'name', 'role', 'title'], 'team member')
+    await addMember(db, body)
+    return withPortfolio(res)
+  }))
+
+  app.put('/api/team/:id', route(async (req, res) => {
+    const body = req.body as TeamMember
+    requireShape(body, ['name', 'role', 'title'], 'team member')
+    await updateMember(db, param(req, 'id'), body)
+    return withPortfolio(res)
+  }))
+
+  app.delete('/api/team/:id', route(async (req, res) => {
+    await deleteMember(db, param(req, 'id'))
+    return withPortfolio(res)
+  }))
+
   app.put('/api/settings/reminders', route(async (req, res) => {
     await updateReminders(db, req.body ?? {})
     return withPortfolio(res)
@@ -166,6 +218,12 @@ export function createApp(db: Db, driver: string) {
     }
     if (err instanceof BadRequest) {
       res.status(400).json({ error: err.message })
+      return
+    }
+    // A refusal the caller can act on: the request was well formed, the
+    // state of the portfolio is what stands in the way.
+    if (err instanceof Conflict) {
+      res.status(409).json({ error: err.message })
       return
     }
     /* Drizzle wraps a driver error, putting its own "failed query" text on

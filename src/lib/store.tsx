@@ -49,6 +49,15 @@ type Action =
   | { type: 'update-property'; property: Property }
   | { type: 'add-client'; client: Client }
   | { type: 'add-booking'; booking: Booking; invoices: Invoice[] }
+  | { type: 'update-client'; client: Client }
+  | { type: 'update-booking'; booking: Booking }
+  | { type: 'end-booking'; booking: Booking }
+  | { type: 'delete-property'; id: string }
+  | { type: 'delete-client'; id: string }
+  | { type: 'delete-booking'; id: string }
+  | { type: 'add-member'; member: TeamMember }
+  | { type: 'update-member'; member: TeamMember }
+  | { type: 'delete-member'; id: string }
   | { type: 'add-note'; clientId: string; text: string }
   | { type: 'update-reminders'; reminders: Partial<ReminderSettings> }
   | { type: 'set-region'; locale: string }
@@ -171,6 +180,66 @@ function reducer(state: State, action: Action): State {
       }
     case 'add-client':
       return { ...state, clients: [action.client, ...state.clients] }
+    case 'update-client':
+      return {
+        ...state,
+        clients: state.clients.map((c) => (c.id === action.client.id ? action.client : c)),
+      }
+    case 'update-booking':
+      return {
+        ...state,
+        bookings: state.bookings.map((b) => (b.id === action.booking.id ? action.booking : b)),
+      }
+    /* Ending a tenancy frees the unit. Leaving the property occupied
+       against a closed agreement is the bug this exists to prevent. */
+    case 'end-booking':
+      return {
+        ...state,
+        bookings: state.bookings.map((b) => (b.id === action.booking.id ? action.booking : b)),
+        properties: state.properties.map((p) =>
+          p.id === action.booking.propertyId
+            ? { ...p, status: 'available' as const, availableFrom: action.booking.end }
+            : p),
+      }
+    /* Removing a property takes its whole record with it — the database
+       cascades, and the screen has to agree or it will look like the
+       charges survived. */
+    case 'delete-property':
+      return {
+        ...state,
+        properties: state.properties.filter((p) => p.id !== action.id),
+        bookings: state.bookings.filter((b) => b.propertyId !== action.id),
+        invoices: state.invoices.filter((i) => i.propertyId !== action.id),
+        maintenance: state.maintenance.filter((m) => m.propertyId !== action.id),
+        clients: state.clients.map((c) => ({
+          ...c,
+          propertyIds: c.propertyIds.filter((id) => id !== action.id),
+        })),
+      }
+    case 'delete-client':
+      return { ...state, clients: state.clients.filter((c) => c.id !== action.id) }
+    /* A paid charge is money that moved, so it outlives the agreement,
+       unlinked. An unpaid one was only this agreement's expectation and
+       goes with it, or a mistake leaves arrears nobody owes. */
+    case 'delete-booking':
+      return {
+        ...state,
+        bookings: state.bookings.filter((b) => b.id !== action.id),
+        invoices: state.invoices
+          .filter((i) => !(i.bookingId === action.id && i.paidAmount === 0))
+          .map((i) => (i.bookingId === action.id ? { ...i, bookingId: null } : i)),
+      }
+    case 'add-member':
+      return { ...state, team: [...state.team, action.member] }
+    case 'update-member':
+      return {
+        ...state,
+        team: state.team.map((m) => (m.id === action.member.id ? action.member : m)),
+        // Changing your own role changes what you can reach.
+        role: action.member.id === state.currentUserId ? action.member.role : state.role,
+      }
+    case 'delete-member':
+      return { ...state, team: state.team.filter((m) => m.id !== action.id) }
     /* An agreement is never just a row: it commits the unit, opens the
        client's charges and ties the two together. Splitting that across
        several actions would let the screen show a half-made tenancy. */
@@ -397,6 +466,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         })
       }
       case 'add-property': return () => api.addProperty(action.property)
+      case 'update-client': return () => api.updateClient(action.client)
+      case 'update-booking': return () => api.updateBooking(action.booking)
+      case 'end-booking': return () => api.updateBooking(action.booking)
+      case 'delete-property': return () => api.deleteProperty(action.id)
+      case 'delete-client': return () => api.deleteClient(action.id)
+      case 'delete-booking': return () => api.deleteBooking(action.id)
+      case 'add-member': return () => api.addMember(action.member)
+      case 'update-member': return () => api.updateMember(action.member)
+      case 'delete-member': return () => api.deleteMember(action.id)
       case 'update-property': return () => api.updateProperty(action.property)
       case 'add-client': return () => api.addClient(action.client)
       case 'add-booking': return () => api.addBooking(action.booking, action.invoices)

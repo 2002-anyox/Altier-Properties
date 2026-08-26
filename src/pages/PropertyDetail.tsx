@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   Bath, BedDouble, CalendarRange, Check, Download, FileText, Maximize2, MapPin, Pencil,
-  Receipt, Star, TrendingUp, User, Wrench,
+  Receipt, Star, Trash2, TrendingUp, User, Wrench,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { PropertyImage } from '../components/PropertyImage'
@@ -14,6 +14,7 @@ import {
 } from '../components/ui'
 import { useStore } from '../lib/store'
 import { PropertyFormModal } from '../components/forms/PropertyFormModal'
+import { ConfirmDelete } from '../components/forms/ConfirmDelete'
 import { can } from '../lib/rbac'
 import { TODAY, daysBetween, iso } from '../lib/data'
 import { mediumDate, money, relativeDay, shortDate } from '../lib/format'
@@ -24,9 +25,11 @@ type Tab = 'overview' | 'occupancy' | 'financials' | 'maintenance' | 'documents'
 
 export default function PropertyDetail() {
   const { id = '' } = useParams()
+  const navigate = useNavigate()
   const { state, dispatch, toast } = useStore()
   const [tab, setTab] = useState<Tab>('overview')
   const [editing, setEditing] = useState(false)
+  const [removing, setRemoving] = useState(false)
 
   const property = state.properties.find((p) => p.id === id)
   const invoices = useMemo(() => state.invoices.filter((i) => i.propertyId === id), [state.invoices, id])
@@ -103,9 +106,12 @@ export default function PropertyDetail() {
             )}
             <Button variant="secondary" icon={<CalendarRange size={15} />}><Link to="/availability">Calendar</Link></Button>
             {can(state.role, 'edit:properties') && (
-              <Button variant="primary" icon={<Pencil size={15} />} onClick={() => setEditing(true)}>
-                Edit
-              </Button>
+              <>
+                <Button variant="secondary" icon={<Trash2 size={15} />} onClick={() => setRemoving(true)}>Delete</Button>
+                <Button variant="primary" icon={<Pencil size={15} />} onClick={() => setEditing(true)}>
+                  Edit
+                </Button>
+              </>
             )}
           </>
         }
@@ -493,6 +499,20 @@ export default function PropertyDetail() {
       </motion.div>
 
       <PropertyFormModal open={editing} onClose={() => setEditing(false)} property={property} />
+
+      <ConfirmDelete
+        open={removing}
+        onClose={() => setRemoving(false)}
+        title="Delete this property"
+        subject={`${property.name} will be removed from the portfolio.`}
+        consequences={[
+          bookings.length && `${bookings.length} agreements against this unit`,
+          invoices.length && `${invoices.length} charges, paid and outstanding`,
+          jobs.length && `${jobs.length} maintenance jobs`,
+        ].filter(Boolean) as string[]}
+        confirmLabel="Delete property"
+        onConfirm={() => { dispatch({ type: 'delete-property', id: property.id }); navigate('/properties') }}
+      />
     </>
   )
 }
