@@ -5,6 +5,8 @@
 **A premium property management platform for real estate, rentals, serviced apartments,
 short stays and commercial space — one portfolio, one calendar, one ledger.**
 
+[![CI](https://github.com/2002-anyox/Altier-Properties/actions/workflows/ci.yml/badge.svg)](https://github.com/2002-anyox/Altier-Properties/actions/workflows/ci.yml)
+
 </div>
 
 ---
@@ -105,6 +107,9 @@ npm run preview    # serve the production build
 npm run typecheck  # TypeScript, no emit
 npm run check:accounting  # revenue-recognition invariants
 ```
+
+CI runs typecheck, the accounting invariants and the production build on every pull request and on
+every push to `main` (`.github/workflows/ci.yml`).
 
 Requires Node 18 or newer. There is no backend: the sample portfolio — 24 properties across Kampala,
 Wakiso and Entebbe, priced in Ugandan shillings — is generated deterministically at load and anchored
