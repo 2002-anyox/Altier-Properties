@@ -173,6 +173,12 @@ export interface Invoice {
   issuedOn: string
   dueOn: string
   amount: number
+  /**
+   * How many months of occupation this charge buys, starting at its due
+   * month. A quarterly advance covers 3, so a third of it is earned in the
+   * month it is paid and the rest is deferred into the two that follow.
+   */
+  coversMonths: number
   paidAmount: number
   status: InvoiceStatus
   method: 'bank_transfer' | 'card' | 'mobile_money' | 'cash' | null

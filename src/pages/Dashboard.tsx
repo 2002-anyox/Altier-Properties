@@ -119,33 +119,32 @@ export default function Dashboard() {
                   {money(kpis.recurringRevenue, true)}
                 </p>
                 <p className="mt-2.5 text-[13px] text-[rgb(var(--c-text-onrail-muted))] dark:text-ink-muted">
-                  Recurring revenue ·{' '}
+                  Recurring revenue earned ·{' '}
                   <span className={cx('font-medium', kpis.recurringDelta >= 0 ? 'text-[#7BD88F]' : 'text-[#F0A9A9]')}>
                     {kpis.recurringDelta >= 0 ? '+' : ''}{kpis.recurringDelta.toFixed(1)}%
                   </span>{' '}
-                  vs the same days last month
+                  vs last month
                 </p>
 
                 {/* Lump money is shown beside the headline, never inside it: a
                     single six-month advance would otherwise read as growth. */}
                 <div className="mt-6 space-y-3.5 border-t border-white/10 pt-5 dark:border-line">
                   <Row
-                    label="Advances collected"
+                    label="Cash collected"
+                    value={money(kpis.monthlyRevenue, true)}
+                    note={`${kpis.monthlyRevenueDelta >= 0 ? '+' : ''}${kpis.monthlyRevenueDelta.toFixed(1)}% vs last month — rent, bookings and fees`}
+                  />
+                  <Row
+                    label="— of which advance"
                     value={money(kpis.advanceCollected, true)}
-                    note="rent for months still to come"
+                    note="buys months still to come"
                   />
                   <Row
                     label="Deposits held"
                     value={money(kpis.depositsCollected, true)}
-                    note="refundable — not revenue"
+                    note="refundable — never revenue"
                   />
-                  <div className="border-t border-white/10 pt-3.5 dark:border-line">
-                    <Row
-                      label="Total cash collected"
-                      value={money(kpis.monthlyRevenue, true)}
-                      note={`${kpis.monthlyRevenueDelta >= 0 ? '+' : ''}${kpis.monthlyRevenueDelta.toFixed(1)}% vs last month, advances included`}
-                    />
-                  </div>
+                  <div className="border-t border-white/10 pt-3.5 dark:border-line" />
                   <Row label="Collection rate" value={`${kpis.collectionRate.toFixed(1)}%`} meter={kpis.collectionRate} />
                   <Row label="Overdue balance" value={money(kpis.overdueAmount, true)} tone="critical" />
                 </div>
@@ -213,20 +212,20 @@ export default function Dashboard() {
         {showMoney && (
           <ChartFrame
             className="xl:col-span-2"
-            title="Recurring revenue vs advances"
-            subtitle="Rolling twelve months — advances lift one month, not the run rate"
+            title="Revenue earned vs advance received"
+            subtitle="Revenue earned each month against the advance cash received that month"
             legend={[
-              { label: 'Recurring', color: VIZ[0] },
-              { label: 'Advances', color: VIZ[1] },
+              { label: 'Earned', color: VIZ[0] },
+              { label: 'Advance received', color: VIZ[1] },
             ]}
             table={
               <table className="w-full text-left text-[12.5px]">
                 <thead className="text-ink-muted">
                   <tr className="border-b border-line">
                     <th scope="col" className="py-2 pr-4 font-medium">Month</th>
-                    <th scope="col" className="py-2 pr-4 text-right font-medium">Recurring</th>
-                    <th scope="col" className="py-2 pr-4 text-right font-medium">Advances</th>
-                    <th scope="col" className="py-2 text-right font-medium">Total</th>
+                    <th scope="col" className="py-2 pr-4 text-right font-medium">Earned</th>
+                    <th scope="col" className="py-2 pr-4 text-right font-medium">Advance in</th>
+                    <th scope="col" className="py-2 text-right font-medium">Cash in</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[rgb(var(--c-border))]">
@@ -246,8 +245,8 @@ export default function Dashboard() {
               data={revenue}
               xKey="label"
               series={[
-                { key: 'recurring', label: 'Recurring', color: VIZ[0] },
-                { key: 'advance', label: 'Advances', color: VIZ[1], dashed: true },
+                { key: 'recurring', label: 'Earned', color: VIZ[0] },
+                { key: 'advance', label: 'Advance received', color: VIZ[1], dashed: true },
               ]}
               format={(n) => money(n, true)}
               height={244}

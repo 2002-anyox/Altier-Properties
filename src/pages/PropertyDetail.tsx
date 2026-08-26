@@ -175,8 +175,8 @@ export default function PropertyDetail() {
                         <span className="text-ink-secondary">{mediumDate(current.start)} · open-ended</span>
                       </div>
                       <div className="flex justify-between text-[12.5px]">
-                        <span className="text-ink-muted">Advance taken</span>
-                        <span className="text-ink-secondary">{current.advanceMonths} months</span>
+                        <span className="text-ink-muted">Payment cycle</span>
+                        <span className="text-ink-secondary">{current.advanceMonths} months in advance</span>
                       </div>
                       <div className="flex justify-between text-[12.5px]">
                         <span className="text-ink-muted">Notice required</span>

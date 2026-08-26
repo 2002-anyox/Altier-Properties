@@ -77,10 +77,17 @@ what the open-ended rental model encourages. Three classes:
 | **Advance** | rent collected now for months still to come | cash now, revenue later |
 | **Deposit** | refundable, held on the tenant's behalf | never — it is a liability |
 
-The dashboard therefore leads with **recurring revenue** and its like-for-like change against the same
-days of last month, and shows advances, deposits and total cash beneath it. A month can show total
-cash flat while recurring has fallen — that gap is the number worth acting on, and no product in the
-survey surfaces it.
+An open-ended rental does not pay once at move-in and then monthly — it pays a **cycle at a time**,
+three, six or twelve months, and the cycle repeats for as long as the tenancy runs. Each payment buys
+`coversMonths` of occupation from its own due date, so revenue is recognised across that span rather
+than banked in the month the money landed: a quarterly advance is earned a third at a time.
+
+The dashboard therefore leads with **revenue earned** on that accrual basis — indifferent to when the
+tenant chose to pay, which is what makes it answerable to "did the book grow" — and shows cash
+collected, the advance portion of it, and deposits beneath. Earned and collected routinely diverge:
+a month can earn well above its cash because earlier advances are being recognised, or collect a
+large advance that barely moves the run rate. That gap is the number worth acting on, and no product
+in the survey surfaces it.
 
 **Presentation** is separate from data. Amounts are stored in Ugandan shillings and converted at
 display time; region controls date and number formatting; language controls the interface chrome.

@@ -48,10 +48,10 @@ thread across email, calls, SMS, portal messages and internal notes.
 **Bookings and tenancies** — three agreement types in one pipeline:
 
 - *Fixed-term lease* — a start, an end and a renewal decision.
-- *Open-ended rental* — rolling monthly until the tenant gives notice, with several months of rent
-  taken up front so a tenancy cannot collapse after one or two months and strand the owner. The
-  record carries the advance taken, the notice required, and the date rent is paid through; alerts
-  fire as that date approaches and again once it lapses.
+- *Open-ended rental* — runs until the tenant gives notice, and pays a cycle at a time: three, six or
+  twelve months up front, repeating for as long as the tenancy lasts, so it cannot collapse after one
+  or two months and strand the owner. The record carries the cycle length, the notice required and the
+  date rent is paid through; alerts fire as that date approaches and again once it lapses.
 - *Short stay* — nightly, Airbnb-style.
 
 **Region, currency and language** — figures are held in shillings and presented in whatever currency
@@ -72,10 +72,11 @@ levels, read state and configurable reminder timing.
 **Reports** — occupancy and vacancy rates, revenue performance, collection rate, overdue exposure and
 ageing, revenue by district, letting-model comparison, per-property performance and client activity.
 
-**Revenue that tells the truth** — cash collected is split into recurring revenue (rent, bookings and
-fees earned in the period), advances (rent taken up front for months still to come) and deposits
-(refundable, never counted as revenue). The dashboard leads with recurring and its like-for-like
-change, so a single six-month advance cannot masquerade as growth.
+**Revenue that tells the truth** — open-ended rentals pay a cycle at a time, and each payment is
+recognised across the months it buys rather than banked when it arrives. The dashboard leads with
+revenue *earned* on that accrual basis and shows cash collected, its advance portion and deposits
+separately, so a six-month advance cannot masquerade as growth and a quiet collection month cannot
+masquerade as decline.
 
 **Role-based access** for Owner, Property Manager, Staff and Accountant, enforced in the navigation,
 at the route and on individual actions and figures. Switch role from the avatar menu to see it.

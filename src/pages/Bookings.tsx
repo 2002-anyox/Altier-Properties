@@ -242,7 +242,7 @@ export default function Bookings() {
                 <>
                   <Detail label="Advance taken" value={`${selected.advanceMonths} months · ${money(selected.rate * selected.advanceMonths)}`} />
                   <Detail label="Notice required" value={`${selected.noticeDays} days`} />
-                  <Detail label="Rent paid through" value={selected.paidThrough ? mediumDate(selected.paidThrough) : '—'} />
+                  <Detail label="Rent paid through" value={selected.paidThrough ? mediumDate(selected.paidThrough) : 'Advance not yet cleared'} />
                 </>
               ) : (
                 <Detail label="Guests" value={String(selected.guests)} />
@@ -277,8 +277,10 @@ export default function Bookings() {
                 <p className="text-[12.5px] font-medium text-gold-ink">
                   {isOpenEnded(selected)
                     ? selected.paidThrough && daysBetween(iso(TODAY), selected.paidThrough) < 0
-                      ? `Rent lapsed ${Math.abs(daysBetween(iso(TODAY), selected.paidThrough))} days ago. The ${selected.advanceMonths}-month advance is spent — collect before the arrears grow.`
-                      : `Rent is covered to ${selected.paidThrough ? mediumDate(selected.paidThrough) : '—'}. ${selected.noticeDays} days notice required to end the tenancy.`
+                      ? `Rent lapsed ${Math.abs(daysBetween(iso(TODAY), selected.paidThrough))} days ago. The ${selected.advanceMonths}-month cycle is spent — collect the next one before the arrears grow.`
+                      : selected.paidThrough
+                        ? `Rent is covered to ${mediumDate(selected.paidThrough)}, then the next ${selected.advanceMonths}-month cycle falls due. ${selected.noticeDays} days notice to end the tenancy.`
+                        : `The first ${selected.advanceMonths}-month advance is still to clear. Keys release once it does.`
                     : selected.end && daysBetween(iso(TODAY), selected.end) >= 0
                       ? `${selected.mode === 'short_stay' ? 'Check-out' : 'Lease end'} ${relativeDay(selected.end)} — turnover and cleaning can be scheduled from the maintenance board.`
                       : 'This agreement has run past its end date. Confirm the renewal or close it off.'}

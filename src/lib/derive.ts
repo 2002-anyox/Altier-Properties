@@ -24,6 +24,45 @@ export const chargeClass = (type: ChargeType): ChargeClass =>
 const sumBy = (invoices: Invoice[], cls: ChargeClass) =>
   invoices.filter((i) => chargeClass(i.type) === cls).reduce((a, i) => a + i.paidAmount, 0)
 
+const monthKeyOf = (isoDate: string) => isoDate.slice(0, 7)
+
+const shiftMonthKey = (key: string, months: number) => {
+  const [y, m] = key.split('-').map(Number)
+  const d = new Date(y, m - 1 + months, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+/**
+ * Revenue earned in a given month, on an accrual basis: a quarterly advance
+ * is recognised a third at a time across the three months it buys, not all
+ * at once in the month the money arrived. Deposits are never recognised —
+ * they are the tenant's money.
+ *
+ * This is the number that answers "did the book actually grow", because it
+ * is indifferent to when the tenant chose to pay.
+ */
+export function earnedInMonth(invoices: Invoice[], key: string) {
+  let total = 0
+  for (const inv of invoices) {
+    if (chargeClass(inv.type) === 'deposit') continue
+    const span = Math.max(1, inv.coversMonths)
+    const from = monthKeyOf(inv.dueOn)
+    for (let k = 0; k < span; k++) {
+      if (shiftMonthKey(from, k) === key) {
+        total += inv.amount / span
+        break
+      }
+    }
+  }
+  return total
+}
+
+/** The part of a payment that buys months still to come. */
+export const deferredPortion = (inv: Invoice) => {
+  const span = Math.max(1, inv.coversMonths)
+  return span <= 1 ? 0 : (inv.paidAmount * (span - 1)) / span
+}
+
 /** An open-ended rental has no end date; for range maths treat it as running
  *  indefinitely, and render it as "open-ended" rather than as a date. */
 export const OPEN_ENDED_SENTINEL = '2999-12-31'
@@ -39,14 +78,13 @@ export interface Kpis {
   inactiveUnits: number
   occupancyRate: number
   vacancyRate: number
-  /** Recurring plus advances. Deposits are excluded — they are not revenue. */
+  /** Cash in this month for rent, bookings and fees. Deposits excluded. */
   monthlyRevenue: number
   monthlyRevenueDelta: number
-  /** Earned this month: rent, bookings and fees, without lump advances. */
+  /** Earned this month on an accrual basis — advances spread over their term. */
   recurringRevenue: number
-  /** Like-for-like against the same span of last month. */
   recurringDelta: number
-  /** Rent taken this month for months still to come. */
+  /** Of this month's cash, the part buying months still to come. */
   advanceCollected: number
   advanceDelta: number
   /** Refundable money taken in this month and held on the tenant's behalf. */
@@ -84,22 +122,29 @@ export function computeKpis(
   const inactive = byStatus('inactive')
   const lettable = properties.length - inactive
 
-  /* Compare like with like: this month to date against the same span of
-     last month, so a mid-month figure never reads as a collapse. */
+  const delta = (now: number, before: number) => (before ? ((now - before) / before) * 100 : 0)
+
+  /* Earned is a whole-month figure on both sides, so it compares directly.
+     Cash is compared like-for-like against the same days of last month. */
+  const thisKey = iso(TODAY).slice(0, 7)
+  const lastKey = iso(new Date(TODAY.getFullYear(), TODAY.getMonth() - 1, 1)).slice(0, 7)
+  const recurringRevenue = earnedInMonth(invoices, thisKey)
+  const lastRecurring = earnedInMonth(invoices, lastKey)
+
   const dayOfMonth = TODAY.getDate()
   const paidThisMonth = invoices.filter((i) => i.paidOn && inMonth(i.paidOn))
   const paidLastMonth = invoices.filter(
     (i) => i.paidOn && inMonth(i.paidOn, -1) && Number(i.paidOn.slice(8, 10)) <= dayOfMonth,
   )
-  const recurringRevenue = sumBy(paidThisMonth, 'recurring')
-  const advanceCollected = sumBy(paidThisMonth, 'advance')
-  const depositsCollected = sumBy(paidThisMonth, 'deposit')
-  const lastRecurring = sumBy(paidLastMonth, 'recurring')
-  const lastAdvance = sumBy(paidLastMonth, 'advance')
+  const cashOf = (rows: Invoice[]) =>
+    rows.filter((i) => chargeClass(i.type) !== 'deposit').reduce((a, i) => a + i.paidAmount, 0)
+  const deferredOf = (rows: Invoice[]) => rows.reduce((a, i) => a + deferredPortion(i), 0)
 
-  const monthlyRevenue = recurringRevenue + advanceCollected
-  const lastRevenue = lastRecurring + lastAdvance
-  const delta = (now: number, before: number) => (before ? ((now - before) / before) * 100 : 0)
+  const depositsCollected = sumBy(paidThisMonth, 'deposit')
+  const advanceCollected = deferredOf(paidThisMonth)
+  const monthlyRevenue = cashOf(paidThisMonth)
+  const lastRevenue = cashOf(paidLastMonth)
+  const lastAdvance = deferredOf(paidLastMonth)
 
   const today = iso(TODAY)
   const upcoming = invoices.filter(
@@ -155,15 +200,15 @@ export function revenueSeries(invoices: Invoice[], months = 12) {
     const ref = new Date(TODAY.getFullYear(), TODAY.getMonth() - m, 1)
     const key = iso(ref).slice(0, 7)
     const paid = invoices.filter((i) => i.paidOn?.slice(0, 7) === key)
-    const recurring = sumBy(paid, 'recurring')
-    const advance = sumBy(paid, 'advance')
+    const recurring = earnedInMonth(invoices, key)
+    const advance = paid.reduce((a, i) => a + deferredPortion(i), 0)
     const billed = invoices
       .filter((i) => i.dueOn.slice(0, 7) === key && chargeClass(i.type) !== 'deposit')
       .reduce((a, i) => a + i.amount, 0)
     out.push({
       key,
       label: ref.toLocaleDateString(presentation.locale, { month: 'short' }),
-      collected: recurring + advance,
+      collected: paid.filter((i) => chargeClass(i.type) !== 'deposit').reduce((a, i) => a + i.paidAmount, 0),
       billed,
       recurring,
       advance,
@@ -214,8 +259,8 @@ export function propertyPerformance(
     /* Deposits are held, not earned, so they stay out of revenue entirely. */
     const earning = inv.filter((i) => chargeClass(i.type) !== 'deposit')
     const revenue = earning.reduce((a, i) => a + i.paidAmount, 0)
-    const recurring = sumBy(earning, 'recurring')
-    const advances = sumBy(earning, 'advance')
+    const recurring = earning.reduce((a, i) => a + (i.paidAmount - deferredPortion(i)), 0)
+    const advances = earning.reduce((a, i) => a + deferredPortion(i), 0)
     const billed = earning.reduce((a, i) => a + i.amount, 0)
     const outstanding = earning.reduce((a, i) => a + (i.amount - i.paidAmount), 0)
     const costs = maintenance.filter((m) => m.propertyId === p.id).reduce((a, m) => a + (m.actualCost ?? m.estimatedCost * 0.5), 0)

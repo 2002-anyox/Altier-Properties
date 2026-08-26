@@ -379,13 +379,17 @@ export const BOOKINGS: Booking[] = (() => {
     if (p.mode === 'rental') {
       if (p.status === 'occupied' || p.status === 'maintenance') {
         const c = attach(pi)
-        const advanceMonths = pick([3, 3, 3, 4, 6, 12])
-        /* A quarter of tenancies are recent, so advances appear in the window. */
-        const elapsed = chance(0.35) ? intBetween(6, 26) : intBetween(60, 640)
+        const advanceMonths = pick([3, 3, 3, 6, 6, 12])
+        /* Most rentals are well established, so several payment cycles fall
+           inside the last twelve months; a minority are newly signed. */
+        const elapsed = chance(0.25) ? intBetween(10, 40) : intBetween(200, 900)
         const start = dayOffset(-elapsed)
-        /* Rent is covered to a date the advance and every monthly payment
-           since have pushed forward; a date in the past means arrears. */
-        const paidThrough = chance(0.25) ? dayOffset(intBetween(-24, -1)) : dayOffset(intBetween(3, 52))
+        /* Rent is covered to the end of the last cycle the tenant paid for.
+           Most are a cycle ahead; a minority have let one lapse. */
+        let cycles = 0
+        while (addMonths(start, (cycles + 1) * advanceMonths) <= iso(TODAY) && cycles < 60) cycles++
+        const paidCycles = chance(0.25) ? cycles : cycles + 1
+        const paidThrough = addMonths(start, paidCycles * advanceMonths)
         out.push({
           id: `b-${++n}`, reference: `RNT-${4800 + n}`, propertyId: p.id, clientId: c.id,
           mode: 'rental', status: 'in_progress', start, end: null,
@@ -393,7 +397,7 @@ export const BOOKINGS: Booking[] = (() => {
           noticeDays: pick([30, 30, 60]),
           guests: Math.max(1, p.bedrooms), source: pick(['direct', 'direct', 'agency']),
           checkIn: '12:00', checkOut: '12:00',
-          notes: `${advanceMonths} months taken in advance at move-in. Rolling monthly thereafter.`,
+          notes: `Pays ${advanceMonths} months at a time; the cycle repeats for as long as the tenancy runs.`,
           createdAt: dayOffset(-(elapsed + intBetween(7, 30))),
         })
       }
@@ -405,9 +409,10 @@ export const BOOKINGS: Booking[] = (() => {
           id: `b-${++n}`, reference: `RNT-${4800 + n}`, propertyId: p.id, clientId: c.id,
           mode: 'rental', status: 'upcoming', start, end: null,
           rate: p.price, deposit: p.price, advanceMonths,
-          paidThrough: addMonths(start, advanceMonths), noticeDays: 30,
+          /* Nothing is covered until the first cycle actually clears. */
+          paidThrough: null, noticeDays: 30,
           guests: Math.max(1, p.bedrooms), source: 'direct', checkIn: '12:00', checkOut: '12:00',
-          notes: `${advanceMonths} months advance cleared. Keys on move-in day.`,
+          notes: `First ${advanceMonths}-month advance invoiced; keys released once it clears.`,
           createdAt: dayOffset(-intBetween(4, 20)),
         })
       }
@@ -473,9 +478,9 @@ export const INVOICES: Invoice[] = (() => {
   const out: Invoice[] = []
   let n = 4200
 
-  const push = (v: Omit<Invoice, 'id' | 'number'>) => {
+  const push = (v: Omit<Invoice, 'id' | 'number' | 'coversMonths'> & { coversMonths?: number }) => {
     n++
-    out.push({ ...v, id: `i-${n}`, number: `ALT-INV-${n}` })
+    out.push({ coversMonths: 1, ...v, id: `i-${n}`, number: `ALT-INV-${n}` })
   }
 
   const addMonths = (from: string, months: number) => {
@@ -483,23 +488,18 @@ export const INVOICES: Invoice[] = (() => {
     d.setMonth(d.getMonth() + months)
     return iso(d)
   }
+  const today = iso(TODAY)
 
   BOOKINGS.forEach((b) => {
     const p = PROPERTIES.find((x) => x.id === b.propertyId)!
     if (b.status === 'cancelled') return
 
-    /* Open-ended rental: the advance up front, then rolling monthly rent
-       whose status is decided by how far the tenant has paid through. */
+    /* Open-ended rental: rent is paid a cycle at a time — three, six or
+       twelve months — and the cycle repeats for as long as the tenancy
+       runs. Each payment buys `advanceMonths` of occupation starting at its
+       own due date, so one month of it is earned immediately and the rest
+       is deferred. */
     if (b.mode === 'rental') {
-      push({
-        propertyId: p.id, clientId: b.clientId, bookingId: b.id, type: 'advance',
-        issuedOn: iso(addDays(b.start, -12)), dueOn: iso(addDays(b.start, -3)),
-        amount: p.price * b.advanceMonths,
-        paidAmount: b.status === 'upcoming' ? p.price * b.advanceMonths : p.price * b.advanceMonths,
-        status: 'paid', method: pick(['bank_transfer', 'mobile_money', 'mobile_money', 'cash']),
-        paidOn: iso(addDays(b.start, -4)),
-        memo: `${b.advanceMonths} months rent in advance at move-in`,
-      })
       push({
         propertyId: p.id, clientId: b.clientId, bookingId: b.id, type: 'deposit',
         issuedOn: iso(addDays(b.start, -12)), dueOn: iso(addDays(b.start, -3)),
@@ -508,24 +508,28 @@ export const INVOICES: Invoice[] = (() => {
         memo: 'Refundable security deposit — held in client account',
       })
 
-      const rollingFrom = addMonths(b.start, b.advanceMonths)
-      const covered = b.paidThrough ?? rollingFrom
-      for (let m = -11; m <= 3; m++) {
-        const due = iso(new Date(TODAY.getFullYear(), TODAY.getMonth() + m, 1))
-        if (due < rollingFrom) continue
-        const today = iso(TODAY)
-        const status: Invoice['status'] =
-          due <= covered ? 'paid'
-            : due <= today ? 'overdue'
-              : daysBetween(today, due) <= 7 ? 'pending' : 'upcoming'
+      const cycle = Math.max(1, b.advanceMonths)
+      const covered = b.paidThrough ?? b.start
+      const horizon = dayOffset(75)
+      let cursor = b.start
+      let guard = 0
+      while (cursor <= horizon && guard++ < 60) {
+        const isPaid = cursor < covered
+        const gap = daysBetween(today, cursor)
+        const status: Invoice['status'] = isPaid
+          ? 'paid'
+          : gap < 0 ? 'overdue' : gap <= 7 ? 'pending' : 'upcoming'
+        const until = addMonths(cursor, cycle)
         push({
-          propertyId: p.id, clientId: b.clientId, bookingId: b.id, type: 'rent',
-          issuedOn: iso(addDays(due, -10)), dueOn: due, amount: p.price,
-          paidAmount: status === 'paid' ? p.price : 0, status,
-          method: status === 'paid' ? pick(['mobile_money', 'mobile_money', 'bank_transfer', 'cash']) : null,
-          paidOn: status === 'paid' ? iso(addDays(due, intBetween(0, 5))) : null,
-          memo: `Monthly rent — ${new Date(due + 'T00:00:00').toLocaleString('en-GB', { month: 'long', year: 'numeric' })}`,
+          propertyId: p.id, clientId: b.clientId, bookingId: b.id, type: 'advance',
+          issuedOn: iso(addDays(cursor, -12)), dueOn: cursor,
+          amount: p.price * cycle, coversMonths: cycle,
+          paidAmount: isPaid ? p.price * cycle : 0, status,
+          method: isPaid ? pick(['mobile_money', 'mobile_money', 'bank_transfer', 'cash']) : null,
+          paidOn: isPaid ? iso(addDays(cursor, intBetween(0, 4))) : null,
+          memo: `${cycle} months rent in advance · ${new Date(cursor + 'T00:00:00').toLocaleString('en-GB', { month: 'short', year: 'numeric' })} – ${new Date(addMonths(cursor, cycle - 1) + 'T00:00:00').toLocaleString('en-GB', { month: 'short', year: 'numeric' })}`,
         })
+        cursor = until
       }
       return
     }
@@ -629,8 +633,6 @@ export const INVOICES: Invoice[] = (() => {
       })
     }
   })
-
-  const today = iso(TODAY)
 
   /* Nothing can be settled on a date that has not happened yet. An advance
      or deposit attached to an agreement that starts next month is money
