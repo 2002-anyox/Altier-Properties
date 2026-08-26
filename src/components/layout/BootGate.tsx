@@ -1,12 +1,18 @@
 import { motion } from 'framer-motion'
 import { Wordmark } from './Wordmark'
 import { useStore } from '../../lib/store'
+import SignIn from '../../pages/SignIn'
 
 /* Held until the portfolio has arrived, so nobody reads a figure that is
    about to be replaced. With no API behind it the probe fails immediately
    and this is a single frame; against a database it is a short, calm wait. */
 export function BootGate({ children }: { children: React.ReactNode }) {
   const { state } = useStore()
+
+  /* A live API with nobody signed in is the door, not the dashboard. In
+     demo mode there is no server to sign in to, so this never applies. */
+  if (state.hydrated && state.source === 'database' && !state.member) return <SignIn />
+
   if (state.hydrated) return <>{children}</>
 
   return (

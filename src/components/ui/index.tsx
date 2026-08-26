@@ -155,13 +155,20 @@ export const MaintenanceChip = ({ status }: { status: MaintenanceStatus }) => (
 
 /* ------------------------------ Inputs ----------------------------- */
 export function Field({
-  label, hint, children, className, id,
-}: { label: string; hint?: string; children: React.ReactNode; className?: string; id?: string }) {
+  label, hint, error, children, className, id,
+}: {
+  label: string; hint?: string; error?: string
+  children: React.ReactNode; className?: string; id?: string
+}) {
   return (
     <div className={cx('flex flex-col gap-1.5', className)}>
       <label htmlFor={id} className="text-[12.5px] font-medium text-ink-secondary">{label}</label>
       {children}
-      {hint && <p className="text-[11.5px] text-ink-muted">{hint}</p>}
+      {/* An error replaces the hint: two lines of small text under one
+          field is where people stop reading either. */}
+      {error
+        ? <p className="text-[11.5px] text-[rgb(var(--c-status-critical))]">{error}</p>
+        : hint && <p className="text-[11.5px] text-ink-muted">{hint}</p>}
     </div>
   )
 }

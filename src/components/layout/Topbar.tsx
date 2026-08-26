@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  Bell, Check, ChevronDown, Menu, Moon, Search, Sun, UserCog,
+  Bell, Check, ChevronDown, KeyRound, LogOut, Menu, Moon, Search, Sun, UserCog,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useStore } from '../../lib/store'
@@ -21,7 +21,7 @@ const PRIORITY_DOT: Record<NotificationPriority, string> = {
 }
 
 export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
-  const { state, dispatch, theme, toggleTheme, setPaletteOpen, toast } = useStore()
+  const { state, dispatch, theme, toggleTheme, setPaletteOpen, toast, signOut } = useStore()
   const [bellOpen, setBellOpen] = useState(false)
   const [roleOpen, setRoleOpen] = useState(false)
   const navigate = useNavigate()
@@ -137,7 +137,8 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
             </AnimatePresence>
           </div>
 
-          {/* Role switcher — role-based access is a first-class demo control */}
+          {/* Signed in: who you are, and the way out. Signed out (demo only):
+              the role switcher, which demonstrates the access model. */}
           <div className="relative">
             <button
               onClick={() => { setRoleOpen((v) => !v); setBellOpen(false) }}
@@ -145,9 +146,9 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
               aria-haspopup="menu"
               aria-expanded={roleOpen}
             >
-              <Avatar name={me.name} size={28} tone="navy" />
+              <Avatar name={state.member?.name ?? me.name} size={28} tone="navy" />
               <span className="hidden text-left leading-tight sm:block">
-                <span className="block text-[12.5px] font-medium text-ink">{me.name.split(' ')[0]}</span>
+                <span className="block text-[12.5px] font-medium text-ink">{(state.member?.name ?? me.name).split(' ')[0]}</span>
                 <span className="block text-[10.5px] text-ink-muted">{roleLabel(state.role)}</span>
               </span>
               <ChevronDown size={14} className={clsx('text-ink-muted transition-transform duration-200', roleOpen && 'rotate-180')} />
@@ -162,10 +163,40 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
                     role="menu"
                   >
                     <div className="border-b border-line px-4 py-3">
-                      <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
-                        <UserCog size={12} /> {t('action.viewAs')}
-                      </p>
+                      {state.member ? (
+                        <>
+                          <p className="truncate text-[13px] font-medium text-ink">{state.member.name}</p>
+                          <p className="truncate text-[11.5px] text-ink-muted">{state.member.email}</p>
+                          <p className="mt-1.5 text-[11px] uppercase tracking-[0.12em] text-ink-muted">
+                            {roleLabel(state.role)}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
+                          <UserCog size={12} /> {t('action.viewAs')}
+                        </p>
+                      )}
                     </div>
+
+                    {state.member ? (
+                      <div className="p-1.5">
+                        <Link
+                          to="/settings"
+                          role="menuitem"
+                          onClick={() => setRoleOpen(false)}
+                          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] text-ink-secondary transition-colors hover:bg-surface-inset hover:text-ink"
+                        >
+                          <KeyRound size={15} /> Change password
+                        </Link>
+                        <button
+                          role="menuitem"
+                          onClick={() => { setRoleOpen(false); void signOut() }}
+                          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] text-ink-secondary transition-colors hover:bg-surface-inset hover:text-ink"
+                        >
+                          <LogOut size={15} /> Sign out
+                        </button>
+                      </div>
+                    ) : (
                     <ul className="p-1.5">
                       {ROLES.map((r) => (
                         <li key={r.id}>
@@ -191,6 +222,7 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
                         </li>
                       ))}
                     </ul>
+                    )}
                   </motion.div>
                 </>
               )}

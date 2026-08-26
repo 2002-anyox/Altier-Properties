@@ -145,6 +145,47 @@ guessing. Every mutation endpoint answers with the refreshed portfolio for that 
 | `POST /api/bookings` | open an agreement, with its opening charges |
 | `PUT /api/settings/reminders` | change reminder timing |
 
+Plus the ones outside the gate: `GET /api/auth/me`, `POST /api/auth/login`,
+`POST /api/auth/logout`, and `GET /api/auth/claimable` + `POST /api/auth/setup`
+while the first-run window is open.
+
+## Signing in
+
+Altier has accounts. A deployment with a database behind it refuses every
+request without a session, and refuses again if the account's role does not
+hold the permission — the same matrix the interface draws from, applied where
+it protects something rather than only where it is visible.
+
+**First run.** A freshly created database has the team but no passwords, so
+nobody can sign in. The sign-in page notices and offers to claim one of those
+accounts by giving it a password. That window shuts permanently the moment any
+account has one. **Do it immediately after deploying**, before the address is
+shared — until you do, whoever reaches the page first can claim an account. Set
+`SETUP_TOKEN` in the environment if you would rather the claim require a secret
+as well.
+
+Afterwards, an owner adds people from Settings → Team and sets their initial
+password there. Tell them out of band, and ask them to change it from Settings →
+Profile; changing a password signs out every other device.
+
+| | |
+|---|---|
+| Passwords | scrypt (`node:crypto`), OWASP N=2^15 r=8 p=3, per-password salt |
+| Sessions | opaque 32-byte token in an httpOnly, SameSite=Lax cookie; 14 days |
+| Storage | only the SHA-256 of the token is stored, so the table is not a key ring |
+| Revocation | removing a team member cascades to their sessions immediately |
+| Throttling | 8 failed attempts locks an account for 15 minutes, recorded on the row so it survives across serverless instances |
+| Enumeration | an unknown email and a wrong password give the same message, and take the same time |
+
+Roles are enforced on the server, not merely in the interface. A staff account
+receives no charges at all from `GET /api/portfolio` — they are withheld rather
+than hidden — and a request it may not make is answered 403. The smoke test
+asserts both, and was verified to fail when the gate is removed.
+
+Without a database there is nobody to be signed in as, so the bundled demo
+skips all of this and keeps the role switcher as a way to see what each role
+reaches.
+
 ## Deploying
 
 The published build works with no server at all — it falls back to the bundled

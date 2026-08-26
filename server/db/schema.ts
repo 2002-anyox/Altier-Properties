@@ -72,7 +72,39 @@ export const teamMembers = pgTable('team_members', {
   email: text('email').notNull().unique(),
   phone: text('phone').notNull(),
   since: date('since', { mode: 'string' }).notNull(),
-})
+
+  /* Credentials. Null until an account is given a password — a person can
+     exist on the team without being able to sign in, which is what every
+     seeded member is until someone sets one. */
+  passwordHash: text('password_hash'),
+  passwordSetAt: timestamp('password_set_at', { withTimezone: true }),
+  /* Throttling lives on the row rather than in memory, because a serverless
+     instance forgets between requests and an attacker would not. */
+  failedAttempts: integer('failed_attempts').notNull().default(0),
+  lockedUntil: timestamp('locked_until', { withTimezone: true }),
+}, (t) => [
+  index('team_members_email_idx').on(t.email),
+])
+
+/**
+ * Sessions.
+ *
+ * The row holds the SHA-256 of the token, never the token itself, so a
+ * copy of this table cannot be used to sign in as anybody. Deleting a
+ * team member cascades here, which is what makes removing someone an
+ * immediate revocation rather than a note for later.
+ */
+export const sessions = pgTable('sessions', {
+  tokenHash: text('token_hash').primaryKey(),
+  memberId: text('member_id').notNull().references(() => teamMembers.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  userAgent: text('user_agent'),
+}, (t) => [
+  index('sessions_member_idx').on(t.memberId),
+  index('sessions_expiry_idx').on(t.expiresAt),
+])
 
 /* ---------------------------- properties --------------------------- */
 export const properties = pgTable('properties', {

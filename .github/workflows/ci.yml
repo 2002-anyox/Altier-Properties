@@ -89,7 +89,7 @@ jobs:
       # so a broken route or a mis-mapped status code fails here rather than
       # in the browser.
       - name: API smoke test
-        run: npm run db:seed && npm run smoke:api
+        run: npm run smoke:api
         env:
           DATABASE_URL: postgres://altier:altier@localhost:5432/altier
 

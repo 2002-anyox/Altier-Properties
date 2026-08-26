@@ -291,6 +291,27 @@ CREATE INDEX "property_documents_property_idx" ON "property_documents" USING btr
 CREATE UNIQUE INDEX "property_notes_order_idx" ON "property_maintenance_notes" USING btree ("property_id","position");
 
 -- ---------------------------------------------------------------
+-- migration: 0001_auth
+-- ---------------------------------------------------------------
+CREATE TABLE "sessions" (
+	"token_hash" text PRIMARY KEY NOT NULL,
+	"member_id" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"last_seen_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL,
+	"user_agent" text
+);
+
+ALTER TABLE "team_members" ADD COLUMN "password_hash" text;
+ALTER TABLE "team_members" ADD COLUMN "password_set_at" timestamp with time zone;
+ALTER TABLE "team_members" ADD COLUMN "failed_attempts" integer DEFAULT 0 NOT NULL;
+ALTER TABLE "team_members" ADD COLUMN "locked_until" timestamp with time zone;
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_member_id_team_members_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."team_members"("id") ON DELETE cascade ON UPDATE no action;
+CREATE INDEX "sessions_member_idx" ON "sessions" USING btree ("member_id");
+CREATE INDEX "sessions_expiry_idx" ON "sessions" USING btree ("expires_at");
+CREATE INDEX "team_members_email_idx" ON "team_members" USING btree ("email");
+
+-- ---------------------------------------------------------------
 -- Record the migrations as applied, so `npm run db:migrate`
 -- against this database does nothing rather than failing.
 -- ---------------------------------------------------------------
@@ -301,6 +322,7 @@ CREATE TABLE IF NOT EXISTS "drizzle"."__drizzle_migrations" (
   created_at bigint
 );
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('0d6cd2f3cc444ee70ee412a9698e0300b24221be711b35db0195d24bc3dda3ee', 1787742595460);
+INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('fd0a043c8b2d7cb874e435d8b42745232e9a3c7ccc7cdbaa38503b2dfb5fb38f', 1787776478682);
 
 -- ---------------------------------------------------------------
 -- The team. A property is assigned to a manager, so at least one

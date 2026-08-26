@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { UserPlus } from 'lucide-react'
 import { Button, Field, Input, Modal, Select } from '../ui'
 import { useStore } from '../../lib/store'
+import { api } from '../../lib/api'
 import {
   editMember, emptyMemberDraft, memberDraftFrom, newMember, type MemberDraft,
 } from '../../lib/create'
@@ -11,13 +12,19 @@ import type { Role, TeamMember } from '../../lib/types'
 export function MemberFormModal({
   open, onClose, member,
 }: { open: boolean; onClose: () => void; member?: TeamMember }) {
-  const { dispatch, toast } = useStore()
+  const { state, dispatch, toast } = useStore()
   const editing = !!member
+  const live = state.source === 'database'
+  const [password, setPassword] = useState('')
+  const [passwordError, setPasswordError] = useState<string | null>(null)
   const [draft, setDraft] = useState<MemberDraft>(() =>
     member ? memberDraftFrom(member) : emptyMemberDraft())
 
   useEffect(() => {
-    if (open) setDraft(member ? memberDraftFrom(member) : emptyMemberDraft())
+    if (!open) return
+    setDraft(member ? memberDraftFrom(member) : emptyMemberDraft())
+    setPassword('')
+    setPasswordError(null)
   }, [open, member])
 
   const set = <K extends keyof MemberDraft>(key: K, value: MemberDraft[K]) =>
@@ -25,19 +32,34 @@ export function MemberFormModal({
 
   const nameGiven = draft.name.trim().length > 0
 
-  const submit = () => {
+  const submit = async () => {
     if (!nameGiven) return
+    if (password && password.length < 10) {
+      setPasswordError('A password needs at least 10 characters.')
+      return
+    }
     if (member) {
       dispatch({ type: 'update-member', member: editMember(member, draft) })
       toast({ title: 'Team member updated', body: `${draft.name.trim()} saved.`, tone: 'success' })
     } else {
       const created = newMember(draft)
-      dispatch({ type: 'add-member', member: created })
+      dispatch({ type: 'add-member', member: created, password: password || undefined })
       toast({
         title: 'Team member added',
         body: `${created.name} joins as ${roleLabel(created.role).toLowerCase()}.`,
         tone: 'success',
       })
+    }
+
+    /* Replacing an existing member's password is its own endpoint: it
+       revokes their sessions, which creating an account does not. */
+    if (live && password && member) {
+      try {
+        await api.setMemberPassword(member.id, password)
+        toast({ title: 'Password reset', body: 'Their other sessions have been signed out.', tone: 'success' })
+      } catch (err) {
+        toast({ title: 'Password not set', body: (err as Error).message, tone: 'critical' })
+      }
     }
     onClose()
   }
@@ -53,7 +75,7 @@ export function MemberFormModal({
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" icon={<UserPlus size={14} />} onClick={submit} disabled={!nameGiven}>
+          <Button variant="primary" icon={<UserPlus size={14} />} onClick={() => { void submit() }} disabled={!nameGiven}>
             {editing ? 'Save changes' : 'Add to team'}
           </Button>
         </>
@@ -87,9 +109,33 @@ export function MemberFormModal({
           </Field>
         </div>
 
+        {live && (
+          <fieldset className="rounded-2xl border border-line p-4">
+            <legend className="px-1.5 text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
+              {editing ? 'Reset their password' : 'Their password'}
+            </legend>
+            <p className="mb-3 text-[12px] leading-relaxed text-ink-muted">
+              {editing
+                ? 'Setting one here replaces whatever they had and signs out every device they were using.'
+                : 'Without one they exist on the team but cannot sign in. You can set it later.'}
+            </p>
+            <Field label={editing ? 'New password' : 'Initial password'} id="mf-password" hint="At least 10 characters. Tell them out of band, and ask them to change it.">
+              <Input
+                id="mf-password" type="password" autoComplete="new-password"
+                value={password} onChange={(e) => setPassword(e.target.value)}
+                placeholder={editing ? 'Leave blank to keep it unchanged' : 'Leave blank for no access yet'}
+              />
+            </Field>
+            {passwordError && (
+              <p role="alert" className="mt-2 text-[12px] text-[rgb(var(--c-status-critical))]">{passwordError}</p>
+            )}
+          </fieldset>
+        )}
+
         <p className="rounded-xl border border-line bg-surface-inset/50 p-3 text-[12px] leading-relaxed text-ink-muted">
-          Roles govern what this platform shows and allows. They are not a sign-in —
-          Altier has no login yet, so anyone who can reach the address can switch between them.
+          {live
+            ? 'The server enforces this role, not just the interface: a permission it does not hold is refused there too.'
+            : 'With no database behind it there is nobody to sign in as, so roles here only demonstrate what each one may reach.'}
         </p>
       </div>
     </Modal>
