@@ -7,24 +7,35 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b --noCheck && vite build",
-    "typecheck": "tsc -b",
+    "typecheck": "tsc -b && tsc --noEmit -p tsconfig.node.json",
     "preview": "vite preview",
     "build:single": "tsc -b --noCheck && vite build --mode single",
-    "check:accounting": "esbuild scripts/check-accounting.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/check-accounting.mjs --log-level=warning && node node_modules/.cache/check-accounting.mjs"
+    "check:accounting": "esbuild scripts/check-accounting.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/check-accounting.mjs --log-level=warning && node node_modules/.cache/check-accounting.mjs",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "npm run --silent db:build && node node_modules/.cache/db/migrate.mjs",
+    "db:seed": "npm run --silent db:build && node node_modules/.cache/db/seed-cli.mjs",
+    "db:build": "esbuild server/db/seed-cli.ts server/db/migrate.ts server/db/verify.ts --bundle --platform=node --format=esm --packages=external --outdir=node_modules/.cache/db --out-extension:.js=.mjs --log-level=warning",
+    "db:check": "npm run --silent db:build && node node_modules/.cache/db/verify.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
+    "drizzle-orm": "^0.45.2",
     "framer-motion": "^11.18.2",
     "lucide-react": "^0.460.0",
+    "pg": "^8.23.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.7",
+    "@types/node": "^26.3.0",
+    "@types/pg": "^8.23.1",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
+    "drizzle-kit": "^0.31.10",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.6.3",

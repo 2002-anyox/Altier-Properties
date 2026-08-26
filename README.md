@@ -108,8 +108,56 @@ npm run typecheck  # TypeScript, no emit
 npm run check:accounting  # revenue-recognition invariants
 ```
 
-CI runs typecheck, the accounting invariants and the production build on every pull request and on
-every push to `main` (`.github/workflows/ci.yml`).
+CI runs typecheck, the accounting invariants, the database round trip and the production build on
+every pull request and on every push to `main` (`.github/workflows/ci.yml`).
+
+## Database
+
+The app currently runs entirely in the browser off a generated portfolio. `server/db/` adds the
+persistence layer beneath it: a Postgres schema, migrations, and a seeder that loads the demo
+portfolio using the very generator the UI runs on — so the seeded database holds exactly the data
+the interface shows, anchored to today.
+
+```bash
+npm run db:generate   # regenerate migrations after changing the schema
+npm run db:migrate    # apply pending migrations
+npm run db:seed       # truncate and load the demo portfolio
+npm run db:check      # migrate, seed, then verify the round trip
+```
+
+Set `DATABASE_URL` to point at Postgres (see `.env.example`). Without one, everything falls back to
+**PGlite** — Postgres compiled to WebAssembly — so the schema and seeder can be exercised with no
+server running. Same SQL either way; CI runs the round trip against both.
+
+`db:check` is the one to trust. It migrates, seeds, reads the portfolio back out, and asserts:
+
+- no rows lost, and billed and collected totals unchanged to the shilling
+- revenue recognition identical month by month against the in-memory figures
+- nulls preserved, so an open-ended rental doesn't quietly become a fixed-term lease
+- deferred revenue and deposits still separable
+- no orphaned relations
+- the schema's `CHECK` constraints genuinely reject invalid rows — with a control row that must be
+  accepted, so a probe failing for the wrong reason can't produce a false pass
+
+### Schema notes
+
+The domain's string unions are Postgres enums, and the arrays embedded in the in-memory model become
+child tables (`property_amenities`, `communications`, `maintenance_events`, and so on). Money is held
+in the base currency as whole units; presentation currency is a client concern and is deliberately
+not stored per row.
+
+Notifications have no table on purpose — they are derived from invoices, bookings and properties, so
+persisting them would only let them go stale.
+
+Invariants the database enforces rather than trusting the application to maintain:
+
+| Constraint | Why |
+|---|---|
+| `invoices_earns_valid` | recognition divides by the earning period; a zero-length one is a crash |
+| `invoices_paid_consistent` | money without a date, or a date without money, is a broken ledger |
+| `invoices_paid_within_amount` | an invoice cannot be overpaid |
+| `bookings_open_ended_is_rental` | only a rental may omit an end date |
+| `maintenance_completed_consistent` | a job is completed exactly when it has a completion date |
 
 Requires Node 18 or newer. There is no backend: the sample portfolio — 24 properties across Kampala,
 Wakiso and Entebbe, priced in Ugandan shillings — is generated deterministically at load and anchored

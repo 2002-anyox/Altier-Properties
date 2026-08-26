@@ -15,8 +15,22 @@ permissions:
 
 jobs:
   verify:
-    name: Typecheck, accounting, build
+    name: Typecheck, accounting, database, build
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: altier
+          POSTGRES_PASSWORD: altier
+          POSTGRES_DB: altier
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U altier"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - uses: actions/checkout@v4
@@ -38,6 +52,19 @@ jobs:
       # This asserts the invariants that no reviewer would catch by eye.
       - name: Accounting invariants
         run: npm run check:accounting
+
+      # The real target. Migrates, seeds and reads the portfolio back out,
+      # checking the figures survive the round trip and that the schema's
+      # constraints reject what they claim to reject.
+      - name: Database round trip (Postgres)
+        run: npm run db:check
+        env:
+          DATABASE_URL: postgres://altier:altier@localhost:5432/altier
+
+      # The same check on the driver contributors use locally, so the
+      # no-server path cannot rot unnoticed.
+      - name: Database round trip (PGlite)
+        run: npm run db:check
 
       - name: Build
         run: npm run build
