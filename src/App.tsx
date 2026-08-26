@@ -3,6 +3,7 @@ import { HashRouter, MemoryRouter, Navigate, Route, Routes, useNavigate } from '
 import { ShieldAlert } from 'lucide-react'
 import { StoreProvider, useStore } from './lib/store'
 import { AppShell } from './components/layout/AppShell'
+import { BootGate } from './components/layout/BootGate'
 import { can, roleLabel, type Permission } from './lib/rbac'
 import { Button, EmptyState } from './components/ui'
 import Dashboard from './pages/Dashboard'
@@ -43,25 +44,27 @@ export default function App() {
   return (
     <StoreProvider>
       <MotionConfig reducedMotion="user">
-        <Router>
-          <Routes>
-            <Route element={<AppShell />}>
-              <Route index element={<Dashboard />} />
-              <Route path="availability" element={<Guard permission="view:calendar"><Availability /></Guard>} />
-              <Route path="properties" element={<Guard permission="view:properties"><Properties /></Guard>} />
-              <Route path="properties/:id" element={<Guard permission="view:properties"><PropertyDetail /></Guard>} />
-              <Route path="bookings" element={<Guard permission="view:bookings"><Bookings /></Guard>} />
-              <Route path="clients" element={<Guard permission="view:clients"><Clients /></Guard>} />
-              <Route path="clients/:id" element={<Guard permission="view:clients"><ClientDetail /></Guard>} />
-              <Route path="payments" element={<Guard permission="view:payments"><Payments /></Guard>} />
-              <Route path="maintenance" element={<Guard permission="view:maintenance"><Maintenance /></Guard>} />
-              <Route path="notifications" element={<Notifications />} />
-              <Route path="reports" element={<Guard permission="view:reports"><Reports /></Guard>} />
-              <Route path="settings" element={<Settings />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Route>
-          </Routes>
-        </Router>
+        <BootGate>
+          <Router>
+            <Routes>
+              <Route element={<AppShell />}>
+                <Route index element={<Dashboard />} />
+                <Route path="availability" element={<Guard permission="view:calendar"><Availability /></Guard>} />
+                <Route path="properties" element={<Guard permission="view:properties"><Properties /></Guard>} />
+                <Route path="properties/:id" element={<Guard permission="view:properties"><PropertyDetail /></Guard>} />
+                <Route path="bookings" element={<Guard permission="view:bookings"><Bookings /></Guard>} />
+                <Route path="clients" element={<Guard permission="view:clients"><Clients /></Guard>} />
+                <Route path="clients/:id" element={<Guard permission="view:clients"><ClientDetail /></Guard>} />
+                <Route path="payments" element={<Guard permission="view:payments"><Payments /></Guard>} />
+                <Route path="maintenance" element={<Guard permission="view:maintenance"><Maintenance /></Guard>} />
+                <Route path="notifications" element={<Notifications />} />
+                <Route path="reports" element={<Guard permission="view:reports"><Reports /></Guard>} />
+                <Route path="settings" element={<Settings />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Route>
+            </Routes>
+          </Router>
+        </BootGate>
       </MotionConfig>
     </StoreProvider>
   )

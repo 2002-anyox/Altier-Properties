@@ -269,3 +269,20 @@ export interface ReminderSettings {
   quietHours: { enabled: boolean; from: string; to: string }
   digest: 'off' | 'daily' | 'weekly'
 }
+
+/**
+ * The bootstrap payload: everything the app needs in one response.
+ *
+ * At this portfolio's size the whole dataset is kilobytes, so the client
+ * holds it and every selector in derive.ts keeps working over plain arrays.
+ * Notifications are absent because they are derived, not stored.
+ */
+export interface Portfolio {
+  properties: Property[]
+  clients: Client[]
+  bookings: Booking[]
+  invoices: Invoice[]
+  maintenance: MaintenanceRequest[]
+  team: TeamMember[]
+  reminders: ReminderSettings
+}

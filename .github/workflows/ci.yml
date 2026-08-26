@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch makes an in-flight run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Typecheck, accounting, database, build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: altier
+          POSTGRES_PASSWORD: altier
+          POSTGRES_DB: altier
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U altier"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Vite 5 requires ^18 || >=20; 20 is the current LTS.
+          node-version: '20'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Revenue-recognition rules fail silently: a charge recognised twice, or
+      # a deposit leaking into revenue, looks like ordinary growth on a chart.
+      # This asserts the invariants that no reviewer would catch by eye.
+      - name: Accounting invariants
+        run: npm run check:accounting
+
+      # The real target. Migrates, seeds and reads the portfolio back out,
+      # checking the figures survive the round trip and that the schema's
+      # constraints reject what they claim to reject.
+      - name: Database round trip (Postgres)
+        run: npm run db:check
+        env:
+          DATABASE_URL: postgres://altier:altier@localhost:5432/altier
+
+      # The same check on the driver contributors use locally, so the
+      # no-server path cannot rot unnoticed.
+      - name: Database round trip (PGlite)
+        run: npm run db:check
+
+      # The round trip never starts a server. This boots the real API against
+      # the seeded database and exercises a read, a write and two error paths,
+      # so a broken route or a mis-mapped status code fails here rather than
+      # in the browser.
+      - name: API smoke test
+        run: npm run db:seed && npm run smoke:api
+        env:
+          DATABASE_URL: postgres://altier:altier@localhost:5432/altier
+
+      - name: Build
+        run: npm run build
