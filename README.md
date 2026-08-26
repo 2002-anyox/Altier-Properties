@@ -139,7 +139,63 @@ guessing. Every mutation endpoint answers with the refreshed portfolio for that 
 | `PATCH /api/maintenance/:id/status` | advance a maintenance request |
 | `POST /api/maintenance` | raise a new request |
 | `POST /api/clients/:id/notes` | append to a client's communication history |
+| `POST /api/properties` | add a property |
+| `PUT /api/properties/:id` | edit one |
+| `POST /api/clients` | add a client |
+| `POST /api/bookings` | open an agreement, with its opening charges |
 | `PUT /api/settings/reminders` | change reminder timing |
+
+## Deploying
+
+The published build works with no server at all — it falls back to the bundled
+portfolio and keeps every change in the browser tab. That is fine for a demo and
+useless for running a business, so a real deployment needs a database behind it.
+
+Three steps, once:
+
+**1. Create a Postgres.** Neon, Supabase and Vercel Postgres all work. Copy the
+**pooled** connection string — a serverless function opens a connection per
+instance, and the unpooled endpoint runs out of them.
+
+**2. Create the schema.** From your machine, pointed at that database:
+
+```bash
+DATABASE_URL='postgres://…' npm run db:init   # empty portfolio, ready to fill in
+DATABASE_URL='postgres://…' npm run db:seed   # or the Kampala demo portfolio
+```
+
+`db:init` lays down only what the app cannot run without — the reminder settings
+and the team — so you start empty and add your own properties through the
+interface. `db:seed` replaces everything with the demo portfolio; it truncates,
+so never point it at a database holding real records.
+
+**3. Set `DATABASE_URL` in the hosting project's environment variables** and
+redeploy. On Vercel that is Settings → Environment Variables; `vercel.json` and
+`api/[...path].ts` are already in the repository, so the API deploys with the
+site.
+
+Check it landed by opening `/api/health` on the deployed URL:
+
+```json
+{ "ok": true, "driver": "postgres", "schema": "ready", "properties": 24 }
+```
+
+`"schema": "missing"` means step 2 has not been run against that database.
+A 500 naming `DATABASE_URL` means step 3 has not. And if Settings → Profile
+still says **Sample data**, the app never reached the API at all — the browser's
+network tab on `/api/portfolio` will say why.
+
+### Why the API is one function
+
+`api/[...path].ts` mounts the same Express app the local process runs. The
+catch-all filename is deliberate: Vercel routes every `/api/*` path to it
+natively, so no rewrite sits between the request and the app. The app also
+re-adds the `/api` prefix if the platform strips it, so it behaves the same
+either way — both paths are covered by the smoke test.
+
+PGlite is refused in production on purpose. A serverless filesystem is thrown
+away between invocations, so falling back to it would serve an empty portfolio
+and look exactly like data loss.
 
 CI runs typecheck, the accounting invariants, the database round trip against both drivers, the API
 smoke test and the production build on every pull request and on every push to `main`
@@ -155,9 +211,10 @@ the interface shows, anchored to today.
 ```bash
 npm run db:generate   # regenerate migrations after changing the schema
 npm run db:migrate    # apply pending migrations
+npm run db:init       # empty portfolio: settings and team only
 npm run db:seed       # truncate and load the demo portfolio
 npm run db:check      # migrate, seed, then verify the round trip
-npm run smoke:api     # boot the API and exercise a read, a write and two errors
+npm run smoke:api     # boot the API and exercise reads, writes and error paths
 ```
 
 Set `DATABASE_URL` to point at Postgres (see `.env.example`). Without one, everything falls back to

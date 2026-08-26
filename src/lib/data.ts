@@ -98,14 +98,14 @@ const SEEDS: Seed[] = [
   { name: 'Kampala Road Retail Front', type: 'commercial', mode: 'long_term', status: 'occupied', district: 'Central', beds: 0, baths: 1, sqm: 150, price: 11_000_000, x: 0.44, y: 0.50 },
 ]
 
-const AMENITY_POOL = [
+export const AMENITY_POOL = [
   'Standby generator', 'Borehole water', 'Water storage tank', 'Solar backup',
   '24-hour security', 'Gated compound', 'Perimeter wall', 'Servants quarters',
   'Air conditioning', 'Fitted kitchen', 'Fibre internet', 'DSTV connection',
   'Secure parking', 'Private garden', 'Balcony', 'Swimming pool',
   'Gym access', 'Lift access', 'Furnished', 'Mosquito screens',
 ]
-const COMMERCIAL_AMENITIES = [
+export const COMMERCIAL_AMENITIES = [
   'Loading bay', '3-phase power', 'Standby generator', 'Fibre internet',
   'Secure parking', 'CCTV', 'Air conditioning', 'Meeting rooms',
   'Street frontage', 'Goods lift', '24-hour security',

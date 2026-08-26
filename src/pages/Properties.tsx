@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
@@ -14,6 +14,7 @@ import { useStore } from '../lib/store'
 import { can } from '../lib/rbac'
 import { money } from '../lib/format'
 import { itemVariants, listVariants } from '../lib/motion'
+import { PropertyFormModal } from '../components/forms/PropertyFormModal'
 import type { Property, PropertyStatus, PropertyType, TenancyMode } from '../lib/types'
 
 type View = 'grid' | 'list' | 'map'
@@ -35,8 +36,19 @@ export default function Properties() {
   const [district, setDistrict] = useState('all')
   const [manager, setManager] = useState('all')
   const [sort, setSort] = useState<SortKey>('name')
+  const [adding, setAdding] = useState(false)
 
   const status = (params.get('status') ?? 'all') as 'all' | PropertyStatus
+
+  /* Deep link: /properties?new=1 opens the intake form straight away, so the
+     dashboard's "Add property" lands on the form rather than near it. */
+  useEffect(() => {
+    if (!params.get('new')) return
+    setAdding(true)
+    const next = new URLSearchParams(params)
+    next.delete('new')
+    setParams(next, { replace: true })
+  }, [params, setParams])
   const setStatus = (s: string) => {
     const next = new URLSearchParams(params)
     if (s === 'all') next.delete('status')
@@ -100,7 +112,7 @@ export default function Properties() {
               ]}
             />
             {can(state.role, 'edit:properties') && (
-              <Button variant="primary" icon={<Plus size={15} />} onClick={() => toast({ title: 'Add property', body: 'The intake form opens here in the full product.', tone: 'default' })}>
+              <Button variant="primary" icon={<Plus size={15} />} onClick={() => setAdding(true)}>
                 <span className="hidden sm:inline">Add property</span>
               </Button>
             )}
@@ -225,6 +237,8 @@ export default function Properties() {
           ))}
         </motion.ul>
       )}
+
+      <PropertyFormModal open={adding} onClose={() => setAdding(false)} />
     </>
   )
 }

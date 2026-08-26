@@ -13,6 +13,7 @@ import {
   PROPERTY_STATUS_META, PriorityChip, Select, StatusChip, Tabs, cx, statusLabel,
 } from '../components/ui'
 import { useStore } from '../lib/store'
+import { PropertyFormModal } from '../components/forms/PropertyFormModal'
 import { can } from '../lib/rbac'
 import { TODAY, daysBetween, iso } from '../lib/data'
 import { mediumDate, money, relativeDay, shortDate } from '../lib/format'
@@ -25,6 +26,7 @@ export default function PropertyDetail() {
   const { id = '' } = useParams()
   const { state, dispatch, toast } = useStore()
   const [tab, setTab] = useState<Tab>('overview')
+  const [editing, setEditing] = useState(false)
 
   const property = state.properties.find((p) => p.id === id)
   const invoices = useMemo(() => state.invoices.filter((i) => i.propertyId === id), [state.invoices, id])
@@ -101,7 +103,7 @@ export default function PropertyDetail() {
             )}
             <Button variant="secondary" icon={<CalendarRange size={15} />}><Link to="/availability">Calendar</Link></Button>
             {can(state.role, 'edit:properties') && (
-              <Button variant="primary" icon={<Pencil size={15} />} onClick={() => toast({ title: 'Editing is disabled in the demo', body: 'The edit drawer opens here in the full product.' })}>
+              <Button variant="primary" icon={<Pencil size={15} />} onClick={() => setEditing(true)}>
                 Edit
               </Button>
             )}
@@ -489,6 +491,8 @@ export default function PropertyDetail() {
           </Card>
         )}
       </motion.div>
+
+      <PropertyFormModal open={editing} onClose={() => setEditing(false)} property={property} />
     </>
   )
 }

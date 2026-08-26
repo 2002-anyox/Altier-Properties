@@ -14,7 +14,7 @@
 import {
   BOOKINGS, CLIENTS, DEFAULT_REMINDERS, INVOICES, MAINTENANCE, PROPERTIES, TEAM,
 } from './data'
-import type { Portfolio } from './types'
+import type { Booking, Client, Invoice, Portfolio, Property } from './types'
 
 export type DataSource = 'database' | 'demo'
 
@@ -67,6 +67,16 @@ export async function loadPortfolio(): Promise<{ portfolio: Portfolio; source: D
 }
 
 export const api = {
+  /* Creates send the whole record, identifier included, so the row the server
+     stores is the row the screen already drew — no flash of a changed id. */
+  addProperty: (property: Property) =>
+    request('/properties', { method: 'POST', body: JSON.stringify(property) }),
+  updateProperty: (property: Property) =>
+    request(`/properties/${property.id}`, { method: 'PUT', body: JSON.stringify(property) }),
+  addClient: (client: Client) =>
+    request('/clients', { method: 'POST', body: JSON.stringify(client) }),
+  addBooking: (booking: Booking, invoices: Invoice[]) =>
+    request('/bookings', { method: 'POST', body: JSON.stringify({ booking, invoices }) }),
   recordPayment: (invoiceId: string) => request(`/invoices/${invoiceId}/payment`, { method: 'POST' }),
   sendReminder: (invoiceId: string) => request(`/invoices/${invoiceId}/reminder`, { method: 'POST' }),
   setPropertyStatus: (id: string, status: string) =>

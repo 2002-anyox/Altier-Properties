@@ -7,6 +7,7 @@ import {
   Avatar, Button, Card, Chip, Drawer, EmptyState, SearchInput, SegmentedControl, Select, cx,
 } from '../components/ui'
 import { useStore } from '../lib/store'
+import { BookingFormModal } from '../components/forms/BookingFormModal'
 import { can } from '../lib/rbac'
 import { TODAY, daysBetween, iso } from '../lib/data'
 import { mediumDate, money, relativeDay, shortDate } from '../lib/format'
@@ -39,6 +40,7 @@ export default function Bookings() {
   const [source, setSource] = useState<'all' | BookingSource>('all')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<Booking | null>(null)
+  const [creating, setCreating] = useState(false)
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -72,7 +74,7 @@ export default function Bookings() {
         description="Long tenancies and short stays share one pipeline. A twelve-month lease and a three-night stay are the same object, seen at different densities."
         actions={
           can(state.role, 'edit:bookings') && (
-            <Button variant="primary" icon={<CalendarPlus size={15} />} onClick={() => toast({ title: 'New agreement', body: 'The booking wizard opens here in the full product.' })}>
+            <Button variant="primary" icon={<CalendarPlus size={15} />} onClick={() => setCreating(true)}>
               <span className="hidden sm:inline">New agreement</span>
             </Button>
           )
@@ -290,6 +292,8 @@ export default function Bookings() {
           </div>
         )}
       </Drawer>
+
+      <BookingFormModal open={creating} onClose={() => setCreating(false)} />
     </>
   )
 }
