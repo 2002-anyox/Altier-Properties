@@ -10,6 +10,7 @@ import { useStore } from '../lib/store'
 import { can } from '../lib/rbac'
 import { mediumDate, money } from '../lib/format'
 import { itemVariants, listVariants } from '../lib/motion'
+import { ClientFormModal } from '../components/forms/ClientFormModal'
 import type { Client, ClientKind } from '../lib/types'
 
 const KIND_LABEL: Record<ClientKind, string> = { tenant: 'Tenant', guest: 'Guest', corporate: 'Corporate', owner: 'Owner' }
@@ -20,6 +21,7 @@ export default function Clients() {
   const [kind, setKind] = useState<'all' | ClientKind>('all')
   const [status, setStatus] = useState<'all' | Client['status']>('all')
   const [sort, setSort] = useState<'name' | 'value' | 'recent'>('name')
+  const [adding, setAdding] = useState(false)
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -51,7 +53,7 @@ export default function Clients() {
         description="Tenants, short-stay guests and corporate accounts — with their agreements, documents, payment record and every conversation on file."
         actions={
           can(state.role, 'edit:clients') && (
-            <Button variant="primary" icon={<UserPlus size={15} />} onClick={() => toast({ title: 'Add client', body: 'The onboarding flow with ID capture opens here in the full product.' })}>
+            <Button variant="primary" icon={<UserPlus size={15} />} onClick={() => setAdding(true)}>
               <span className="hidden sm:inline">Add client</span>
             </Button>
           )
@@ -163,6 +165,8 @@ export default function Clients() {
           })}
         </motion.ul>
       )}
+
+      <ClientFormModal open={adding} onClose={() => setAdding(false)} />
     </>
   )
 }

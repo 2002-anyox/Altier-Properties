@@ -11,7 +11,8 @@ import { eq, sql } from 'drizzle-orm'
 import type { Db } from './db/client.ts'
 import * as t from './db/schema.ts'
 import type {
-  MaintenancePriority, MaintenanceStatus, PropertyStatus, ReminderSettings,
+  Booking, Client, Invoice, MaintenancePriority, MaintenanceStatus, Property,
+  PropertyStatus, ReminderSettings,
 } from '../src/lib/types.ts'
 
 const today = () => new Date().toISOString().slice(0, 10)
@@ -167,4 +168,122 @@ export async function updateReminders(db: Db, patch: Partial<ReminderSettings>) 
     set.quietHoursTo = patch.quietHours.to
   }
   await db.update(t.reminderSettings).set(set).where(eq(t.reminderSettings.id, 1))
+}
+
+/* ------------------------- creating records ------------------------ *
+ * The client builds each record with the factories in src/lib/create.ts
+ * and sends it whole, identifier included, so the row stored here is the
+ * row the screen already drew. These writers are the seeder's insert
+ * logic for a single record — the same column mapping, so a record made
+ * at runtime is indistinguishable from a seeded one.
+ * ------------------------------------------------------------------- */
+
+const propertyColumns = (p: Property) => ({
+  id: p.id, code: p.code, name: p.name, type: p.type, mode: p.mode, status: p.status,
+  addressLine1: p.address.line1, district: p.address.district,
+  city: p.address.city, country: p.address.country,
+  mapX: p.address.x, mapY: p.address.y,
+  bedrooms: p.bedrooms, bathrooms: p.bathrooms, sizeSqm: p.sizeSqm,
+  price: p.price, managerId: p.managerId, rating: p.rating,
+  availableFrom: p.availableFrom, acquiredOn: p.acquiredOn,
+  yieldPct: p.yieldPct, notes: p.notes, photoSeed: p.photoSeed,
+})
+
+/** Replaces a property's amenity set; they are rows, not an array column. */
+async function writeAmenities(db: Db, propertyId: string, amenities: string[]) {
+  await db.delete(t.propertyAmenities).where(eq(t.propertyAmenities.propertyId, propertyId))
+  const rows = [...new Set(amenities)].map((amenity) => ({ propertyId, amenity }))
+  if (rows.length) await db.insert(t.propertyAmenities).values(rows)
+}
+
+export async function addProperty(db: Db, property: Property) {
+  await db.insert(t.properties).values(propertyColumns(property))
+  await writeAmenities(db, property.id, property.amenities)
+  if (property.maintenanceNotes.length) {
+    await db.insert(t.propertyNotes).values(property.maintenanceNotes.map((note, i) => ({
+      id: `${property.id}-note-${i}`, propertyId: property.id, position: i, note,
+    })))
+  }
+}
+
+export async function updateProperty(db: Db, id: string, property: Property) {
+  await requireOne(
+    await db.select({ id: t.properties.id }).from(t.properties).where(eq(t.properties.id, id)),
+    `property ${id}`,
+  )
+  // The identifier and code are the record's identity, not editable fields.
+  const { id: _ignored, code: _code, ...columns } = propertyColumns(property)
+  await db.update(t.properties).set(columns).where(eq(t.properties.id, id))
+  await writeAmenities(db, id, property.amenities)
+}
+
+export async function addClient(db: Db, client: Client) {
+  await db.insert(t.clients).values({
+    id: client.id, name: client.name, kind: client.kind, email: client.email,
+    phone: client.phone, nationality: client.nationality, since: client.since,
+    status: client.status, notes: client.notes,
+    emergencyContact: client.emergencyContact,
+    lifetimeValue: client.lifetimeValue, rating: client.rating,
+  })
+  if (client.propertyIds.length) {
+    await db.insert(t.clientProperties).values(
+      [...new Set(client.propertyIds)].map((propertyId) => ({ clientId: client.id, propertyId })),
+    )
+  }
+  if (client.communications.length) {
+    await db.insert(t.communications).values(client.communications.map((c) => ({
+      id: c.id, clientId: client.id, channel: c.channel, direction: c.direction,
+      subject: c.subject, preview: c.preview, at: c.at, author: c.author,
+    })))
+  }
+}
+
+/**
+ * An agreement commits the unit, opens the client's charges and links the
+ * two. Every write happens in one transaction so a rejected charge cannot
+ * leave a property marked occupied against a tenancy that does not exist.
+ */
+export async function addBooking(db: Db, booking: Booking, invoices: Invoice[]) {
+  await requireOne(
+    await db.select({ id: t.properties.id }).from(t.properties).where(eq(t.properties.id, booking.propertyId)),
+    `property ${booking.propertyId}`,
+  )
+  await requireOne(
+    await db.select({ id: t.clients.id }).from(t.clients).where(eq(t.clients.id, booking.clientId)),
+    `client ${booking.clientId}`,
+  )
+
+  await db.transaction(async (tx) => {
+    await tx.insert(t.bookings).values({
+      id: booking.id, reference: booking.reference, propertyId: booking.propertyId,
+      clientId: booking.clientId, mode: booking.mode, status: booking.status,
+      startsOn: booking.start, endsOn: booking.end, rate: booking.rate,
+      deposit: booking.deposit, advanceMonths: booking.advanceMonths,
+      paidThrough: booking.paidThrough, noticeDays: booking.noticeDays,
+      guests: booking.guests, source: booking.source,
+      checkIn: booking.checkIn, checkOut: booking.checkOut,
+      notes: booking.notes, createdAt: booking.createdAt,
+    })
+
+    if (invoices.length) {
+      await tx.insert(t.invoices).values(invoices.map((i) => ({
+        id: i.id, number: i.number, propertyId: i.propertyId, clientId: i.clientId,
+        bookingId: i.bookingId, type: i.type, issuedOn: i.issuedOn, dueOn: i.dueOn,
+        amount: i.amount, earnsFrom: i.earnsFrom, earnsTo: i.earnsTo,
+        paidAmount: i.paidAmount, status: i.status, method: i.method,
+        paidOn: i.paidOn, memo: i.memo,
+      })))
+    }
+
+    await tx.update(t.properties)
+      .set({ status: booking.status === 'upcoming' ? 'reserved' : 'occupied', availableFrom: null })
+      .where(eq(t.properties.id, booking.propertyId))
+
+    await tx.update(t.clients).set({ status: 'active' }).where(eq(t.clients.id, booking.clientId))
+
+    // The link may already exist from an earlier tenancy in the same unit.
+    await tx.insert(t.clientProperties)
+      .values({ clientId: booking.clientId, propertyId: booking.propertyId })
+      .onConflictDoNothing()
+  })
 }

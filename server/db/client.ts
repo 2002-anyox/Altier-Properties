@@ -29,7 +29,17 @@ export type Db = Awaited<ReturnType<typeof connect>>['db']
 export async function connect(url = process.env.DATABASE_URL) {
   if (url) {
     const { Pool } = await import('pg')
-    const pool = new Pool({ connectionString: url })
+    /* A serverless instance handles one request at a time, so one connection
+       is all it can use — and a pool per instance multiplied by the number of
+       instances is how a hosted Postgres runs out of connections. Point
+       DATABASE_URL at the provider's pooled endpoint as well. */
+    const serverless = !!process.env.VERCEL
+    const pool = new Pool({
+      connectionString: url,
+      max: serverless ? 1 : 10,
+      idleTimeoutMillis: serverless ? 10_000 : 30_000,
+      connectionTimeoutMillis: 10_000,
+    })
     const db = drizzlePg(pool, { schema })
     return {
       db,

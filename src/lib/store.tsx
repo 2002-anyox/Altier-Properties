@@ -4,6 +4,7 @@ import {
   buildNotifications, dayOffset, iso,
 } from './data'
 import { api, demoPortfolio, loadPortfolio, type DataSource } from './api'
+import { statusForBooking } from './create'
 import { REGIONS, currencyDef, setPresentation } from './money'
 import { setLanguage, type Language } from './strings'
 import type {
@@ -44,6 +45,10 @@ type Action =
   | { type: 'set-property-status'; id: string; status: PropertyStatus }
   | { type: 'set-maintenance-status'; id: string; status: MaintenanceStatus }
   | { type: 'add-maintenance'; request: MaintenanceRequest }
+  | { type: 'add-property'; property: Property }
+  | { type: 'update-property'; property: Property }
+  | { type: 'add-client'; client: Client }
+  | { type: 'add-booking'; booking: Booking; invoices: Invoice[] }
   | { type: 'add-note'; clientId: string; text: string }
   | { type: 'update-reminders'; reminders: Partial<ReminderSettings> }
   | { type: 'set-region'; locale: string }
@@ -157,6 +162,40 @@ function reducer(state: State, action: Action): State {
       }
     case 'add-maintenance':
       return { ...state, maintenance: [action.request, ...state.maintenance] }
+    case 'add-property':
+      return { ...state, properties: [action.property, ...state.properties] }
+    case 'update-property':
+      return {
+        ...state,
+        properties: state.properties.map((p) => (p.id === action.property.id ? action.property : p)),
+      }
+    case 'add-client':
+      return { ...state, clients: [action.client, ...state.clients] }
+    /* An agreement is never just a row: it commits the unit, opens the
+       client's charges and ties the two together. Splitting that across
+       several actions would let the screen show a half-made tenancy. */
+    case 'add-booking': {
+      const { booking, invoices } = action
+      return {
+        ...state,
+        bookings: [booking, ...state.bookings],
+        invoices: [...invoices, ...state.invoices],
+        properties: state.properties.map((p) =>
+          p.id === booking.propertyId
+            ? { ...p, status: statusForBooking(booking), availableFrom: null }
+            : p),
+        clients: state.clients.map((c) =>
+          c.id === booking.clientId
+            ? {
+                ...c,
+                status: 'active' as const,
+                propertyIds: c.propertyIds.includes(booking.propertyId)
+                  ? c.propertyIds
+                  : [...c.propertyIds, booking.propertyId],
+              }
+            : c),
+      }
+    }
     case 'add-note':
       return {
         ...state,
@@ -357,6 +396,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           priority: r.priority, vendor: r.vendor, dueOn: r.dueOn,
         })
       }
+      case 'add-property': return () => api.addProperty(action.property)
+      case 'update-property': return () => api.updateProperty(action.property)
+      case 'add-client': return () => api.addClient(action.client)
+      case 'add-booking': return () => api.addBooking(action.booking, action.invoices)
       // Re-reading is the only sensible "reset" once a database is behind it.
       case 'reset': return () => api.reload()
       default: return null

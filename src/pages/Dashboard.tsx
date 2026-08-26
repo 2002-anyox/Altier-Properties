@@ -94,7 +94,7 @@ export default function Dashboard() {
               Availability
             </Button>
             {can(role, 'edit:properties') && (
-              <Button variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/properties')}>
+              <Button variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/properties?new=1')}>
                 Add property
               </Button>
             )}
