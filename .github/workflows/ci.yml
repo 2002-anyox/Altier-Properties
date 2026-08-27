@@ -78,6 +78,26 @@ jobs:
       - name: Setup SQL is current
         run: npm run db:sql -- --check
 
+      # A deployment that already exists upgrades with docs/upgrade.sql
+      # rather than being rebuilt. This proves that path: a database at the
+      # very first migration, upgraded, then upgraded again to show the
+      # second run changes nothing. Starting from 0000 rather than from
+      # whatever main happens to hold keeps the check meaningful after this
+      # merges, when main would already be current.
+      - name: Upgrade an existing database
+        run: |
+          psql "$DATABASE_URL" -q -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' \
+                                  -c 'DROP SCHEMA IF EXISTS drizzle CASCADE;'
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f server/db/migrations/0000_init.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f docs/upgrade.sql 2>&1 | tee /tmp/first.log
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f docs/upgrade.sql 2>&1 | tee /tmp/second.log
+          grep -q '^psql.*NOTICE:  applied: 0001_auth' /tmp/first.log
+          grep -q 'already applied: 0001_auth' /tmp/second.log
+          psql "$DATABASE_URL" -tAc "select count(*) from information_schema.columns \
+            where table_name='team_members' and column_name='password_hash'" | grep -qx 1
+        env:
+          DATABASE_URL: postgres://altier:altier@localhost:5432/altier
+
       # The path a real deployment takes: an empty database that still has to
       # serve a portfolio. It has its own failure mode — the reminder settings
       # singleton and the team are not optional, and nothing else notices.
