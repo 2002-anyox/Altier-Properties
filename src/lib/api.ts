@@ -1,14 +1,19 @@
 /* ------------------------------------------------------------------ *
  * API client
  *
- * The app runs in two modes and is honest about which:
+ * Three states, and the app says which one it is in rather than papering
+ * over the difference:
  *
- *   database — an API is reachable, so the portfolio is loaded from it and
- *              every change is written back
- *   demo     — no API, so the bundled generator supplies the portfolio and
- *              changes live only in the tab
+ *   database    — an API answered, so the portfolio is real and every
+ *                 change is written back
+ *   unreachable — there should be an API and there is not, which is a
+ *                 fault to report, not a reason to invent records
+ *   demo        — the single-file build, which has no server by design
+ *                 and carries a sample portfolio inside it
  *
- * The published single-file build is always a demo and never probes.
+ * Only `--mode single` produces the demo. A normal build never falls back
+ * to sample data: showing somebody twenty-four properties they do not own,
+ * because a connection string was wrong, is worse than showing nothing.
  * ------------------------------------------------------------------ */
 
 import {
@@ -16,12 +21,13 @@ import {
 } from './data'
 import type { Booking, Client, Invoice, Portfolio, Property, Role, TeamMember } from './types'
 
-export type DataSource = 'database' | 'demo'
+export type DataSource = 'database' | 'demo' | 'unreachable'
 
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api'
 const STANDALONE = import.meta.env.MODE === 'single'
 const PROBE_TIMEOUT_MS = 4000
 
+/** The sample portfolio, reachable only from the single-file build. */
 export const demoPortfolio = (): Portfolio => ({
   properties: PROPERTIES,
   clients: CLIENTS,
@@ -29,6 +35,32 @@ export const demoPortfolio = (): Portfolio => ({
   invoices: INVOICES,
   maintenance: MAINTENANCE,
   team: TEAM,
+  reminders: DEFAULT_REMINDERS,
+})
+
+/** True only for the `--mode single` build, which ships its own portfolio. */
+export const IS_DEMO_BUILD = STANDALONE
+
+/**
+ * What the app holds before anything has been fetched. Empty everywhere
+ * except the single-file demo, which has no server to fetch from.
+ */
+export const initialPortfolio = (): Portfolio =>
+  (STANDALONE ? demoPortfolio() : emptyPortfolio())
+
+/**
+ * Nothing at all, which is what a new deployment holds and what the app
+ * shows anybody who is not signed in. Reminder settings are the exception:
+ * they are a settings row rather than a record, and every screen that
+ * reads them would otherwise have to guard against their absence.
+ */
+export const emptyPortfolio = (): Portfolio => ({
+  properties: [],
+  clients: [],
+  bookings: [],
+  invoices: [],
+  maintenance: [],
+  team: [],
   reminders: DEFAULT_REMINDERS,
 })
 
@@ -104,10 +136,35 @@ export async function loadPortfolio(): Promise<{ portfolio: Portfolio; source: D
     })
     if (!res.ok) throw new ApiError(String(res.status), res.status)
     const body = await res.json()
-    if (!isPortfolio(body)) throw new Error('not a portfolio')
+    if (!isPortfolio(body)) throw new Error('The server returned an unexpected response.')
     return { portfolio: body, source: 'database' }
   } catch {
-    return { portfolio: demoPortfolio(), source: 'demo' }
+    /* Deliberately not a fallback. The caller shows the fault; inventing a
+       portfolio here would hide a broken deployment behind plausible
+       figures, which is the one failure nobody would think to check. */
+    return { portfolio: emptyPortfolio(), source: 'unreachable' }
+  }
+}
+
+/**
+ * Why the API could not be reached, for the screen that has to explain it.
+ * /api/health answers even when the schema is missing, which separates
+ * "no server" from "a server pointed at an empty database".
+ */
+export async function diagnose(): Promise<{ reachable: boolean; detail: string }> {
+  try {
+    const res = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) })
+    const body = await res.json().catch(() => null) as { error?: string; schema?: string } | null
+    if (res.ok) return { reachable: true, detail: 'The API answered, but the portfolio did not load.' }
+    return {
+      reachable: true,
+      detail: body?.error ?? `The API answered ${res.status}.`,
+    }
+  } catch {
+    return {
+      reachable: false,
+      detail: 'Nothing answered at /api. The most likely cause is that DATABASE_URL is not set on the host.',
+    }
   }
 }
 
@@ -153,9 +210,9 @@ export const auth = {
   startSso: (provider: string) => { window.location.assign(`${BASE}/auth/oauth/${provider}/start`) },
   unlink: (provider: string) =>
     send(`/auth/identities/${provider}`, { method: 'DELETE' }) as Promise<{ identities: Identity[] }>,
-  claimable: () => send('/auth/claimable') as Promise<{ members: Array<{ id: string; name: string; role: Role; title: string }> }>,
-  setup: (memberId: string, password: string, token?: string) =>
-    send('/auth/setup', { method: 'POST', body: JSON.stringify({ memberId, password, token }) }) as Promise<{ member: SessionMember }>,
+  /** First run only: creates the owner account on an empty portfolio. */
+  setup: (owner: { name: string; email: string; password: string; token?: string }) =>
+    send('/auth/setup', { method: 'POST', body: JSON.stringify(owner) }) as Promise<{ member: SessionMember }>,
   login: (email: string, password: string) =>
     send('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }) as Promise<{ member: SessionMember }>,
   logout: () => send('/auth/logout', { method: 'POST' }),

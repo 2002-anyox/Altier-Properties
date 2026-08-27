@@ -148,7 +148,7 @@ export function BookingFormModal({
             label="Agreement type"
             id="bf-mode"
             hint={rental
-              ? `Open-ended — it runs until notice is given. At least ${floor} months are taken up front.`
+              ? `Open-ended: it runs until notice is given. At least ${floor} months are taken up front.`
               : shortStay
                 ? 'Nightly, with a fixed departure date.'
                 : 'A fixed term with an agreed end date.'}

@@ -1,29 +1,23 @@
 /* ------------------------------------------------------------------ *
  * Empty portfolio
  *
- * Migrates and lays down only what the app cannot run without: the
- * reminder settings singleton and the team, because a property needs a
- * manager to belong to. Nothing else — no demo properties, clients or
- * charges — so a real deployment starts empty and is filled in through
- * the interface.
+ * Migrates and lays down the one row the app cannot run without: the
+ * reminder settings singleton. Nothing else. No people, no properties,
+ * no charges — the first person to open the app creates their own owner
+ * account, and fills the portfolio in from there.
  *
- * `npm run db:init`. Use `npm run db:seed` instead to load the demo
- * portfolio, which truncates and replaces everything.
+ * `npm run db:init`. Use `npm run db:seed` instead to load the sample
+ * portfolio for development, which truncates and replaces everything.
  * ------------------------------------------------------------------ */
 
 import { sql } from 'drizzle-orm'
-import { DEFAULT_REMINDERS, TEAM } from '../../src/lib/data.ts'
+import { DEFAULT_REMINDERS } from '../../src/lib/data.ts'
 import type { Db } from './client.ts'
 import * as t from './schema.ts'
 
 export async function init(db: Db) {
   const existing = await db.select({ id: t.reminderSettings.id }).from(t.reminderSettings)
   if (existing.length) return { created: false }
-
-  await db.insert(t.teamMembers).values(TEAM.map((m) => ({
-    id: m.id, name: m.name, role: m.role, title: m.title,
-    email: m.email, phone: m.phone, since: m.since,
-  }))).onConflictDoNothing()
 
   const r = DEFAULT_REMINDERS
   await db.insert(t.reminderSettings).values({
@@ -50,6 +44,7 @@ export async function counts(db: Db) {
     return row?.n ?? 0
   }
   return {
+    team: await one(t.teamMembers),
     properties: await one(t.properties),
     clients: await one(t.clients),
     bookings: await one(t.bookings),

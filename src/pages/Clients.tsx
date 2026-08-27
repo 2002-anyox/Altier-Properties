@@ -50,7 +50,7 @@ export default function Clients() {
       <PageHeader
         eyebrow="Portfolio"
         title="Clients"
-        description="Tenants, short-stay guests and corporate accounts — with their agreements, documents, payment record and every conversation on file."
+        description="Tenants, short-stay guests and corporate accounts, with their agreements, documents, payment record and every conversation on file."
         actions={
           can(state.role, 'edit:clients') && (
             <Button variant="primary" icon={<UserPlus size={15} />} onClick={() => setAdding(true)}>
@@ -98,12 +98,23 @@ export default function Clients() {
 
       {rows.length === 0 ? (
         <Card>
-          <EmptyState
-            icon={<Search size={22} />}
-            title="No clients match"
-            body="Try a different spelling, clear the type filter, or search by email domain."
-            action={<Button variant="secondary" onClick={() => { setQuery(''); setKind('all'); setStatus('all') }}>Reset filters</Button>}
-          />
+          {state.clients.length === 0 ? (
+            <EmptyState
+              icon={<Users size={22} />}
+              title="No clients yet"
+              body="Tenants, guests and corporate accounts live here. Add somebody, then place them in a unit with an agreement."
+              action={can(state.role, 'edit:clients')
+                ? <Button variant="primary" icon={<UserPlus size={15} />} onClick={() => setAdding(true)}>Add the first client</Button>
+                : undefined}
+            />
+          ) : (
+            <EmptyState
+              icon={<Search size={22} />}
+              title="No clients match"
+              body="Try a different spelling, clear the type filter, or search by email domain."
+              action={<Button variant="secondary" onClick={() => { setQuery(''); setKind('all'); setStatus('all') }}>Reset filters</Button>}
+            />
+          )}
         </Card>
       ) : (
         <motion.ul variants={listVariants} initial="initial" animate="animate" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

@@ -4,8 +4,8 @@ import {
   buildNotifications, dayOffset, iso,
 } from './data'
 import {
-  api, auth, demoPortfolio, isSignedOut, loadPortfolio, probeSession,
-  type DataSource, type Identity, type SessionMember,
+  IS_DEMO_BUILD, api, auth, emptyPortfolio, initialPortfolio, isSignedOut, loadPortfolio,
+  probeSession, type DataSource, type Identity, type SessionMember,
 } from './api'
 import { statusForBooking } from './create'
 import { REGIONS, currencyDef, setPresentation } from './money'
@@ -101,7 +101,7 @@ const stateFrom = (p: Portfolio, source: DataSource, hydrated: boolean): State =
   reminders: p.reminders,
   team: p.team,
   role: 'owner',
-  currentUserId: 'tm-01',
+  currentUserId: '',
   locale: 'en-UG',
   currency: 'UGX',
   language: 'en',
@@ -113,7 +113,34 @@ const stateFrom = (p: Portfolio, source: DataSource, hydrated: boolean): State =
   identities: [],
 })
 
-const seed = (): State => stateFrom(demoPortfolio(), 'demo', false)
+/* Nothing, until the probe says what there is. An app that starts with
+   records already in it has to unlearn them, and for one frame shows
+   somebody figures that were never theirs. The single-file build is the
+   exception: it has no server to ask, and carries its own portfolio. */
+/**
+ * Whoever is signed in, as a team record.
+ *
+ * Always returns somebody. The signed-in account is a row in the team, so
+ * the lookup normally succeeds; the fallback covers the frame between
+ * signing in and the portfolio arriving, when the session knows who you
+ * are and the team list does not yet.
+ */
+export function currentMember(state: State): TeamMember {
+  const found = state.team.find((t) => t.id === state.currentUserId) ?? state.team[0]
+  if (found) return found
+  return {
+    id: state.member?.id ?? '',
+    name: state.member?.name ?? 'You',
+    role: state.role,
+    title: state.member?.title ?? '',
+    email: state.member?.email ?? '',
+    phone: state.member?.phone ?? '',
+    since: state.member?.since ?? '',
+  }
+}
+
+const seed = (): State =>
+  stateFrom(initialPortfolio(), IS_DEMO_BUILD ? 'demo' : 'database', false)
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -393,8 +420,8 @@ interface Ctx {
   /** Throws with the server's reason on failure, for the form to show. */
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
-  /** First run only: give one of the seeded accounts a password. */
-  claimAccount: (memberId: string, password: string, token?: string) => Promise<void>
+  /** First run only: creates the owner account on an empty portfolio. */
+  createOwner: (owner: { name: string; email: string; password: string; token?: string }) => Promise<void>
   /** Re-reads which ways in the account has, after linking or unlinking. */
   refreshAccount: () => Promise<void>
   /**
@@ -521,7 +548,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         })
         if (!session.member) {
           // Signed out: nothing to load, and the gate will ask for a password.
-          dispatch({ type: 'sync', portfolio: demoPortfolio(), source: 'database' })
+          dispatch({ type: 'sync', portfolio: emptyPortfolio(), source: 'database' })
           return
         }
       }
@@ -563,8 +590,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     await refreshAccount().catch(() => { /* cosmetic; the session is real */ })
   }, [refreshAccount])
 
-  const claimAccount = useCallback(async (memberId: string, password: string, token?: string) => {
-    const { member } = await auth.setup(memberId, password, token)
+  const createOwner = useCallback(async (owner: { name: string; email: string; password: string; token?: string }) => {
+    const { member } = await auth.setup(owner)
     dispatch({ type: 'signed-in', member })
     const { portfolio } = await loadPortfolio()
     dispatch({ type: 'sync', portfolio, source: 'database' })
@@ -574,7 +601,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     await auth.logout().catch(() => { /* the cookie is going either way */ })
     dispatch({ type: 'signed-out' })
-    dispatch({ type: 'sync', portfolio: demoPortfolio(), source: 'database' })
+    // Whoever signs in next must not inherit a frame of the last person's data.
+    dispatch({ type: 'sync', portfolio: emptyPortfolio(), source: 'database' })
   }, [])
 
   /* Which actions have to reach the server, and how. Anything absent here
@@ -656,13 +684,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setPaletteOpen,
       signIn,
       signOut,
-      claimAccount,
+      createOwner,
       refreshAccount,
       ssoError,
       clearSsoError,
     }),
     [state, theme, toasts, toast, dismissToast, paletteOpen, dispatchWithSync, signIn, signOut,
-     claimAccount, refreshAccount, ssoError, clearSsoError],
+     createOwner, refreshAccount, ssoError, clearSsoError],
   )
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

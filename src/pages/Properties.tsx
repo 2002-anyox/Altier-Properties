@@ -98,7 +98,7 @@ export default function Properties() {
       <PageHeader
         eyebrow="Portfolio"
         title="Properties"
-        description="Every unit Altier manages across Kampala and Entebbe — leases, open-ended rentals, serviced residences, short stays and commercial space in one list."
+        description="Every unit you manage in one list: leases, open-ended rentals, serviced residences, short stays and commercial space."
         actions={
           <>
             <SegmentedControl<View>
@@ -217,12 +217,25 @@ export default function Properties() {
       {/* -------------------------------- Results ------------------------------ */}
       {filtered.length === 0 ? (
         <Card>
-          <EmptyState
-            icon={<Search size={22} />}
-            title="No properties match those filters"
-            body="Try widening the status, clearing the district filter, or searching for a property code such as ALT-004."
-            action={<Button variant="secondary" onClick={() => { clearFilters(); setQuery(''); setStatus('all') }}>Reset everything</Button>}
-          />
+          {/* Nothing at all and nothing that matches are different problems,
+              and the advice for one is useless for the other. */}
+          {state.properties.length === 0 ? (
+            <EmptyState
+              icon={<Building2 size={22} />}
+              title="No properties yet"
+              body="Add the first one and it appears here, on the calendar, and everywhere a unit can be chosen."
+              action={can(state.role, 'edit:properties')
+                ? <Button variant="primary" icon={<Plus size={15} />} onClick={() => setAdding(true)}>Add the first property</Button>
+                : undefined}
+            />
+          ) : (
+            <EmptyState
+              icon={<Search size={22} />}
+              title="No properties match those filters"
+              body="Try widening the status, clearing the district filter, or searching by name or code."
+              action={<Button variant="secondary" onClick={() => { clearFilters(); setQuery(''); setStatus('all') }}>Reset everything</Button>}
+            />
+          )}
         </Card>
       ) : view === 'map' ? (
         <MapView properties={filtered} />

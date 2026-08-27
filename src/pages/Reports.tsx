@@ -8,12 +8,19 @@ import {
   Button, Card, CardHeader, Meter, PROPERTY_STATUS_META, SegmentedControl, Select, cx, statusLabel,
 } from '../components/ui'
 import { useStore } from '../lib/store'
-import { money, pct } from '../lib/format'
+import { money, num, pct } from '../lib/format'
+import { exportCsv } from '../lib/csv'
+import { amountIn } from '../lib/money'
+import type { TenancyMode } from '../lib/types'
 import {
   ageingBuckets, chargeClass, computeKpis, deferredPortion, earnedInMonth, occupancyMix,
   propertyPerformance, revenueSeries,
 } from '../lib/derive'
 import { itemVariants, listVariants } from '../lib/motion'
+
+const MODEL_LABEL: Record<TenancyMode, string> = {
+  long_term: 'Fixed lease', rental: 'Open rental', short_stay: 'Short stay',
+}
 
 type Range = '6m' | '12m'
 
@@ -97,12 +104,19 @@ export default function Reports() {
     occupied: VIZ[0], reserved: VIZ[1], available: VIZ[2], maintenance: VIZ[4], inactive: VIZ[3],
   }
 
+  /* Every panel below reads from one of these two, so name the condition
+     once rather than repeating the test in five places. */
+  const noCharges = state.invoices.length === 0
+    ? 'Charges appear here once an agreement has raised some.' : undefined
+  const noProperties = state.properties.length === 0
+    ? 'Nothing to show until the portfolio has a property in it.' : undefined
+
   return (
     <>
       <PageHeader
         eyebrow="Insight"
         title="Reports"
-        description="Occupancy, revenue, collection performance, overdue exposure and per-property returns. Every table here is filterable and exportable."
+        description="Occupancy, revenue, collection performance, overdue exposure and per-property returns."
         actions={
           <>
             <SegmentedControl<Range>
@@ -112,7 +126,30 @@ export default function Reports() {
               size="sm"
               options={[{ value: '6m', label: '6 months' }, { value: '12m', label: '12 months' }]}
             />
-            <Button variant="secondary" icon={<Download size={15} />} onClick={() => toast({ title: 'Report export queued', body: 'A styled PDF and CSV would be generated here.' })}>
+            <Button
+              variant="secondary"
+              icon={<Download size={15} />}
+              disabled={ranked.length === 0}
+              onClick={() => {
+                const n = exportCsv('altier-property-performance', ranked, [
+                  { header: 'Property', value: (r) => r.property.name },
+                  { header: 'Code', value: (r) => r.property.code },
+                  { header: 'District', value: (r) => r.property.address.district },
+                  { header: 'Letting model', value: (r) => MODEL_LABEL[r.property.mode] },
+                  { header: 'Status', value: (r) => r.property.status },
+                  { header: `Revenue (${state.currency})`, value: (r) => amountIn(r.revenue) },
+                  { header: `Maintenance (${state.currency})`, value: (r) => amountIn(r.costs) },
+                  { header: `Net (${state.currency})`, value: (r) => amountIn(r.net) },
+                  { header: `Outstanding (${state.currency})`, value: (r) => amountIn(r.outstanding) },
+                  { header: 'Collection %', value: (r) => Math.round(r.collection * 10) / 10 },
+                ])
+                toast({
+                  title: 'Export downloaded',
+                  body: `${num(n)} properties, over the last ${range === '6m' ? 'six' : 'twelve'} months.`,
+                  tone: 'success',
+                })
+              }}
+            >
               <span className="hidden sm:inline">Export</span>
             </Button>
           </>
@@ -123,17 +160,17 @@ export default function Reports() {
         <motion.div variants={itemVariants} className="card card-pad">
           <p className="text-[12.5px] font-medium text-ink-secondary">Occupancy rate</p>
           <p className="tnum mt-2 text-[26px] font-semibold leading-none text-ink">{pct(kpis.occupancyRate, 1)}</p>
-          <Meter className="mt-3" value={kpis.occupancyRate} tone="good" label="Occupancy rate" />
+          <Meter className="mt-3" value={kpis.occupancyRate ?? 0} tone="good" label="Occupancy rate" />
         </motion.div>
         <motion.div variants={itemVariants} className="card card-pad">
           <p className="text-[12.5px] font-medium text-ink-secondary">Vacancy rate</p>
           <p className="tnum mt-2 text-[26px] font-semibold leading-none text-ink">{pct(kpis.vacancyRate, 1)}</p>
-          <Meter className="mt-3" value={kpis.vacancyRate} tone="critical" label="Vacancy rate" />
+          <Meter className="mt-3" value={kpis.vacancyRate ?? 0} tone="critical" label="Vacancy rate" />
         </motion.div>
         <motion.div variants={itemVariants} className="card card-pad">
           <p className="text-[12.5px] font-medium text-ink-secondary">Collection rate</p>
           <p className="tnum mt-2 text-[26px] font-semibold leading-none text-ink">{pct(kpis.collectionRate, 1)}</p>
-          <Meter className="mt-3" value={kpis.collectionRate} tone="gold" label="Collection rate" />
+          <Meter className="mt-3" value={kpis.collectionRate ?? 0} tone="gold" label="Collection rate" />
         </motion.div>
         <motion.div variants={itemVariants} className="card card-pad">
           <p className="text-[12.5px] font-medium text-ink-secondary">Overdue exposure</p>
@@ -146,6 +183,7 @@ export default function Reports() {
         <ChartFrame
           className="xl:col-span-2"
           title="Revenue performance"
+          empty={noCharges}
           subtitle={`Collected against billed over the last ${range === '6m' ? 'six' : 'twelve'} months. Refundable deposits are excluded from both.`}
           legend={[{ label: 'Collected', color: VIZ[0] }, { label: 'Billed', color: VIZ[1] }]}
           table={
@@ -178,6 +216,7 @@ export default function Reports() {
 
         <ChartFrame
           title="Portfolio composition"
+          empty={noProperties}
           subtitle="Where every property currently sits"
           table={
             <table className="w-full text-left text-[12.5px]">
@@ -202,6 +241,7 @@ export default function Reports() {
       <div className="mt-4 grid gap-4 xl:grid-cols-3">
         <ChartFrame
           title="Earned against money received"
+          empty={noCharges}
           subtitle="Each payment is earned across the period it buys, day by day"
           table={
             <table className="w-full text-left text-[12.5px]">
@@ -234,6 +274,7 @@ export default function Reports() {
 
         <ChartFrame
           title="Revenue by district"
+          empty={noCharges}
           subtitle="Collected to date, top eight districts"
           table={
             <table className="w-full text-left text-[12.5px]">
@@ -249,6 +290,7 @@ export default function Reports() {
 
         <ChartFrame
           title="Letting model comparison"
+          empty={noProperties}
           subtitle="Revenue against maintenance cost by model"
           legend={[{ label: 'Revenue', color: VIZ[0] }, { label: 'Maintenance', color: VIZ[4] }]}
           table={
@@ -297,6 +339,13 @@ export default function Reports() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[rgb(var(--c-border))]">
+              {ranked.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-5 py-8 text-center text-[13px] text-ink-muted sm:px-6">
+                    No properties to rank yet.
+                  </td>
+                </tr>
+              )}
               {ranked.map((r) => (
                 <tr key={r.property.id} className="transition-colors hover:bg-surface-inset/60">
                   <td className="px-5 py-3 sm:px-6">
@@ -339,6 +388,13 @@ export default function Reports() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[rgb(var(--c-border))]">
+                {clientActivity.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-5 py-8 text-center text-[13px] text-ink-muted sm:px-6">
+                      No clients to rank yet.
+                    </td>
+                  </tr>
+                )}
                 {clientActivity.map((r) => (
                   <tr key={r.client.id} className="transition-colors hover:bg-surface-inset/60">
                     <td className="px-5 py-3 sm:px-6">

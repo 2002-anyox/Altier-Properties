@@ -80,7 +80,7 @@ export default function Bookings() {
       <PageHeader
         eyebrow="Portfolio"
         title="Bookings & leases"
-        description="Long tenancies and short stays share one pipeline. A twelve-month lease and a three-night stay are the same object, seen at different densities."
+        description="Long tenancies and short stays share one pipeline. A twelve-month lease and a three-night stay are the same kind of record, seen at different densities."
         actions={
           can(state.role, 'edit:bookings') && (
             <Button variant="primary" icon={<CalendarPlus size={15} />} onClick={() => setCreating(true)}>
@@ -149,12 +149,25 @@ export default function Bookings() {
 
       {rows.length === 0 ? (
         <Card>
-          <EmptyState
-            icon={<Search size={22} />}
-            title="No agreements match"
-            body="Try clearing the source filter or searching for a reference such as STY-7104."
-            action={<Button variant="secondary" onClick={() => { setQuery(''); setStatus('all'); setMode('all'); setSource('all') }}>Reset filters</Button>}
-          />
+          {state.bookings.length === 0 ? (
+            <EmptyState
+              icon={<CalendarPlus size={22} />}
+              title="No agreements yet"
+              body={state.properties.length === 0 || state.clients.length === 0
+                ? 'An agreement puts a client in a property, so it needs at least one of each first.'
+                : 'A lease, an open-ended rental or a short stay. Whichever it is, it starts here and raises its own opening charges.'}
+              action={can(state.role, 'edit:bookings') && state.properties.length > 0 && state.clients.length > 0
+                ? <Button variant="primary" icon={<CalendarPlus size={15} />} onClick={() => setCreating(true)}>Create the first agreement</Button>
+                : undefined}
+            />
+          ) : (
+            <EmptyState
+              icon={<Search size={22} />}
+              title="No agreements match"
+              body="Try clearing the source filter, or searching by reference, client or property."
+              action={<Button variant="secondary" onClick={() => { setQuery(''); setStatus('all'); setMode('all'); setSource('all') }}>Reset filters</Button>}
+            />
+          )}
         </Card>
       ) : (
         <Card className="overflow-hidden">
@@ -294,12 +307,12 @@ export default function Bookings() {
                 <p className="text-[12.5px] font-medium text-gold-ink">
                   {isOpenEnded(selected)
                     ? selected.paidThrough && daysBetween(iso(TODAY), selected.paidThrough) < 0
-                      ? `Rent lapsed ${Math.abs(daysBetween(iso(TODAY), selected.paidThrough))} days ago. The ${selected.advanceMonths}-month cycle is spent — collect the next one before the arrears grow.`
+                      ? `Rent lapsed ${Math.abs(daysBetween(iso(TODAY), selected.paidThrough))} days ago. The ${selected.advanceMonths}-month cycle is spent. Collect the next one before the arrears grow.`
                       : selected.paidThrough
                         ? `Rent is covered to ${mediumDate(selected.paidThrough)}, then the next ${selected.advanceMonths}-month cycle falls due. ${selected.noticeDays} days notice to end the tenancy.`
                         : `The first ${selected.advanceMonths}-month advance is still to clear. Keys release once it does.`
                     : selected.end && daysBetween(iso(TODAY), selected.end) >= 0
-                      ? `${selected.mode === 'short_stay' ? 'Check-out' : 'Lease end'} ${relativeDay(selected.end)} — turnover and cleaning can be scheduled from the maintenance board.`
+                      ? `${selected.mode === 'short_stay' ? 'Check-out' : 'Lease end'} ${relativeDay(selected.end)}. Turnover and cleaning can be scheduled from the maintenance board.`
                       : 'This agreement has run past its end date. Confirm the renewal or close it off.'}
                 </p>
               </div>

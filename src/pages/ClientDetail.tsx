@@ -82,10 +82,15 @@ export default function ClientDetail() {
                 <Button variant="secondary" icon={<Trash2 size={15} />} onClick={() => setRemoving(true)}>Delete</Button>
               </>
             )}
-            <Button variant="secondary" icon={<Phone size={15} />}>Call</Button>
-            <Button variant="primary" icon={<Mail size={15} />} onClick={() => toast({ title: 'Composer opened', body: `A message to ${client.name} would be drafted here.` })}>
-              Message
-            </Button>
+            {/* Real links rather than a composer Altier does not have: the
+                phone and mail apps already on the device do this better,
+                and a button that only announces itself is worse than none. */}
+            <a href={client.phone ? `tel:${client.phone.replace(/[^+\d]/g, '')}` : undefined}>
+              <Button variant="secondary" icon={<Phone size={15} />} disabled={!client.phone}>Call</Button>
+            </a>
+            <a href={client.email ? `mailto:${client.email}` : undefined}>
+              <Button variant="primary" icon={<Mail size={15} />} disabled={!client.email}>Email</Button>
+            </a>
           </>
         }
       />

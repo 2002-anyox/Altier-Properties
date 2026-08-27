@@ -100,17 +100,23 @@ export interface Kpis {
   reservedUnits: number
   maintenanceUnits: number
   inactiveUnits: number
-  occupancyRate: number
-  vacancyRate: number
+  /**
+   * Null when there is nothing to take a percentage of. A portfolio with no
+   * lettable units is not 0% occupied and a ledger with nothing billed is
+   * not 100% collected — both are simply unanswerable, and printing a
+   * confident number for them is how an empty deployment looks healthy.
+   */
+  occupancyRate: number | null
+  vacancyRate: number | null
   /** Cash in this month for rent, bookings and fees. Deposits excluded. */
   monthlyRevenue: number
-  monthlyRevenueDelta: number
+  monthlyRevenueDelta: number | null
   /** Earned this month on an accrual basis — advances spread over their term. */
   recurringRevenue: number
-  recurringDelta: number
+  recurringDelta: number | null
   /** Of this month's cash, the part buying months still to come. */
   advanceCollected: number
-  advanceDelta: number
+  advanceDelta: number | null
   /** Refundable money taken in this month and held on the tenant's behalf. */
   depositsCollected: number
   upcomingAmount: number
@@ -118,7 +124,7 @@ export interface Kpis {
   overdueAmount: number
   overdueCount: number
   activeClients: number
-  collectionRate: number
+  collectionRate: number | null
   openMaintenance: number
   urgentMaintenance: number
   maintenanceSpend: number
@@ -146,7 +152,10 @@ export function computeKpis(
   const inactive = byStatus('inactive')
   const lettable = properties.length - inactive
 
-  const delta = (now: number, before: number) => (before ? ((now - before) / before) * 100 : 0)
+  /* Null rather than zero when last month was nothing: "+0.0% vs last
+     month" on a portfolio's first month is a number that reads as a real
+     comparison and is not one. */
+  const delta = (now: number, before: number) => (before ? ((now - before) / before) * 100 : null)
 
   /* Earned is a whole-month figure on both sides, so it compares directly.
      Cash is compared like-for-like against the same days of last month. */
@@ -190,8 +199,8 @@ export function computeKpis(
     reservedUnits: reserved,
     maintenanceUnits: maint,
     inactiveUnits: inactive,
-    occupancyRate: lettable ? ((occupied + reserved) / lettable) * 100 : 0,
-    vacancyRate: lettable ? (vacant / lettable) * 100 : 0,
+    occupancyRate: lettable ? ((occupied + reserved) / lettable) * 100 : null,
+    vacancyRate: lettable ? (vacant / lettable) * 100 : null,
     monthlyRevenue,
     monthlyRevenueDelta: delta(monthlyRevenue, lastRevenue),
     recurringRevenue,
@@ -204,7 +213,7 @@ export function computeKpis(
     overdueAmount: overdue.reduce((a, i) => a + (i.amount - i.paidAmount), 0),
     overdueCount: overdue.length,
     activeClients: clients.filter((c) => c.status === 'active').length,
-    collectionRate: billed ? (collected / billed) * 100 : 100,
+    collectionRate: billed ? (collected / billed) * 100 : null,
     openMaintenance: openMx.length,
     urgentMaintenance: openMx.filter((m) => m.priority === 'urgent' || m.priority === 'high').length,
     maintenanceSpend: maintenance.reduce((a, m) => a + (m.actualCost ?? 0), 0),

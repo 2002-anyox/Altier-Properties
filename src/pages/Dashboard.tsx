@@ -9,10 +9,10 @@ import { PageHeader } from '../components/layout/PageHeader'
 import { StatTile } from '../components/StatTile'
 import { AreaTrendChart, ChartFrame, DonutChart, VIZ, VIZ_STATUS } from '../components/charts'
 import { Button, Card, CardHeader, Chip, EmptyState, Meter, PROPERTY_STATUS_META, StatusChip, cx, statusLabel } from '../components/ui'
-import { useStore } from '../lib/store'
+import { currentMember, useStore } from '../lib/store'
 import { can } from '../lib/rbac'
 import { TODAY, daysBetween, iso } from '../lib/data'
-import { money, relativeDay, shortDate } from '../lib/format'
+import { money, pct, relativeDay, shortDate } from '../lib/format'
 import { ageingBuckets, computeKpis, occupancyMix, revenueSeries, upcomingAvailability } from '../lib/derive'
 import { listVariants } from '../lib/motion'
 
@@ -20,7 +20,7 @@ export default function Dashboard() {
   const { state } = useStore()
   const navigate = useNavigate()
   const { properties, invoices, clients, maintenance, bookings, role } = state
-  const me = state.team.find((t) => t.id === state.currentUserId) ?? state.team[0]
+  const me = currentMember(state)
 
   const kpis = useMemo(() => computeKpis(properties, invoices, clients, maintenance, bookings), [properties, invoices, clients, maintenance, bookings])
   const revenue = useMemo(() => revenueSeries(invoices), [invoices])
@@ -82,12 +82,26 @@ export default function Dashboard() {
     inactive: VIZ[3],
   }
 
+  /* Where the portfolio actually is, rather than where a sample one was.
+     Two districts are named; beyond that the list stops being a summary. */
+  const districts = [...new Set(state.properties.map((p) => p.address.district).filter(Boolean))]
+  const where = districts.length === 0 ? ''
+    : districts.length <= 2 ? ` in ${districts.join(' and ')}`
+    : ` across ${districts.length} districts`
+
+  const portfolioLine = kpis.totalProperties === 0
+    ? 'No properties yet. Add the first one and the figures here start filling in.'
+    : `${kpis.totalProperties} ${kpis.totalProperties === 1 ? 'property' : 'properties'}${where}. `
+      + (kpis.overdueCount > 0
+        ? `${kpis.overdueCount} ${kpis.overdueCount === 1 ? 'payment needs' : 'payments need'} chasing today.`
+        : 'Collections are clean today.')
+
   return (
     <>
       <PageHeader
         eyebrow={new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
         title={`${greeting}, ${me.name.split(' ')[0]}`}
-        description={`${kpis.totalProperties} properties across Kampala and Entebbe. ${kpis.overdueCount > 0 ? `${kpis.overdueCount} payments need chasing today.` : 'Collections are clean today.'}`}
+        description={portfolioLine}
         actions={
           <>
             <Button variant="secondary" icon={<CalendarClock size={15} />} onClick={() => navigate('/availability')}>
@@ -119,11 +133,19 @@ export default function Dashboard() {
                   {money(kpis.recurringRevenue, true)}
                 </p>
                 <p className="mt-2.5 text-[13px] text-[rgb(var(--c-text-onrail-muted))] dark:text-ink-muted">
-                  Recurring revenue earned ·{' '}
-                  <span className={cx('font-medium', kpis.recurringDelta >= 0 ? 'text-[#7BD88F]' : 'text-[#F0A9A9]')}>
-                    {kpis.recurringDelta >= 0 ? '+' : ''}{kpis.recurringDelta.toFixed(1)}%
-                  </span>{' '}
-                  vs last month
+                  Recurring revenue earned
+                  {kpis.recurringDelta === null ? (
+                    // No last month to compare against, so no comparison is drawn.
+                    ' this month'
+                  ) : (
+                    <>
+                      {' · '}
+                      <span className={cx('font-medium', kpis.recurringDelta >= 0 ? 'text-[#7BD88F]' : 'text-[#F0A9A9]')}>
+                        {kpis.recurringDelta >= 0 ? '+' : ''}{kpis.recurringDelta.toFixed(1)}%
+                      </span>{' '}
+                      vs last month
+                    </>
+                  )}
                 </p>
 
                 {/* Lump money is shown beside the headline, never inside it: a
@@ -132,7 +154,9 @@ export default function Dashboard() {
                   <Row
                     label="Cash collected"
                     value={money(kpis.monthlyRevenue, true)}
-                    note={`${kpis.monthlyRevenueDelta >= 0 ? '+' : ''}${kpis.monthlyRevenueDelta.toFixed(1)}% vs last month — rent, bookings and fees`}
+                    note={kpis.monthlyRevenueDelta === null
+                      ? 'rent, bookings and fees'
+                      : `${kpis.monthlyRevenueDelta >= 0 ? '+' : ''}${kpis.monthlyRevenueDelta.toFixed(1)}% vs last month — rent, bookings and fees`}
                   />
                   <Row
                     label="— of which advance"
@@ -145,7 +169,7 @@ export default function Dashboard() {
                     note="refundable — never revenue"
                   />
                   <div className="border-t border-white/10 pt-3.5 dark:border-line" />
-                  <Row label="Collection rate" value={`${kpis.collectionRate.toFixed(1)}%`} meter={kpis.collectionRate} />
+                  <Row label="Collection rate" value={pct(kpis.collectionRate, 1)} meter={kpis.collectionRate ?? undefined} />
                   <Row label="Overdue balance" value={money(kpis.overdueAmount, true)} tone="critical" />
                 </div>
               </div>
@@ -164,12 +188,12 @@ export default function Dashboard() {
           />
           <StatTile
             label="Occupied units" value={String(kpis.occupiedUnits)} rawValue={kpis.occupiedUnits}
-            footnote={`${kpis.occupancyRate.toFixed(0)}% occupancy including reserved`}
+            footnote={`${pct(kpis.occupancyRate)} occupancy including reserved`}
             to="/properties?status=occupied" icon={<BedDouble size={15} />}
           />
           <StatTile
             label="Vacant units" value={String(kpis.vacantUnits)} rawValue={kpis.vacantUnits}
-            footnote={`${kpis.vacancyRate.toFixed(0)}% vacancy rate`}
+            footnote={`${pct(kpis.vacancyRate)} vacancy rate`}
             to="/properties?status=available" icon={<DoorOpen size={15} />}
           />
           <StatTile
@@ -214,6 +238,7 @@ export default function Dashboard() {
             className="xl:col-span-2"
             title="Revenue earned vs advance received"
             subtitle="Revenue earned each month against cash received for occupancy beyond it"
+            empty={state.invoices.length === 0 ? 'Charges appear here once an agreement has raised some.' : undefined}
             legend={[
               { label: 'Earned', color: VIZ[0] },
               { label: 'Received in advance', color: VIZ[1] },
@@ -256,7 +281,8 @@ export default function Dashboard() {
 
         <ChartFrame
           title="Portfolio status"
-          subtitle={`${kpis.occupancyRate.toFixed(0)}% occupancy · ${kpis.vacancyRate.toFixed(0)}% vacancy`}
+          subtitle={`${pct(kpis.occupancyRate)} occupancy · ${pct(kpis.vacancyRate)} vacancy`}
+          empty={state.properties.length === 0 ? 'Nothing to show until the portfolio has a property in it.' : undefined}
           className={showMoney ? '' : 'xl:col-span-3'}
           table={
             <table className="w-full text-left text-[12.5px]">
@@ -284,7 +310,7 @@ export default function Dashboard() {
                 value: m.count,
                 color: statusColors[m.status],
               }))}
-              centerValue={`${kpis.occupancyRate.toFixed(0)}%`}
+              centerValue={pct(kpis.occupancyRate)}
               centerLabel="Occupancy"
               size={168}
             />
@@ -303,7 +329,7 @@ export default function Dashboard() {
             />
             <div className="mt-3 flex-1">
               {overdue.length === 0 ? (
-                <EmptyState icon={<Banknote size={20} />} title="Nothing overdue" body="Every invoice due to date has been settled. The next reminder run is scheduled for tomorrow morning." />
+                <EmptyState icon={<Banknote size={20} />} title="Nothing overdue" body="Every invoice due to date has been settled." />
               ) : (
                 <ul className="divide-y divide-[rgb(var(--c-border))]">
                   {overdue.map((inv) => {

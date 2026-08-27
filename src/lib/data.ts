@@ -772,7 +772,7 @@ export function buildNotifications(
         id: `n-inv-${inv.id}`, kind: 'payment_due', priority: gap <= 1 ? 'high' : 'normal',
         title: `${inv.type === 'rent' ? 'Rent' : 'Payment'} due ${gap === 0 ? 'today' : `in ${gap} day${gap > 1 ? 's' : ''}`}`,
         body: `${formatMoney(inv.amount)} from ${clientOf(inv.clientId)} for ${nameOf(inv.propertyId)}.`,
-        createdAt: dayOffset(-Math.max(0, reminders.rentDueLeadDays - gap)), read: chance(0.4),
+        createdAt: dayOffset(-Math.max(0, reminders.rentDueLeadDays - gap)), read: false,
         entity: { type: 'invoice', id: inv.id }, actionLabel: 'Send reminder',
       })
     } else if (inv.status === 'partial') {
@@ -780,7 +780,7 @@ export function buildNotifications(
         id: `n-inv-${inv.id}`, kind: 'payment_due', priority: 'normal',
         title: `Part payment received · ${formatMoney(inv.paidAmount)} of ${formatMoney(inv.amount)}`,
         body: `${clientOf(inv.clientId)} — balance of ${formatMoney(inv.amount - inv.paidAmount)} outstanding on ${inv.number}.`,
-        createdAt: inv.dueOn, read: chance(0.5), entity: { type: 'invoice', id: inv.id }, actionLabel: 'Review balance',
+        createdAt: inv.dueOn, read: false, entity: { type: 'invoice', id: inv.id }, actionLabel: 'Review balance',
       })
     }
   })
@@ -793,7 +793,7 @@ export function buildNotifications(
         id: `n-in-${b.id}`, kind: 'check_in', priority: inDays === 0 ? 'high' : 'normal',
         title: `Check-in ${inDays === 0 ? 'today' : inDays === 1 ? 'tomorrow' : `in ${inDays} days`} · ${b.checkIn}`,
         body: `${clientOf(b.clientId)} arriving at ${nameOf(b.propertyId)} · ${b.guests} guest${b.guests > 1 ? 's' : ''} · ${b.reference}.`,
-        createdAt: dayOffset(-1), read: chance(0.3), entity: { type: 'booking', id: b.id }, actionLabel: 'Prepare arrival',
+        createdAt: dayOffset(-1), read: false, entity: { type: 'booking', id: b.id }, actionLabel: 'Prepare arrival',
       })
     }
     if (b.status === 'in_progress' && b.mode === 'short_stay' && outDays >= 0 && outDays <= 2) {
@@ -820,7 +820,7 @@ export function buildNotifications(
           id: `n-rent-${b.id}`, kind: 'payment_due', priority: covered <= 7 ? 'high' : 'normal',
           title: `Rent covered for ${covered} more day${covered === 1 ? '' : 's'}`,
           body: `${clientOf(b.clientId)} at ${nameOf(b.propertyId)} is paid through ${b.paidThrough}. Collect the next month before it lapses.`,
-          createdAt: dayOffset(-1), read: chance(0.4), entity: { type: 'booking', id: b.id }, actionLabel: 'Request rent',
+          createdAt: dayOffset(-1), read: false, entity: { type: 'booking', id: b.id }, actionLabel: 'Request rent',
         })
       }
     }
@@ -832,7 +832,7 @@ export function buildNotifications(
           id: `n-lease-${b.id}`, kind: 'lease_expiry', priority: expiry <= 21 ? 'high' : 'normal',
           title: `Lease expires in ${expiry} days`,
           body: `${clientOf(b.clientId)} at ${nameOf(b.propertyId)} — decide on renewal or start re-marketing.`,
-          createdAt: dayOffset(-2), read: chance(0.35), entity: { type: 'booking', id: b.id }, actionLabel: 'Open renewal',
+          createdAt: dayOffset(-2), read: false, entity: { type: 'booking', id: b.id }, actionLabel: 'Open renewal',
         })
       }
     }
@@ -846,7 +846,7 @@ export function buildNotifications(
           id: `n-vac-${p.id}`, kind: 'vacancy', priority: vacantFor > 30 ? 'high' : 'normal',
           title: `Vacant ${vacantFor} days · ${formatMoney(p.mode === 'short_stay' ? p.price * 30 : p.price)} monthly exposure`,
           body: `${p.name} in ${p.address.district} has had no booking since ${p.availableFrom}.`,
-          createdAt: dayOffset(-1), read: chance(0.4), entity: { type: 'property', id: p.id }, actionLabel: 'Review listing',
+          createdAt: dayOffset(-1), read: false, entity: { type: 'property', id: p.id }, actionLabel: 'Review listing',
         })
       }
     }
@@ -866,19 +866,9 @@ export function buildNotifications(
     }
   })
 
-  out.push({
-    id: 'n-doc-1', kind: 'document', priority: 'normal',
-    title: 'KCCA trading licence renewal in 21 days',
-    body: 'Old Kampala Stone Apartment — the short-stay trading licence must be renewed before it lapses.',
-    createdAt: dayOffset(-3), read: false, entity: { type: 'property', id: 'p-14' }, actionLabel: 'Upload renewal',
-  })
-  out.push({
-    id: 'n-sys-1', kind: 'system', priority: 'low',
-    title: 'Monthly owner statements are ready',
-    body: 'Statements for 24 properties have been generated and are awaiting your review.',
-    createdAt: dayOffset(-1), read: true, entity: null, actionLabel: 'Open reports',
-  })
-
+  /* Nothing is appended here. Every notification above is derived from a
+     record that exists, so an empty portfolio produces an empty list —
+     which is the honest answer, and the one a new deployment needs. */
   return out.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
 }
 

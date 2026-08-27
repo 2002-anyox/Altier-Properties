@@ -4,7 +4,7 @@ import { X } from 'lucide-react'
 import clsx from 'clsx'
 import { NAV } from './nav'
 import { Wordmark } from './Wordmark'
-import { useStore } from '../../lib/store'
+import { currentMember, useStore } from '../../lib/store'
 import { can, roleLabel } from '../../lib/rbac'
 import { t } from '../../lib/strings'
 import { Avatar, IconButton } from '../ui'
@@ -13,7 +13,7 @@ import { spring } from '../../lib/motion'
 export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { state } = useStore()
   const location = useLocation()
-  const me = state.team.find((t) => t.id === state.currentUserId) ?? state.team[0]
+  const me = currentMember(state)
 
   const counts = {
     notifications: state.notifications.filter((n) => !n.read).length,

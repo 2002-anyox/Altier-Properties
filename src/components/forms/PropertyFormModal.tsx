@@ -23,7 +23,7 @@ const TYPES: Array<[PropertyType, string]> = [
 const MODES: Array<[TenancyMode, string, string]> = [
   ['long_term', 'Fixed-term lease', 'A lease with an agreed end date.'],
   ['rental', 'Open-ended rental', 'Runs until the tenant gives notice; opened with an advance.'],
-  ['short_stay', 'Short stay', 'Nightly bookings — the rate below is per night.'],
+  ['short_stay', 'Short stay', 'Nightly bookings. The rate below is per night.'],
 ]
 
 /**
@@ -75,7 +75,7 @@ export function PropertyFormModal({
       title={editing ? `Edit ${property.name}` : 'Add a property'}
       subtitle={editing
         ? 'Occupancy history, documents and charges are unaffected.'
-        : 'Only the name is required — the rest can be filled in later.'}
+        : 'Only the name is required. The rest can be filled in later.'}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>

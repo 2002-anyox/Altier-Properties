@@ -45,13 +45,16 @@ export async function sendReminder(db: Db, invoiceId: string) {
     await db.select().from(t.invoices).where(eq(t.invoices.id, invoiceId)),
     `invoice ${invoiceId}`,
   )
+  /* A note, not an email. Altier has no mail server, and recording this
+     as sent correspondence would leave somebody believing a message went
+     out that never did. */
   await db.insert(t.communications).values({
     id: `${invoice.clientId}-cm-${Date.now()}`,
     clientId: invoice.clientId,
-    channel: 'email',
+    channel: 'note',
     direction: 'outbound',
-    subject: `Payment reminder — ${invoice.number}`,
-    preview: `A polite reminder that ${invoice.memo} is due on ${invoice.dueOn}.`,
+    subject: `Payment reminder due · ${invoice.number}`,
+    preview: `Flagged for follow-up: ${invoice.memo} is due on ${invoice.dueOn}.`,
     at: today(),
     author: 'Altier Properties',
   })

@@ -242,7 +242,7 @@ export default function PropertyDetail() {
                   {property.status === 'available'
                     ? `Vacant and marketed. Available since ${property.availableFrom ? mediumDate(property.availableFrom) : 'recently'}.`
                     : property.status === 'reserved'
-                      ? 'Reserved — the incoming agreement is signed and awaiting move-in.'
+                      ? 'Reserved: the incoming agreement is signed and awaiting move-in.'
                       : property.status === 'maintenance'
                         ? 'Off the market while maintenance work completes.'
                         : 'Currently inactive and excluded from availability.'}
@@ -417,7 +417,7 @@ export default function PropertyDetail() {
             <Card className="lg:col-span-2">
               <CardHeader title="Maintenance jobs" subtitle={`${openJobs.length} open · ${jobs.length} total`} />
               {jobs.length === 0 ? (
-                <EmptyState icon={<Wrench size={20} />} title="No maintenance recorded" body="Nothing has been reported against this property. Jobs raised from the portal or an inspection will appear here." />
+                <EmptyState icon={<Wrench size={20} />} title="No maintenance recorded" body="Nothing has been reported against this property. Jobs raised against it appear here." />
               ) : (
                 <ul className="mt-3 divide-y divide-[rgb(var(--c-border))]">
                   {jobs.map((m) => (

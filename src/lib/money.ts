@@ -73,6 +73,14 @@ export const presentation = {
   compactFrom: 1_000_000,
 }
 
+/**
+ * A base-currency amount in whatever currency is on screen, as a bare
+ * number. For exports: a spreadsheet wants 2500000, not "USh 2.5M", and
+ * the column header carries the currency instead.
+ */
+export const amountIn = (base: number) =>
+  Math.round(base * presentation.rate * 100) / 100
+
 export function setPresentation(locale: string, currency: string) {
   const def = currencyDef(currency)
   presentation.locale = locale

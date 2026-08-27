@@ -24,7 +24,7 @@ const AXIS = 'var(--viz-axis)'
  * carried by colour alone.
  * ------------------------------------------------------------------ */
 export function ChartFrame({
-  title, subtitle, legend, action, children, table, className,
+  title, subtitle, legend, action, children, table, className, empty,
 }: {
   title: string
   subtitle?: string
@@ -33,6 +33,12 @@ export function ChartFrame({
   children: React.ReactNode
   table?: React.ReactNode
   className?: string
+  /**
+   * What to say when there is nothing to plot. A chart drawn over no data
+   * is a set of empty axes that looks like a rendering failure, and the
+   * legend and view toggle promise controls that do nothing.
+   */
+  empty?: string
 }) {
   const [view, setView] = useState<'chart' | 'table'>('chart')
   const labelId = useId()
@@ -45,7 +51,7 @@ export function ChartFrame({
         </div>
         <div className="flex items-center gap-2">
           {action}
-          {table && (
+          {!empty && table && (
             <div className="inline-flex rounded-lg border border-line bg-surface-inset p-0.5">
               {(['chart', 'table'] as const).map((v) => (
                 <button
@@ -66,7 +72,7 @@ export function ChartFrame({
         </div>
       </div>
 
-      {legend && legend.length > 1 && (
+      {!empty && legend && legend.length > 1 && (
         <ul className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-5 pt-3 sm:px-6">
           {legend.map((l) => (
             <li key={l.label} className="inline-flex items-center gap-1.5 text-[12px] text-ink-secondary">
@@ -78,7 +84,11 @@ export function ChartFrame({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col justify-center px-2 pb-4 pt-3 sm:px-3">
-        {view === 'chart' ? children : <div className="scroll-x px-3 sm:px-3">{table}</div>}
+        {empty
+          ? (
+            <p className="px-4 py-10 text-center text-[13px] leading-relaxed text-ink-muted">{empty}</p>
+          )
+          : view === 'chart' ? children : <div className="scroll-x px-3 sm:px-3">{table}</div>}
       </div>
     </section>
   )

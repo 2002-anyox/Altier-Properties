@@ -1,7 +1,68 @@
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { Wordmark } from './Wordmark'
+import { Button } from '../ui'
 import { useStore } from '../../lib/store'
+import { diagnose } from '../../lib/api'
 import SignIn from '../../pages/SignIn'
+
+/**
+ * Shown when there should be an API and there is not.
+ *
+ * The alternative — quietly serving the sample portfolio — is how a broken
+ * connection string survives a week: everything looks right, and the
+ * records are somebody else's. So this says what failed and where to look.
+ */
+function Unreachable() {
+  const [detail, setDetail] = useState<string | null>(null)
+  useEffect(() => { void diagnose().then((d) => setDetail(d.detail)) }, [])
+
+  return (
+    <div className="flex min-h-[100dvh] items-center justify-center bg-surface px-5 py-10">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
+        className="w-full max-w-[440px]"
+      >
+        <div className="mb-7 flex justify-center">
+          <span className="rounded-2xl bg-surface-rail px-5 py-4 ring-1 ring-white/10">
+            <Wordmark />
+          </span>
+        </div>
+        <div className="card card-pad" role="alert">
+          <span
+            className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-[rgb(var(--c-status-critical)/0.12)] text-[rgb(var(--c-status-critical))]"
+            aria-hidden
+          >
+            <AlertTriangle size={19} />
+          </span>
+          <h1 className="font-display text-[21px] font-semibold leading-tight text-ink">
+            The portfolio could not be loaded
+          </h1>
+          <p className="mt-2.5 text-[13px] leading-relaxed text-ink-secondary">
+            {detail ?? 'Checking what went wrong…'}
+          </p>
+          <p className="mt-4 text-[12.5px] leading-relaxed text-ink-muted">
+            Nothing is shown rather than sample figures, so there is no chance of
+            reading numbers that belong to nobody. Check <code className="text-ink-secondary">/api/health</code>{' '}
+            for the server&rsquo;s own account of the problem.
+          </p>
+          <Button
+            variant="primary"
+            block
+            className="mt-6"
+            icon={<RefreshCw size={14} />}
+            onClick={() => window.location.reload()}
+          >
+            Try again
+          </Button>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
 
 /* Held until the portfolio has arrived, so nobody reads a figure that is
    about to be replaced. With no API behind it the probe fails immediately
@@ -9,8 +70,11 @@ import SignIn from '../../pages/SignIn'
 export function BootGate({ children }: { children: React.ReactNode }) {
   const { state } = useStore()
 
-  /* A live API with nobody signed in is the door, not the dashboard. In
-     demo mode there is no server to sign in to, so this never applies. */
+  /* A fault is reported, never papered over with sample data. */
+  if (state.hydrated && state.source === 'unreachable') return <Unreachable />
+
+  /* A live API with nobody signed in is the door, not the dashboard. The
+     single-file demo has no server to sign in to, so this never applies. */
   if (state.hydrated && state.source === 'database' && !state.member) return <SignIn />
 
   if (state.hydrated) return <>{children}</>

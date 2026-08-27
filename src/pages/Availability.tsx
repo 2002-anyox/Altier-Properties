@@ -55,7 +55,7 @@ export default function Availability() {
       <PageHeader
         eyebrow="Overview"
         title="Availability"
-        description="One timeline for the whole portfolio. Leases and open-ended rentals run as continuous bars, short stays as blocks — the same grid, whatever the letting model."
+        description="One timeline for the whole portfolio. Leases and open-ended rentals run as continuous bars, short stays as blocks. Whatever the letting model, it is the same grid."
         actions={
           <SegmentedControl<View>
             ariaLabel="Change availability view"
@@ -354,7 +354,7 @@ function ListView({ properties, freeingUp }: { properties: Property[]; freeingUp
   return (
     <div className="grid gap-4">
       <Card>
-        <CardHeader title="Becoming available" subtitle="Properties freeing up in the next 60 days — start re-marketing before the gap opens" />
+        <CardHeader title="Becoming available" subtitle="Properties freeing up in the next 60 days. Start re-marketing before the gap opens." />
         {freeingUp.length === 0 ? (
           <EmptyState icon={<CalendarRange size={20} />} title="Nothing frees up soon" body="Every committed property runs beyond the next 60 days." />
         ) : (
