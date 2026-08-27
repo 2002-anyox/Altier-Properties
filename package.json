@@ -3,6 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "description": "Altier Properties \u2014 premium property management platform",
   "scripts": {
     "dev": "vite",

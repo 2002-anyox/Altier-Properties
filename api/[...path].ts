@@ -9,11 +9,16 @@
  * The app and its connection pool are built once per warm instance and
  * reused, which is what keeps a request from opening a new Postgres
  * connection every time.
+ *
+ * Nothing is imported at module scope. An import that throws while the
+ * module is loading cannot be caught by anything inside it, and the
+ * platform answers with its own page — FUNCTION_INVOCATION_FAILED and
+ * no further detail, which is the least diagnosable failure there is.
+ * Loading the app inside the handler turns that into a reply that says
+ * what went wrong.
  * ------------------------------------------------------------------ */
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { connect } from '../server/db/client.ts'
-import { createApp } from '../server/app.ts'
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void
 
@@ -29,6 +34,10 @@ async function getApp(): Promise<Handler> {
       + 'add the connection string to the project\'s environment variables.',
     )
   }
+  const [{ connect }, { createApp }] = await Promise.all([
+    import('../server/db/client.ts'),
+    import('../server/app.ts'),
+  ])
   const { db, driver } = await connect()
   return createApp(db, driver) as unknown as Handler
 }
@@ -41,8 +50,19 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   } catch (error) {
     // A failed connection must not be cached, or the instance stays broken.
     pending = null
+    const err = error as NodeJS.ErrnoException
+    console.error('Altier API failed to start:', err)
     res.statusCode = 500
     res.setHeader('content-type', 'application/json')
-    res.end(JSON.stringify({ error: (error as Error).message }))
+    res.end(JSON.stringify({
+      ok: false,
+      schema: 'unknown',
+      error: err.message,
+      /* The code and the first stack frame are what separate "cannot
+         reach the database" from "a module is missing", and neither is
+         guessable from the message alone. */
+      code: err.code,
+      at: err.stack?.split('\n')[1]?.trim(),
+    }))
   }
 }
