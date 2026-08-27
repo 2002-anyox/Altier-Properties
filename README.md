@@ -271,6 +271,27 @@ A 500 naming `DATABASE_URL` means step 3 has not. And if Settings → Profile
 still says **Sample data**, the app never reached the API at all — the browser's
 network tab on `/api/portfolio` will say why.
 
+### Reading `/api/health`
+
+It answers even when the database does not, and it names the fault rather
+than reporting one word for all of them:
+
+| `schema` | What it means |
+|---|---|
+| `ready` | Connected, schema current |
+| `behind` | Connected, and missing the migrations it lists. Run `docs/upgrade.sql` |
+| `missing` | Connected, no Altier tables. Run `docs/setup.sql` |
+| `nodatabase` | Server reached, the database named at the end of the URL is not there |
+| `unauthorised` | Credentials refused — usually a placeholder password never replaced |
+| `unreachable` | Nothing answered. On Supabase, usually the direct endpoint instead of the pooled one |
+| `denied` | Tables exist and this role may not read them |
+
+`detail` carries the database's own words. Drizzle wraps a driver error,
+putting its own "Failed query: …" on `message` and the real complaint on
+`cause`, so anything that only reads `message` reports the wrapper and
+hides the cause — which is how a wrong password, an unreachable host and
+an absent table all came to look identical.
+
 ### Why relative imports carry a `.js` extension
 
 `import { connect } from './db/client.js'` points at a file called

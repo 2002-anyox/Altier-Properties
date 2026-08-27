@@ -20,6 +20,7 @@ import { connect, type Db } from './db/client.js'
 import { properties, teamMembers } from './db/schema.js'
 import { readPortfolio } from './db/read.js'
 import { missingMigrations } from './db/applied.js'
+import { classify, explain, rootCause } from './db/fault.js'
 import {
   Conflict, NotFound, addBooking, addClient, addMaintenance, addMember, addNote,
   addProperty, deleteBooking, deleteClient, deleteMember, deleteProperty,
@@ -116,12 +117,21 @@ export function createApp(db: Db, driver: string) {
 
       res.json({ ok: true, driver, schema: 'ready', properties: count, sso })
     } catch (error) {
+      /* "Failed query: …" is Drizzle talking about itself. What the
+         database said is underneath it, and it is the only part worth
+         reading: a wrong password, an unreachable host and an absent
+         table all look identical until you go and get it. */
+      const root = rootCause(error)
+      const fault = classify(root.code, root.message)
+      const { error: message, remedy } = explain(fault)
       res.status(503).json({
         ok: false,
         driver,
-        schema: 'missing',
-        error: 'The database has no Altier schema in it. Run docs/setup.sql against it.',
-        detail: (error as Error).message,
+        schema: fault,
+        error: message,
+        remedy,
+        detail: root.message,
+        code: root.code,
         sso,
       })
     }

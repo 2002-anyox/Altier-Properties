@@ -156,11 +156,15 @@ export interface Diagnosis {
 
 /** Reads whatever came back, JSON or not, without throwing. */
 async function readBody(res: Response): Promise<{
-  error?: string; schema?: string; missing?: string[]; text: string
+  error?: string; schema?: string; missing?: string[]; remedy?: string
+  detail?: string; code?: string; text: string
 }> {
   const text = await res.text().catch(() => '')
   try {
-    const parsed = JSON.parse(text) as { error?: string; schema?: string; missing?: string[] }
+    const parsed = JSON.parse(text) as {
+      error?: string; schema?: string; missing?: string[]
+      remedy?: string; detail?: string; code?: string
+    }
     return { ...parsed, text }
   } catch {
     /* Not JSON: a platform error page rather than ours. The first line is
@@ -193,16 +197,18 @@ export async function diagnose(): Promise<Diagnosis> {
   const body = await readBody(health)
 
   if (!health.ok) {
-    if (body.schema === 'missing') {
-      return {
-        detail: 'The database has no Altier schema in it.',
-        remedy: 'Run docs/setup.sql against it, in the database\u2019s own SQL editor.',
-      }
-    }
     if (body.schema === 'behind') {
       return {
         detail: body.error ?? 'This database is behind the code.',
         remedy: 'Paste docs/upgrade.sql into the database\u2019s SQL editor and run it. Your records are left alone.',
+      }
+    }
+    /* The server classifies the fault and says what to do; repeating that
+       judgement here would only let the two drift apart. */
+    if (body.error && body.remedy) {
+      return {
+        detail: body.detail ? `${body.error} (${body.detail})` : body.error,
+        remedy: body.remedy,
       }
     }
     return {
