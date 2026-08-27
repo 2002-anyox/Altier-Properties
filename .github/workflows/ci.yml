@@ -81,9 +81,40 @@ jobs:
       # docs/setup.sql is generated from the migrations and pasted into a
       # hosted database's SQL editor. If it drifts from the schema it stops
       # producing a working database, silently, for anyone following the
-      # deployment guide.
+      # deployment guide. server/db/expected-migrations.ts is generated from
+      # the same journal and compiled into the API, so it drifts the same way.
       - name: Setup SQL is current
         run: npm run db:sql -- --check
+
+      # A database can hold a schema and still be the wrong one. This builds
+      # a database from the setup.sql that shipped before the auth work and
+      # asserts /api/health names the two migrations it is missing, rather
+      # than passing and failing later on a column that is not there.
+      - name: Health reports a database that is behind
+        run: |
+          psql "$DATABASE_URL" -q -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' \
+                                  -c 'DROP SCHEMA IF EXISTS drizzle CASCADE;'
+          git show 04e62d2:docs/setup.sql > /tmp/old-setup.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f /tmp/old-setup.sql
+          npx esbuild 'api/[...path].ts' --bundle --platform=node --format=esm \
+            --packages=external --outfile=node_modules/.cache/vercel-fn.mjs --log-level=warning
+          node -e "
+            const { createServer } = require('node:http');
+            import('./node_modules/.cache/vercel-fn.mjs').then(async (m) => {
+              const s = createServer((q, r) => m.default(q, r)).listen(5210);
+              await new Promise((r) => setTimeout(r, 1500));
+              const res = await fetch('http://127.0.0.1:5210/api/health');
+              const body = await res.json();
+              console.log(res.status, JSON.stringify(body));
+              s.close();
+              const wrong = res.status !== 503 || body.schema !== 'behind'
+                || body.missing.join() !== '0001_auth,0002_oauth';
+              process.exit(wrong ? 1 : 0);
+            });
+          "
+        env:
+          DATABASE_URL: postgres://altier:altier@localhost:5432/altier
+          VERCEL: '1'
 
       # A deployment that already exists upgrades with docs/upgrade.sql
       # rather than being rebuilt. This proves that path: a database at the

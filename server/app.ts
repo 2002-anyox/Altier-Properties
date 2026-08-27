@@ -19,6 +19,7 @@ import { eq, sql } from 'drizzle-orm'
 import { connect, type Db } from './db/client.ts'
 import { properties, teamMembers } from './db/schema.ts'
 import { readPortfolio } from './db/read.ts'
+import { missingMigrations } from './db/applied.ts'
 import {
   Conflict, NotFound, addBooking, addClient, addMaintenance, addMember, addNote,
   addProperty, deleteBooking, deleteClient, deleteMember, deleteProperty,
@@ -88,19 +89,40 @@ export function createApp(db: Db, driver: string) {
      process is up: a deployment pointed at an unmigrated database is the
      failure most worth being able to see from outside. */
   app.get('/api/health', route(async (_req, res) => {
+    /* Which sign-in methods this deployment actually has keys for —
+       answerable from outside, without opening a browser. */
+    const sso = configuredProviders().map((p) => p.id)
     try {
       const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(properties)
-      /* Which sign-in methods this deployment actually has keys for —
-         answerable from outside, without opening a browser. */
-      const sso = configuredProviders().map((p) => p.id)
+
+      /* A schema that exists is not necessarily the schema this build
+         wants. Without this the mismatch surfaces later as a query naming
+         a column that is not there, wrapped by the ORM so the reason
+         never reaches the browser — the hardest kind of fault to place. */
+      const missing = await missingMigrations(db)
+      if (missing.length) {
+        res.status(503).json({
+          ok: false,
+          driver,
+          schema: 'behind',
+          missing,
+          error: `This database is ${missing.length} migration${missing.length === 1 ? '' : 's'} behind the code (${missing.join(', ')}).`
+            + ' Run docs/upgrade.sql against it.',
+          properties: count,
+          sso,
+        })
+        return
+      }
+
       res.json({ ok: true, driver, schema: 'ready', properties: count, sso })
     } catch (error) {
       res.status(503).json({
         ok: false,
         driver,
         schema: 'missing',
-        error: 'The database has no schema yet — run `npm run db:migrate` and `npm run db:seed` against it.',
+        error: 'The database has no Altier schema in it. Run docs/setup.sql against it.',
         detail: (error as Error).message,
+        sso,
       })
     }
   }))

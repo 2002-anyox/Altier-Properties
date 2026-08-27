@@ -146,26 +146,87 @@ export async function loadPortfolio(): Promise<{ portfolio: Portfolio; source: D
   }
 }
 
-/**
- * Why the API could not be reached, for the screen that has to explain it.
- * /api/health answers even when the schema is missing, which separates
- * "no server" from "a server pointed at an empty database".
- */
-export async function diagnose(): Promise<{ reachable: boolean; detail: string }> {
+/** What went wrong, and what to do about it. */
+export interface Diagnosis {
+  /** The headline: what failed. */
+  detail: string
+  /** The next action, when the failure names one. */
+  remedy?: string
+}
+
+/** Reads whatever came back, JSON or not, without throwing. */
+async function readBody(res: Response): Promise<{
+  error?: string; schema?: string; missing?: string[]; text: string
+}> {
+  const text = await res.text().catch(() => '')
   try {
-    const res = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) })
-    const body = await res.json().catch(() => null) as { error?: string; schema?: string } | null
-    if (res.ok) return { reachable: true, detail: 'The API answered, but the portfolio did not load.' }
-    return {
-      reachable: true,
-      detail: body?.error ?? `The API answered ${res.status}.`,
-    }
+    const parsed = JSON.parse(text) as { error?: string; schema?: string; missing?: string[] }
+    return { ...parsed, text }
+  } catch {
+    /* Not JSON: a platform error page rather than ours. The first line is
+       usually the only useful part, and the rest is markup. */
+    return { text: text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200) }
+  }
+}
+
+/**
+ * Why the portfolio could not be loaded, for the screen that has to
+ * explain it.
+ *
+ * Two probes, because the interesting failures show up in different
+ * places. /api/health answers even when the schema is missing, which
+ * separates "no server" from "a server pointed at the wrong database";
+ * and a database that is merely *behind* passes health and fails on the
+ * first query naming a column it does not have yet.
+ */
+export async function diagnose(): Promise<Diagnosis> {
+  let health: Response
+  try {
+    health = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) })
   } catch {
     return {
-      reachable: false,
-      detail: 'Nothing answered at /api. The most likely cause is that DATABASE_URL is not set on the host.',
+      detail: 'Nothing answered at /api.',
+      remedy: 'The API is not running, or the deployment has no serverless function. On Vercel, check the project\u2019s Functions log.',
     }
   }
+
+  const body = await readBody(health)
+
+  if (!health.ok) {
+    if (body.schema === 'missing') {
+      return {
+        detail: 'The database has no Altier schema in it.',
+        remedy: 'Run docs/setup.sql against it, in the database\u2019s own SQL editor.',
+      }
+    }
+    if (body.schema === 'behind') {
+      return {
+        detail: body.error ?? 'This database is behind the code.',
+        remedy: 'Paste docs/upgrade.sql into the database\u2019s SQL editor and run it. Your records are left alone.',
+      }
+    }
+    return {
+      detail: body.error || body.text || `The API answered ${health.status}.`,
+      remedy: health.status >= 500 && !body.error
+        ? 'That is the platform\u2019s own error page rather than the app\u2019s, so the function crashed or timed out. The Functions log on the host has the stack trace.'
+        : undefined,
+    }
+  }
+
+  /* Health passes, so the server and the database are both there. The
+     failure is in a query, and the likeliest reason is a database a
+     version or two behind the code. */
+  const session = await fetch(`${BASE}/auth/me`, { credentials: 'same-origin' })
+    .then(readBody, () => null)
+  const reason = session?.error ?? session?.text ?? ''
+  if (/does not exist|column|relation/i.test(reason)) {
+    return {
+      detail: reason.split('\n')[0]!.slice(0, 220),
+      remedy: 'The database is behind the code. Run docs/upgrade.sql against it, then reload.',
+    }
+  }
+  if (reason) return { detail: reason.split('\n')[0]!.slice(0, 220) }
+  return { detail: 'The API answered, but the portfolio did not load.' }
 }
 
 export interface Session {
