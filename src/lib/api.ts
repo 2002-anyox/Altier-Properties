@@ -115,6 +115,24 @@ export interface Session {
   member: SessionMember | null
   /** True only before anybody has a password: the first-run window. */
   setupNeeded: boolean
+  /** False for an account that only ever signs in with Google or Apple. */
+  hasPassword?: boolean
+  identities?: Identity[]
+}
+
+/** A Google or Apple account linked to a team member. */
+export interface Identity {
+  provider: 'google' | 'apple'
+  email: string | null
+  linkedAt: string
+  lastUsedAt: string | null
+}
+
+export interface SsoProvider {
+  id: 'google' | 'apple'
+  label: string
+  /** Exactly what has to be registered in the provider's console. */
+  redirectUri: string
 }
 
 export interface SessionMember {
@@ -129,6 +147,12 @@ export interface SessionMember {
 
 export const auth = {
   me: () => send('/auth/me') as Promise<Session>,
+  providers: () => send('/auth/providers') as Promise<{ providers: SsoProvider[] }>,
+  /* A full navigation, not a fetch: the provider answers with its own
+     page, and the session cookie has to be set on a top-level request. */
+  startSso: (provider: string) => { window.location.assign(`${BASE}/auth/oauth/${provider}/start`) },
+  unlink: (provider: string) =>
+    send(`/auth/identities/${provider}`, { method: 'DELETE' }) as Promise<{ identities: Identity[] }>,
   claimable: () => send('/auth/claimable') as Promise<{ members: Array<{ id: string; name: string; role: Role; title: string }> }>,
   setup: (memberId: string, password: string, token?: string) =>
     send('/auth/setup', { method: 'POST', body: JSON.stringify({ memberId, password, token }) }) as Promise<{ member: SessionMember }>,

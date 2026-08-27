@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  Check, Coins, Globe2, KeyRound, Moon, Palette, Pencil, RotateCcw, ShieldCheck, Sun,
-  Trash2, UserPlus, Users2,
+  Check, Coins, Globe2, KeyRound, Link2, Moon, Palette, Pencil, RotateCcw, ShieldCheck, Sun,
+  Trash2, Unlink, UserPlus, Users2,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import {
@@ -10,6 +10,7 @@ import {
 } from '../components/ui'
 import { ReminderModal } from './Notifications'
 import { MemberFormModal } from '../components/forms/MemberFormModal'
+import { SsoButtons, useSsoProviders } from '../components/auth/SsoButtons'
 import { ConfirmDelete } from '../components/forms/ConfirmDelete'
 import { useStore } from '../lib/store'
 import { auth } from '../lib/api'
@@ -39,7 +40,9 @@ const PERMISSION_ROWS: Array<{ label: string; permission: Permission }> = [
 ]
 
 export default function Settings() {
-  const { state, dispatch, theme, toggleTheme, toast } = useStore()
+  const { state, dispatch, theme, toggleTheme, toast, refreshAccount } = useStore()
+  const ssoProviders = useSsoProviders()
+  const [unlinking, setUnlinking] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('profile')
   const [tuning, setTuning] = useState(false)
   const me = state.team.find((t) => t.id === state.currentUserId) ?? state.team[0]
@@ -105,12 +108,16 @@ export default function Settings() {
                   <KeyRound size={16} className="text-gold" /> Your password
                 </h3>
                 <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-ink-secondary">
-                  Changing it signs out every other device, which is usually the point of changing it.
+                  {state.hasPassword
+                    ? 'Changing it signs out every other device, which is usually the point of changing it.'
+                    : 'You sign in with a linked account and have no password yet. Setting one gives you a second way in, for the day a provider is unreachable.'}
                 </p>
                 <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                  <Field label="Current password" id="pw-current">
-                    <Input id="pw-current" type="password" autoComplete="current-password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} />
-                  </Field>
+                  {state.hasPassword && (
+                    <Field label="Current password" id="pw-current">
+                      <Input id="pw-current" type="password" autoComplete="current-password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} />
+                    </Field>
+                  )}
                   <Field label="New password" id="pw-next" hint="At least 10 characters.">
                     <Input id="pw-next" type="password" autoComplete="new-password" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} />
                   </Field>
@@ -121,13 +128,18 @@ export default function Settings() {
                 <div className="mt-5 flex justify-end">
                   <Button
                     variant="primary"
-                    disabled={pw.current.length === 0 || pw.next.length < 10 || pwBusy}
+                    disabled={(state.hasPassword && pw.current.length === 0) || pw.next.length < 10 || pwBusy}
                     onClick={async () => {
                       setPwBusy(true); setPwError(null)
                       try {
                         await auth.changePassword(pw.current, pw.next)
                         setPw({ current: '', next: '' })
-                        toast({ title: 'Password changed', body: 'Every other session has been signed out.', tone: 'success' })
+                        await refreshAccount().catch(() => { /* cosmetic */ })
+                        toast({
+                          title: state.hasPassword ? 'Password changed' : 'Password set',
+                          body: 'Every other session has been signed out.',
+                          tone: 'success',
+                        })
                       } catch (err) {
                         setPwError((err as Error).message)
                       } finally {
@@ -135,9 +147,91 @@ export default function Settings() {
                       }
                     }}
                   >
-                    {pwBusy ? 'Changing…' : 'Change password'}
+                    {pwBusy ? 'Saving…' : state.hasPassword ? 'Change password' : 'Set a password'}
                   </Button>
                 </div>
+              </Card>
+            )}
+
+            {state.member && ssoProviders.length > 0 && (
+              <Card className="card-pad lg:col-span-2">
+                <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink">
+                  <Link2 size={16} className="text-gold" /> Linked sign-in accounts
+                </h3>
+                <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-ink-secondary">
+                  A linked account is another way into <em>this</em> account — it never creates a
+                  new one. Linking works when the address on the provider matches the email on your
+                  Altier profile.
+                </p>
+
+                {state.identities.length > 0 && (
+                  <ul className="mt-5 space-y-2.5">
+                    {state.identities.map((identity) => {
+                      const provider = ssoProviders.find((p) => p.id === identity.provider)
+                      const onlyWayIn = !state.hasPassword && state.identities.length === 1
+                      return (
+                        <li
+                          key={identity.provider}
+                          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface-inset/50 px-4 py-3"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-[13.5px] font-medium text-ink">
+                              {provider?.label ?? identity.provider}
+                            </p>
+                            <p className="truncate text-[12px] text-ink-muted">
+                              {identity.email ?? 'address not shared'}
+                              {' · '}
+                              {identity.lastUsedAt
+                                ? `last used ${mediumDate(identity.lastUsedAt.slice(0, 10))}`
+                                : `linked ${mediumDate(identity.linkedAt.slice(0, 10))}`}
+                            </p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            icon={<Unlink size={14} />}
+                            disabled={onlyWayIn || unlinking === identity.provider}
+                            onClick={async () => {
+                              setUnlinking(identity.provider)
+                              try {
+                                await auth.unlink(identity.provider)
+                                await refreshAccount()
+                                toast({
+                                  title: 'Account unlinked',
+                                  body: `${provider?.label ?? identity.provider} can no longer sign you in.`,
+                                  tone: 'success',
+                                })
+                              } catch (err) {
+                                toast({ title: 'Not unlinked', body: (err as Error).message, tone: 'critical' })
+                              } finally {
+                                setUnlinking(null)
+                              }
+                            }}
+                          >
+                            {onlyWayIn ? 'Only way in' : 'Unlink'}
+                          </Button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+
+                {/* Only what is not already linked; a second Google account
+                    would replace the first rather than sit beside it. */}
+                {ssoProviders.some((p) => !state.identities.some((i) => i.provider === p.id)) && (
+                  <div className="mt-5 max-w-sm">
+                    <SsoButtons
+                      verb="Link"
+                      providers={ssoProviders.filter((p) => !state.identities.some((i) => i.provider === p.id))}
+                    />
+                  </div>
+                )}
+
+                {state.identities.length === 0 && (
+                  <p className="mt-4 text-[12px] leading-relaxed text-ink-muted">
+                    Your Altier email is <strong className="text-ink-secondary">{state.member.email}</strong>.
+                    Link the provider account that uses that same address.
+                  </p>
+                )}
               </Card>
             )}
 

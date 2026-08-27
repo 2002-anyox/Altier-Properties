@@ -27,12 +27,14 @@ import {
 import type { Booking, Client, Invoice, Property, TeamMember } from '../src/lib/types.ts'
 import { can } from '../src/lib/rbac.ts'
 import {
-  Forbidden, MIN_PASSWORD, SESSION_COOKIE, Unauthorized, attachMember, claimableMembers,
-  clearFailures, clearSessionCookie, createSession, destroyAllSessions, destroySession,
-  equaliseTiming, findByEmail, hashPassword, lockedFor, noAccountsYet, recordFailure, rejectPassword,
-  requireMember, requirePermission, setPassword, setSessionCookie, verifyPassword,
-  type Authed,
+  Forbidden, LastWayIn, NotLinked, OAUTH_COOKIE, MIN_PASSWORD, SESSION_COOKIE, Unauthorized,
+  attachMember, beginOauth, claimableMembers, clearFailures, clearOauthCookie, clearSessionCookie,
+  completeOauth, createSession, destroyAllSessions, destroySession, equaliseTiming, findByEmail,
+  hashPassword, identitiesFor, lockedFor, memberForIdentity, noAccountsYet, recordFailure,
+  rejectPassword, requireMember, requirePermission, setOauthCookie, setPassword, setSessionCookie,
+  unlinkIdentity, verifyPassword, type Authed,
 } from './auth.ts'
+import { SsoError, configuredProviders } from './oidc.ts'
 
 /** What the client is allowed to know about an account. Never the hash. */
 const publicMember = (m: { id: string; name: string; role: string; title: string; email: string; phone: string; since: string }) =>
@@ -42,6 +44,10 @@ export function createApp(db: Db, driver: string) {
   const app = express()
   app.use(cors())
   app.use(express.json({ limit: '256kb' }))
+  /* Apple answers the sign-in flow with a form POST rather than a query
+     string, because it also returns the person's name. Nothing else here
+     is form-encoded, hence the small limit. */
+  app.use(express.urlencoded({ extended: false, limit: '16kb' }))
 
   app.use(cookieParser())
 
@@ -83,7 +89,10 @@ export function createApp(db: Db, driver: string) {
   app.get('/api/health', route(async (_req, res) => {
     try {
       const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(properties)
-      res.json({ ok: true, driver, schema: 'ready', properties: count })
+      /* Which sign-in methods this deployment actually has keys for —
+         answerable from outside, without opening a browser. */
+      const sso = configuredProviders().map((p) => p.id)
+      res.json({ ok: true, driver, schema: 'ready', properties: count, sso })
     } catch (error) {
       res.status(503).json({
         ok: false,
@@ -107,6 +116,8 @@ export function createApp(db: Db, driver: string) {
       member: member ? publicMember(member) : null,
       // Only meaningful before the first password exists; false forever after.
       setupNeeded: member ? false : await noAccountsYet(db),
+      hasPassword: !!member?.passwordHash,
+      identities: member ? await identitiesFor(db, member.id) : [],
     })
   }))
 
@@ -183,13 +194,160 @@ export function createApp(db: Db, driver: string) {
     res.json({ ok: true })
   }))
 
+  /* ------------------- Google and Apple sign-in --------------------- *
+   * Three routes: what is on offer, the leg that sends the browser to
+   * the provider, and the leg it comes back to. The policy that decides
+   * whether a verified identity may sign in lives in auth.ts.
+   * ------------------------------------------------------------------ */
+
+  /**
+   * The origin this deployment is reached at, used for one thing: the
+   * redirect URI, which has to match what is registered in the provider's
+   * console exactly or the exchange is refused. PUBLIC_URL settles it;
+   * otherwise it is read off the proxy headers. Nothing else derives a
+   * destination from it, so a spoofed Host costs a failed sign-in rather
+   * than a redirect somewhere it should not go.
+   */
+  const originOf = (req: Request) => {
+    const explicit = process.env.PUBLIC_URL?.trim()
+    if (explicit) return explicit.replace(/\/+$/, '')
+    const first = (value: string | undefined, fallback: string) =>
+      (value ?? fallback).split(',')[0]!.trim()
+    const proto = first(req.get('x-forwarded-proto'), req.protocol || 'http')
+    const host = first(req.get('x-forwarded-host'), req.get('host') ?? 'localhost:5173')
+    return `${proto}://${host}`
+  }
+
+  const callbackUri = (req: Request, provider: string) =>
+    `${originOf(req)}/api/auth/oauth/${provider}/callback`
+
+  const escapeHtml = (value: string) =>
+    value.replace(/[&<>"']/g, (c) => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
+
+  /**
+   * Hands the browser back to the app.
+   *
+   * A plain 302 would be simpler, but Apple's callback is a cross-site
+   * POST and browsers withhold a SameSite=Lax cookie on the redirect that
+   * follows one — the session would be set and then not sent, which looks
+   * exactly like a failed sign-in. Navigating from a document on our own
+   * origin is unambiguously same-site, so the cookie travels.
+   */
+  const handBackToApp = (res: Response, target: string) => {
+    const safe = escapeHtml(target)
+    const forScript = JSON.stringify(target).replace(/</g, '\\u003c')
+    res.status(200).type('html').send(
+      '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+      + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+      + '<title>Signing in…</title>'
+      + `<meta http-equiv="refresh" content="0;url=${safe}">`
+      + '<style>body{font:15px/1.6 system-ui,sans-serif;background:#12161c;color:#e9e4d9;'
+      + 'display:grid;place-items:center;min-height:100vh;margin:0}a{color:#c9a227}</style>'
+      + `</head><body><p>Signing you in… <a href="${safe}">continue</a></p>`
+      + `<script>location.replace(${forScript})</script></body></html>`,
+    )
+  }
+
+  /**
+   * Failures come back to the sign-in screen with something readable.
+   *
+   * Relative, deliberately: an absolute target built from request headers
+   * would be an open redirect wherever a proxy passes an attacker's Host
+   * through. The provider's redirect URI has to be absolute — and it is
+   * checked against a registered list — but this one does not.
+   */
+  const handBackWithError = (_req: Request, res: Response, message: string) =>
+    handBackToApp(res, `/?sso_error=${encodeURIComponent(message)}`)
+
+  /** Which buttons the sign-in screen should draw, and where to register
+   *  each redirect URI — the value a console rejects for one character. */
+  app.get('/api/auth/providers', route(async (req, res) => {
+    res.json({
+      providers: configuredProviders().map((p) => ({ ...p, redirectUri: callbackUri(req, p.id) })),
+    })
+  }))
+
+  app.get('/api/auth/oauth/:provider/start', route(async (req, res) => {
+    const id = param(req, 'provider')
+    try {
+      /* Closed during first run. The seeded addresses are placeholders
+         nobody owns yet, and letting a public identity provider claim one
+         would be a way in that no owner ever granted. */
+      if (await noAccountsYet(db)) {
+        throw new SsoError('Set up the first account with a password before using single sign-on.')
+      }
+      const { url, browserSecret, crossSite } = await beginOauth(db, id, callbackUri(req, id))
+      setOauthCookie(res, browserSecret, crossSite)
+      res.redirect(302, url)
+    } catch (error) {
+      if (error instanceof SsoError) { handBackWithError(req, res, error.message); return }
+      throw error
+    }
+  }))
+
+  /* Google comes back as a redirect, Apple as a form POST. Same handler. */
+  const callback = route(async (req, res) => {
+    const id = param(req, 'provider')
+    const crossSite = req.method === 'POST'
+    const field = (name: string) => {
+      const source = (req.method === 'POST' ? req.body : req.query) as Record<string, unknown>
+      const value = source?.[name]
+      return typeof value === 'string' ? value : ''
+    }
+    try {
+      /* The person pressed cancel on the provider's screen; that is not
+         an error worth a scary message. */
+      const refusal = field('error')
+      if (refusal) {
+        throw new SsoError(refusal === 'access_denied'
+          ? 'That sign-in was cancelled.'
+          : `The provider refused the sign-in (${refusal}).`)
+      }
+
+      const claims = await completeOauth(
+        db, id, field('state'), field('code'),
+        req.cookies?.[OAUTH_COOKIE] as string | undefined,
+      )
+      const member = await memberForIdentity(db, id, claims)
+
+      clearOauthCookie(res, crossSite)
+      const { token, expiresAt } = await createSession(db, member.id, req.get('user-agent'))
+      setSessionCookie(res, token, expiresAt)
+      handBackToApp(res, '/')
+    } catch (error) {
+      clearOauthCookie(res, crossSite)
+      if (error instanceof SsoError) { handBackWithError(req, res, error.message); return }
+      throw error
+    }
+  })
+  app.get('/api/auth/oauth/:provider/callback', callback)
+  app.post('/api/auth/oauth/:provider/callback', callback)
+
+  /** Unlinking your own. Refused when it is the last way into the
+   *  account — locking yourself out should take more than one button. */
+  app.delete('/api/auth/identities/:provider', route(async (req: Authed, res) => {
+    const member = requireMember(req)
+    try {
+      await unlinkIdentity(db, member, param(req, 'provider'))
+    } catch (error) {
+      if (error instanceof NotLinked) throw new NotFound(error.message)
+      if (error instanceof LastWayIn) throw new Conflict(error.message)
+      throw error
+    }
+    res.json({ identities: await identitiesFor(db, member.id) })
+  }))
+
   /** Changing your own password. Requires the current one, and signs out
    *  every other session — a change is usually a response to a worry. */
   app.put('/api/auth/password', route(async (req: Authed, res) => {
     const member = requireMember(req)
     const current = String(req.body?.current ?? '')
     const next = String(req.body?.next ?? '')
-    if (!await verifyPassword(current, member.passwordHash)) {
+    /* An account that only ever signed in with Google has no current
+       password to prove. The session is the proof, and refusing here
+       would leave that person unable to add a second way in at all. */
+    if (member.passwordHash && !await verifyPassword(current, member.passwordHash)) {
       throw new Unauthorized('That is not your current password.')
     }
     const problem = rejectPassword(next, member)

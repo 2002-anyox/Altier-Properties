@@ -5,6 +5,7 @@ import { Button, Field, Input, Select } from '../components/ui'
 import { Wordmark } from '../components/layout/Wordmark'
 import { useStore } from '../lib/store'
 import { auth } from '../lib/api'
+import { SsoButtons, useSsoProviders } from '../components/auth/SsoButtons'
 import type { Role } from '../lib/types'
 
 interface Claimable { id: string; name: string; role: Role; title: string }
@@ -16,8 +17,9 @@ interface Claimable { id: string; name: string; role: Role; title: string }
  * moment the first password exists, so it cannot mint a second way in.
  */
 export default function SignIn() {
-  const { state, signIn, claimAccount } = useStore()
+  const { state, signIn, claimAccount, ssoError, clearSsoError } = useStore()
   const setup = state.setupNeeded
+  const providers = useSsoProviders()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -27,6 +29,11 @@ export default function SignIn() {
   const [claimable, setClaimable] = useState<Claimable[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [leaving, setLeaving] = useState(false)
+
+  /* A failed Google or Apple attempt came back as a page load, so it is
+     already waiting rather than being raised by anything on this screen. */
+  const shown = error ?? ssoError
 
   useEffect(() => {
     if (!setup) return
@@ -48,6 +55,7 @@ export default function SignIn() {
     if (!ready || busy) return
     setBusy(true)
     setError(null)
+    clearSsoError()
     try {
       if (setup) await claimAccount(memberId, password, token.trim() || undefined)
       else await signIn(email, password)
@@ -132,12 +140,12 @@ export default function SignIn() {
               </>
             )}
 
-            {error && (
+            {shown && (
               <p
                 role="alert"
                 className="rounded-xl border border-[rgb(var(--c-status-critical)/0.35)] bg-[rgb(var(--c-status-critical)/0.08)] px-3.5 py-2.5 text-[13px] leading-relaxed text-[rgb(var(--c-status-critical))]"
               >
-                {error}
+                {shown}
               </p>
             )}
 
@@ -152,6 +160,26 @@ export default function SignIn() {
               {busy ? 'One moment…' : setup ? 'Claim account and sign in' : 'Sign in'}
             </Button>
           </form>
+
+          {/* Only after the first account has a password: until then there
+              is nobody for a Google or Apple account to *be*. */}
+          {!setup && providers.length > 0 && (
+            <>
+              <div className="my-5 flex items-center gap-3" aria-hidden>
+                <span className="h-px flex-1 bg-line" />
+                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted">or</span>
+                <span className="h-px flex-1 bg-line" />
+              </div>
+              <SsoButtons
+                providers={providers}
+                disabled={busy || leaving}
+                onPick={() => { setLeaving(true); clearSsoError() }}
+              />
+              <p className="mt-3 text-center text-[12px] leading-relaxed text-ink-muted">
+                Works when an owner has already put that address on your team account.
+              </p>
+            </>
+          )}
         </div>
 
         <p className="mt-5 flex items-start gap-2 px-1 text-[12px] leading-relaxed text-ink-muted">

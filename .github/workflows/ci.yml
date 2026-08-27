@@ -58,6 +58,13 @@ jobs:
       - name: Accounting invariants
         run: npm run check:accounting
 
+      # An identity token is the whole boundary for Google and Apple sign-in:
+      # everything downstream believes what it says. This mints forged ones —
+      # unsigned, wrongly signed, addressed elsewhere, replayed — against the
+      # real verifier and insists each is refused.
+      - name: Sign-in token verification
+        run: npm run check:sso
+
       # The real target. Migrates, seeds and reads the portfolio back out,
       # checking the figures survive the round trip and that the schema's
       # constraints reject what they claim to reject.
@@ -91,10 +98,14 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f server/db/migrations/0000_init.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f docs/upgrade.sql 2>&1 | tee /tmp/first.log
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f docs/upgrade.sql 2>&1 | tee /tmp/second.log
-          grep -q '^psql.*NOTICE:  applied: 0001_auth' /tmp/first.log
+          grep -q 'NOTICE:  applied: 0001_auth' /tmp/first.log
+          grep -q 'NOTICE:  applied: 0002_oauth' /tmp/first.log
           grep -q 'already applied: 0001_auth' /tmp/second.log
+          grep -q 'already applied: 0002_oauth' /tmp/second.log
           psql "$DATABASE_URL" -tAc "select count(*) from information_schema.columns \
             where table_name='team_members' and column_name='password_hash'" | grep -qx 1
+          psql "$DATABASE_URL" -tAc "select count(*) from information_schema.tables \
+            where table_name in ('identities','oauth_states')" | grep -qx 2
         env:
           DATABASE_URL: postgres://altier:altier@localhost:5432/altier
 

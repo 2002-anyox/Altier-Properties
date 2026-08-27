@@ -24,20 +24,54 @@ const BASE = `http://127.0.0.1:${PORT}/api`
 const fail = []
 const ok = (cond, msg) => { console.log(`  ${cond ? 'ok  ' : 'FAIL'}  ${msg}`); if (!cond) fail.push(msg) }
 
+/* Credentials that are structurally right and belong to nobody: enough
+   to make the flow real up to the point where Google would answer, which
+   is as far as a test without a browser can go. */
+const SSO_ENV = {
+  GOOGLE_CLIENT_ID: 'altier-smoke.apps.googleusercontent.com',
+  GOOGLE_CLIENT_SECRET: 'smoke-secret',
+  PUBLIC_URL: `http://127.0.0.1:${PORT}`,
+}
+
 const api = spawn('node', ['node_modules/.cache/db/api.mjs'], {
-  env: { ...process.env, API_PORT: PORT },
+  env: { ...process.env, ...SSO_ENV, API_PORT: PORT },
   stdio: ['ignore', 'inherit', 'inherit'],
 })
 
 /* One jar for the whole run: the API is behind a session now, so every
-   call carries the cookie the login handed back. */
+   call carries the cookie the login handed back. A sign-in flow sets a
+   second cookie alongside it, so the jar holds them by name rather than
+   keeping only the most recent one.
+
+   Redirects are never followed — the sign-in flow answers with one that
+   points at Google, and the assertion is about that Location header. */
 let cookie = ''
+
+const parseJar = (value) => new Map(
+  value.split('; ').filter(Boolean).map((pair) => {
+    const eq = pair.indexOf('=')
+    return [pair.slice(0, eq), pair.slice(eq + 1)]
+  }),
+)
+const writeJar = (jar) => [...jar].map(([k, v]) => `${k}=${v}`).join('; ')
+
 const get = (path, init = {}) => fetch(`${BASE}${path}`, {
   ...init,
-  headers: { ...init.headers, ...(cookie ? { cookie } : {}) },
+  redirect: 'manual',
+  headers: { ...init.headers, ...(cookie && init.cookie !== null ? { cookie } : {}) },
 }).then((res) => {
-  const set = res.headers.get('set-cookie')
-  if (set) cookie = set.split(';')[0]
+  const jar = parseJar(cookie)
+  for (const raw of res.headers.getSetCookie?.() ?? []) {
+    const [pair, ...attributes] = raw.split(';')
+    const eq = pair.indexOf('=')
+    const name = pair.slice(0, eq).trim()
+    const value = pair.slice(eq + 1)
+    // A cleared cookie arrives as an empty value dated in the past.
+    const expired = attributes.some((a) => /^\s*expires=/i.test(a) && new Date(a.split('=')[1]) < new Date())
+    if (!value || expired) jar.delete(name)
+    else jar.set(name, value)
+  }
+  cookie = writeJar(jar)
   return res
 })
 
@@ -64,6 +98,16 @@ try {
   const closedWrite = await get('/clients', jsonInit({ id: 'x', name: 'Mallory', kind: 'tenant', status: 'active' }))
   ok(closedWrite.status === 401, `so are writes (got ${closedWrite.status})`)
 
+  /* A failed sign-in comes back as a page that navigates to the app with
+     the reason in the query string — so the reason is what to read. */
+  const ssoError = (html) => {
+    const found = html.match(/sso_error=([^"'&]+)/)
+    return found ? decodeURIComponent(found[1]) : `no sso_error in: ${html.slice(0, 120)}`
+  }
+  const tooEarly = ssoError(await get('/auth/oauth/google/start').then((r) => r.text()))
+  ok(/before using single sign-on/.test(tooEarly),
+     `Google sign-in is refused while no account has a password yet (${tooEarly})`)
+
   /* The run seeds first (see npm run smoke:api), so the team exists with no
      passwords and the first-run window is open. Claim an account through it. */
   const PASSWORD = 'smoke-test-password'
@@ -88,6 +132,63 @@ try {
   const wrongBody = await wrong.clone?.().json?.().catch(() => null)
   ok(strangerBody.error === 'That email and password do not match an account.',
      'an unknown email is refused in the same words as a wrong password')
+
+  /* ------------------ Google and Apple sign-in ----------------------- *
+   * The half that does not need a browser: what is offered, what the
+   * redirect actually asks for, and every way the callback can be lied
+   * to. The token verifier itself is checked in `npm run check:sso`.
+   * ------------------------------------------------------------------- */
+  ok(health.sso?.includes('google'), `health reports what is configured (${JSON.stringify(health.sso)})`)
+
+  const offered = await get('/auth/providers').then((r) => r.json())
+  ok(offered.providers.length === 1 && offered.providers[0].id === 'google',
+     `only configured providers are offered (${offered.providers.map((p) => p.id).join(', ') || 'none'})`)
+  ok(offered.providers[0].redirectUri === `http://127.0.0.1:${PORT}/api/auth/oauth/google/callback`,
+     `the redirect URI to register is spelled out (${offered.providers[0].redirectUri})`)
+
+  const unconfigured = ssoError(await get('/auth/oauth/apple/start').then((r) => r.text()))
+  ok(/Apple sign-in is not set up/.test(unconfigured),
+     `a provider with no keys says so rather than half-starting (${unconfigured})`)
+
+  const started = await get('/auth/oauth/google/start')
+  ok(started.status === 302, `starting a sign-in redirects (got ${started.status})`)
+  const sent = new URL(started.headers.get('location'))
+  ok(sent.origin === 'https://accounts.google.com', `to Google (${sent.origin})`)
+  ok(sent.searchParams.get('client_id') === SSO_ENV.GOOGLE_CLIENT_ID, 'carrying our client id')
+  ok(sent.searchParams.get('response_type') === 'code', 'asking for an authorization code')
+  ok(sent.searchParams.get('code_challenge_method') === 'S256'
+     && (sent.searchParams.get('code_challenge') ?? '').length > 20, 'with a PKCE challenge')
+  ok((sent.searchParams.get('state') ?? '').length > 20, 'and an unguessable state')
+  ok((sent.searchParams.get('nonce') ?? '').length > 10, 'and a nonce')
+  ok(sent.searchParams.get('redirect_uri') === offered.providers[0].redirectUri,
+     'and the redirect URI it advertises')
+  ok(/altier_oauth=/.test(cookie), 'the browser is given something to be recognised by')
+
+  const state = sent.searchParams.get('state')
+  const callback = (query, init) => get(`/auth/oauth/google/callback?${query}`, init)
+
+  const invented = ssoError(await callback('state=made-up&code=made-up').then((r) => r.text()))
+  ok(/already been used, or has expired/.test(invented), `a state we never issued is refused (${invented})`)
+
+  /* The attack this defends against: an attacker starts a flow and hands
+     somebody else the finished link, landing them in the attacker's
+     account. Without the cookie, the state alone must not be enough. */
+  const elsewhere = ssoError(await callback(`state=${encodeURIComponent(state)}&code=x`, { cookie: null }).then((r) => r.text()))
+  ok(/started in a different browser/.test(elsewhere),
+     `a state without the matching browser is refused (${elsewhere})`)
+
+  const cancelled = ssoError(await callback(`state=${encodeURIComponent(state)}&error=access_denied`).then((r) => r.text()))
+  ok(/was cancelled/.test(cancelled), `pressing cancel says so plainly (${cancelled})`)
+
+  const replayed = ssoError(await callback(`state=${encodeURIComponent(state)}&code=x`).then((r) => r.text()))
+  ok(/already been used, or has expired/.test(replayed), `and a state is single use (${replayed})`)
+
+  const notLinked = await get('/auth/identities/google', { method: 'DELETE' })
+  ok(notLinked.status === 404, `unlinking what was never linked answers 404 (got ${notLinked.status})`)
+
+  const whoami = await get('/auth/me').then((r) => r.json())
+  ok(whoami.hasPassword === true && Array.isArray(whoami.identities) && whoami.identities.length === 0,
+     'the session reports a password and no linked accounts')
 
   const portfolio = await get('/portfolio').then((r) => r.json())
   ok(portfolio.properties?.length > 0, `portfolio: ${portfolio.properties?.length} properties, ${portfolio.invoices?.length} invoices`)
@@ -284,6 +385,8 @@ try {
   ok(loggedOut.status === 200, 'sign out succeeds')
   const afterLogout = await get('/portfolio')
   ok(afterLogout.status === 401, `and the session is gone (got ${afterLogout.status})`)
+  const unlinkOut = await get('/auth/identities/google', { method: 'DELETE' })
+  ok(unlinkOut.status === 401, `unlinking needs a session too (got ${unlinkOut.status})`)
 } finally {
   api.kill('SIGINT')
   await sleep(1500)

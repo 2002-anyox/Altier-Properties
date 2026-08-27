@@ -5,11 +5,12 @@ import {
 } from './data'
 import {
   api, auth, demoPortfolio, isSignedOut, loadPortfolio, probeSession,
-  type DataSource, type SessionMember,
+  type DataSource, type Identity, type SessionMember,
 } from './api'
 import { statusForBooking } from './create'
 import { REGIONS, currencyDef, setPresentation } from './money'
 import { setLanguage, type Language } from './strings'
+import { takeSsoError } from './sso'
 import type {
   AppNotification, Booking, Client, Invoice, MaintenanceRequest, MaintenanceStatus,
   Portfolio, Property, PropertyStatus, ReminderSettings, Role, TeamMember,
@@ -42,6 +43,9 @@ interface State {
   member: SessionMember | null
   /** True only before any account has a password — the first-run window. */
   setupNeeded: boolean
+  /** The ways the signed-in account can be opened. */
+  hasPassword: boolean
+  identities: Identity[]
 }
 
 type Action =
@@ -80,6 +84,7 @@ type Action =
   | { type: 'signed-in'; member: SessionMember }
   | { type: 'signed-out' }
   | { type: 'setup-needed'; needed: boolean }
+  | { type: 'account'; hasPassword: boolean; identities: Identity[] }
   | { type: 'reset' }
 
 /** Notifications are derived, never stored, so they are rebuilt on every load. */
@@ -104,6 +109,8 @@ const stateFrom = (p: Portfolio, source: DataSource, hydrated: boolean): State =
   hydrated,
   member: null,
   setupNeeded: false,
+  hasPassword: false,
+  identities: [],
 })
 
 const seed = (): State => stateFrom(demoPortfolio(), 'demo', false)
@@ -350,24 +357,14 @@ function reducer(state: State, action: Action): State {
         setupNeeded: false,
       }
     case 'signed-out':
-      return { ...state, member: null }
+      return { ...state, member: null, identities: [], hasPassword: false }
     case 'setup-needed':
       return { ...state, setupNeeded: action.needed }
-    /* Signing in decides the role: it is the account's, not a preference,
-       and the server enforces the same matrix regardless of what is set
-       here. The switcher that used to change it is gone. */
-    case 'signed-in':
-      return {
-        ...state,
-        member: action.member,
-        role: action.member.role,
-        currentUserId: action.member.id,
-        setupNeeded: false,
-      }
-    case 'signed-out':
-      return { ...state, member: null }
-    case 'setup-needed':
-      return { ...state, setupNeeded: action.needed }
+    /* How this account can be opened: a password, a linked Google or
+       Apple account, or both. Settings needs it to know whether removing
+       one would leave nobody able to get in. */
+    case 'account':
+      return { ...state, hasPassword: action.hasPassword, identities: action.identities }
     case 'reset':
       return { ...seed(), hydrated: true, role: state.role, currentUserId: state.currentUserId,
                locale: state.locale, currency: state.currency, language: state.language }
@@ -398,6 +395,15 @@ interface Ctx {
   signOut: () => Promise<void>
   /** First run only: give one of the seeded accounts a password. */
   claimAccount: (memberId: string, password: string, token?: string) => Promise<void>
+  /** Re-reads which ways in the account has, after linking or unlinking. */
+  refreshAccount: () => Promise<void>
+  /**
+   * Why a Google or Apple sign-in did not work. It arrives as a page load
+   * rather than a reply, so it is read once here and held for whichever
+   * screen ends up drawn.
+   */
+  ssoError: string | null
+  clearSsoError: () => void
 }
 
 const StoreContext = createContext<Ctx | null>(null)
@@ -492,6 +498,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const dismissToast = useCallback((id: number) => setToasts((prev) => prev.filter((x) => x.id !== id)), [])
 
+  /* Taken from the URL on the first render, before anything can navigate
+     and lose it. Read once: a refresh should not re-raise it. */
+  const [ssoError, setSsoError] = useState<string | null>(() => takeSsoError())
+  const clearSsoError = useCallback(() => setSsoError(null), [])
+
   /* Boot in two steps, because the answers are different. First: is there
      a server, and does it know us? Only then load the portfolio — asking
      for it while signed out would fall back to demo data and quietly show
@@ -503,6 +514,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (session) {
         if (session.member) dispatch({ type: 'signed-in', member: session.member })
         dispatch({ type: 'setup-needed', needed: session.setupNeeded })
+        dispatch({
+          type: 'account',
+          hasPassword: !!session.hasPassword,
+          identities: session.identities ?? [],
+        })
         if (!session.member) {
           // Signed out: nothing to load, and the gate will ask for a password.
           dispatch({ type: 'sync', portfolio: demoPortfolio(), source: 'database' })
@@ -516,21 +532,44 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true }
   }, [])
 
+  /* A link attempted from Settings fails back to the app, not to the
+     sign-in screen — so somebody already signed in needs to be told in
+     the way the rest of the app tells them things. */
+  useEffect(() => {
+    if (!ssoError || !state.member) return
+    toast({ title: 'That account was not linked', body: ssoError, tone: 'critical' })
+    setSsoError(null)
+  }, [ssoError, state.member, toast])
+
   /* Signing in and out. Both reload the portfolio, because what a role may
      see differs and the previous answer is not theirs. */
+  /* Which ways in this account has. Re-read rather than guessed, because
+     linking one happens through a full page navigation and comes back as
+     a fresh boot, not as a reply we could have merged. */
+  const refreshAccount = useCallback(async () => {
+    const session = await auth.me()
+    dispatch({
+      type: 'account',
+      hasPassword: !!session.hasPassword,
+      identities: session.identities ?? [],
+    })
+  }, [])
+
   const signIn = useCallback(async (email: string, password: string) => {
     const { member } = await auth.login(email, password)
     dispatch({ type: 'signed-in', member })
     const { portfolio } = await loadPortfolio()
     dispatch({ type: 'sync', portfolio, source: 'database' })
-  }, [])
+    await refreshAccount().catch(() => { /* cosmetic; the session is real */ })
+  }, [refreshAccount])
 
   const claimAccount = useCallback(async (memberId: string, password: string, token?: string) => {
     const { member } = await auth.setup(memberId, password, token)
     dispatch({ type: 'signed-in', member })
     const { portfolio } = await loadPortfolio()
     dispatch({ type: 'sync', portfolio, source: 'database' })
-  }, [])
+    await refreshAccount().catch(() => { /* cosmetic; the session is real */ })
+  }, [refreshAccount])
 
   const signOut = useCallback(async () => {
     await auth.logout().catch(() => { /* the cookie is going either way */ })
@@ -618,8 +657,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       signIn,
       signOut,
       claimAccount,
+      refreshAccount,
+      ssoError,
+      clearSsoError,
     }),
-    [state, theme, toasts, toast, dismissToast, paletteOpen, dispatchWithSync, signIn, signOut, claimAccount],
+    [state, theme, toasts, toast, dismissToast, paletteOpen, dispatchWithSync, signIn, signOut,
+     claimAccount, refreshAccount, ssoError, clearSsoError],
   )
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

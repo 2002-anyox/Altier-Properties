@@ -312,6 +312,35 @@ CREATE INDEX "sessions_expiry_idx" ON "sessions" USING btree ("expires_at");
 CREATE INDEX "team_members_email_idx" ON "team_members" USING btree ("email");
 
 -- ---------------------------------------------------------------
+-- migration: 0002_oauth
+-- ---------------------------------------------------------------
+CREATE TYPE "public"."auth_provider" AS ENUM('google', 'apple');
+CREATE TABLE "identities" (
+	"provider" "auth_provider" NOT NULL,
+	"subject" text NOT NULL,
+	"member_id" text NOT NULL,
+	"email" text,
+	"linked_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"last_used_at" timestamp with time zone,
+	CONSTRAINT "identities_provider_subject_pk" PRIMARY KEY("provider","subject")
+);
+
+CREATE TABLE "oauth_states" (
+	"state_hash" text PRIMARY KEY NOT NULL,
+	"provider" "auth_provider" NOT NULL,
+	"verifier" text,
+	"nonce" text NOT NULL,
+	"browser_hash" text NOT NULL,
+	"redirect_uri" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL
+);
+
+ALTER TABLE "identities" ADD CONSTRAINT "identities_member_id_team_members_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."team_members"("id") ON DELETE cascade ON UPDATE no action;
+CREATE INDEX "identities_member_idx" ON "identities" USING btree ("member_id");
+CREATE INDEX "oauth_states_expiry_idx" ON "oauth_states" USING btree ("expires_at");
+
+-- ---------------------------------------------------------------
 -- Record the migrations as applied, so `npm run db:migrate`
 -- against this database does nothing rather than failing.
 -- ---------------------------------------------------------------
@@ -323,6 +352,7 @@ CREATE TABLE IF NOT EXISTS "drizzle"."__drizzle_migrations" (
 );
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('0d6cd2f3cc444ee70ee412a9698e0300b24221be711b35db0195d24bc3dda3ee', 1787742595460);
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('fd0a043c8b2d7cb874e435d8b42745232e9a3c7ccc7cdbaa38503b2dfb5fb38f', 1787776478682);
+INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('7995837e230ff8c1a909c8683ab738da26d778c999fedfc08aed767d9f15f827', 1787810234659);
 
 -- ---------------------------------------------------------------
 -- The team. A property is assigned to a manager, so at least one

@@ -182,6 +182,31 @@ receives no charges at all from `GET /api/portfolio` — they are withheld rathe
 than hidden — and a request it may not make is answered 403. The smoke test
 asserts both, and was verified to fail when the gate is removed.
 
+### Google and Apple
+
+Both are supported, and both are optional — set no environment variables and
+Altier works exactly as above, with passwords only. Set them and the sign-in
+page grows a button per provider it has keys for.
+
+A Google or Apple account is a **way into an existing team member**, never a
+way to create one. An owner adds somebody in Settings → Team with their real
+email; that person presses *Continue with Google*; the verified address is
+matched against the team, and an address that matches nobody is refused. Nobody
+can sign themselves up, and single sign-on stays closed until the first account
+has a password.
+
+The flow is written directly against both providers in `server/oidc.ts` — the
+OpenID Connect authorization-code flow, PKCE on Google, a one-time state row
+bound to the browser, `alg` pinned to RS256, and the signature, issuer,
+audience, expiry and nonce all checked. No authentication library: a dependency
+in this position sees every credential that passes through it, and the protocol
+is about a hundred lines.
+
+`npm run check:sso` forges tokens against the real verifier and insists each is
+refused. **[docs/SIGN-IN-WITH-GOOGLE-AND-APPLE.md](docs/SIGN-IN-WITH-GOOGLE-AND-APPLE.md)**
+has the console-by-console setup, including the fact that Apple needs a paid
+developer account.
+
 Without a database there is nobody to be signed in as, so the bundled demo
 skips all of this and keeps the role switcher as a way to see what each role
 reaches.
