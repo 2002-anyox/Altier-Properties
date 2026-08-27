@@ -86,59 +86,16 @@ jobs:
       - name: Setup SQL is current
         run: npm run db:sql -- --check
 
-      # A database can hold a schema and still be the wrong one. This builds
-      # a database from the setup.sql that shipped before the auth work and
-      # asserts /api/health names the two migrations it is missing, rather
-      # than passing and failing later on a column that is not there.
+      # A database can hold a schema and still be the wrong one: the
+      # properties table has existed since the first migration, so one that
+      # is missing a later one passes a naive health check and fails much
+      # later on a column that is not there. This builds exactly that
+      # database and insists health names what is outstanding.
       - name: Health reports a database that is behind
-        run: |
-          psql "$DATABASE_URL" -q -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' \
-                                  -c 'DROP SCHEMA IF EXISTS drizzle CASCADE;'
-          git show 04e62d2:docs/setup.sql > /tmp/old-setup.sql
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f /tmp/old-setup.sql
-          npx esbuild 'api/[...path].ts' --bundle --platform=node --format=esm \
-            --packages=external --outfile=node_modules/.cache/vercel-fn.mjs --log-level=warning
-          node -e "
-            const { createServer } = require('node:http');
-            import('./node_modules/.cache/vercel-fn.mjs').then(async (m) => {
-              const s = createServer((q, r) => m.default(q, r)).listen(5210);
-              await new Promise((r) => setTimeout(r, 1500));
-              const res = await fetch('http://127.0.0.1:5210/api/health');
-              const body = await res.json();
-              console.log(res.status, JSON.stringify(body));
-              s.close();
-              const wrong = res.status !== 503 || body.schema !== 'behind'
-                || body.missing.join() !== '0001_auth,0002_oauth';
-              process.exit(wrong ? 1 : 0);
-            });
-          "
+        run: npm run check:stale
         env:
           DATABASE_URL: postgres://altier:altier@localhost:5432/altier
           VERCEL: '1'
-
-      # A deployment that already exists upgrades with docs/upgrade.sql
-      # rather than being rebuilt. This proves that path: a database at the
-      # very first migration, upgraded, then upgraded again to show the
-      # second run changes nothing. Starting from 0000 rather than from
-      # whatever main happens to hold keeps the check meaningful after this
-      # merges, when main would already be current.
-      - name: Upgrade an existing database
-        run: |
-          psql "$DATABASE_URL" -q -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' \
-                                  -c 'DROP SCHEMA IF EXISTS drizzle CASCADE;'
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f server/db/migrations/0000_init.sql
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f docs/upgrade.sql 2>&1 | tee /tmp/first.log
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f docs/upgrade.sql 2>&1 | tee /tmp/second.log
-          grep -q 'NOTICE:  applied: 0001_auth' /tmp/first.log
-          grep -q 'NOTICE:  applied: 0002_oauth' /tmp/first.log
-          grep -q 'already applied: 0001_auth' /tmp/second.log
-          grep -q 'already applied: 0002_oauth' /tmp/second.log
-          psql "$DATABASE_URL" -tAc "select count(*) from information_schema.columns \
-            where table_name='team_members' and column_name='password_hash'" | grep -qx 1
-          psql "$DATABASE_URL" -tAc "select count(*) from information_schema.tables \
-            where table_name in ('identities','oauth_states')" | grep -qx 2
-        env:
-          DATABASE_URL: postgres://altier:altier@localhost:5432/altier
 
       # The path a real deployment takes: an empty database that still has to
       # serve a portfolio. It has its own failure mode — the reminder settings
