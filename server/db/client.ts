@@ -12,7 +12,7 @@ import { drizzle as drizzlePg } from 'drizzle-orm/node-postgres'
 import { migrate as migratePg } from 'drizzle-orm/node-postgres/migrator'
 import { drizzle as drizzlePglite } from 'drizzle-orm/pglite'
 import { migrate as migratePglite } from 'drizzle-orm/pglite/migrator'
-import * as schema from './schema.ts'
+import * as schema from './schema.js'
 
 /* Resolved from the working directory, not import.meta.url: these entry
    points are bundled into a cache directory before running, which would

@@ -2,7 +2,7 @@ import {
   BellRing, Building2, CalendarRange, ClipboardList, CreditCard, LayoutDashboard,
   PieChart, Settings, Users, Wrench,
 } from 'lucide-react'
-import type { Permission } from '../../lib/rbac'
+import type { Permission } from '../../lib/rbac.js'
 
 export interface NavItem {
   to: string

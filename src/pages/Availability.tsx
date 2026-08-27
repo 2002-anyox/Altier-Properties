@@ -4,17 +4,17 @@ import { Link } from 'react-router-dom'
 import {
   CalendarDays, CalendarRange, ChevronLeft, ChevronRight, DoorOpen, LayoutList, Rows3,
 } from 'lucide-react'
-import { PageHeader } from '../components/layout/PageHeader'
+import { PageHeader } from '../components/layout/PageHeader.js'
 import {
   Button, Card, CardHeader, Chip, EmptyState, IconButton, PROPERTY_STATUS_META, SearchInput,
   SegmentedControl, Select, StatusChip, cx,
 } from '../components/ui'
-import { useStore } from '../lib/store'
-import { TODAY, addDays, daysBetween, iso } from '../lib/data'
-import { mediumDate, money, relativeDay, shortDate } from '../lib/format'
-import { buildMonthGrid, endOf, isOpenEnded, upcomingAvailability } from '../lib/derive'
-import { itemVariants, listVariants } from '../lib/motion'
-import type { Booking, Property, TenancyMode } from '../lib/types'
+import { useStore } from '../lib/store.js'
+import { TODAY, addDays, daysBetween, iso } from '../lib/data.js'
+import { mediumDate, money, relativeDay, shortDate } from '../lib/format.js'
+import { buildMonthGrid, endOf, isOpenEnded, upcomingAvailability } from '../lib/derive.js'
+import { itemVariants, listVariants } from '../lib/motion.js'
+import type { Booking, Property, TenancyMode } from '../lib/types.js'
 
 type View = 'timeline' | 'month' | 'list'
 

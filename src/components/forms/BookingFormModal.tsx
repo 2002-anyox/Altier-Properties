@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CalendarPlus } from 'lucide-react'
 import { Button, EmptyState, Field, Input, Modal, Select, Textarea } from '../ui'
-import { useStore } from '../../lib/store'
+import { useStore } from '../../lib/store.js'
 import {
   advanceFloor, bookingDraftFrom, editBooking, emptyBookingDraft, newBooking,
   openingCharges, type BookingDraft,
-} from '../../lib/create'
-import { money } from '../../lib/format'
-import type { Booking, BookingSource, TenancyMode } from '../../lib/types'
+} from '../../lib/create.js'
+import { money } from '../../lib/format.js'
+import type { Booking, BookingSource, TenancyMode } from '../../lib/types.js'
 
 const MODES: Array<[TenancyMode, string]> = [
   ['long_term', 'Fixed-term lease'],

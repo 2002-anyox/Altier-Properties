@@ -2,7 +2,7 @@ import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { BarChart3, Table2 } from 'lucide-react'
 import clsx from 'clsx'
-import { EASE } from '../../lib/motion'
+import { EASE } from '../../lib/motion.js'
 
 /* Chart colours are CSS custom properties, so a theme switch repaints the
    marks with no JavaScript and no re-render. Both sets are validated

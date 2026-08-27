@@ -16,18 +16,18 @@ import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import { eq, sql } from 'drizzle-orm'
-import { connect, type Db } from './db/client.ts'
-import { properties, teamMembers } from './db/schema.ts'
-import { readPortfolio } from './db/read.ts'
-import { missingMigrations } from './db/applied.ts'
+import { connect, type Db } from './db/client.js'
+import { properties, teamMembers } from './db/schema.js'
+import { readPortfolio } from './db/read.js'
+import { missingMigrations } from './db/applied.js'
 import {
   Conflict, NotFound, addBooking, addClient, addMaintenance, addMember, addNote,
   addProperty, deleteBooking, deleteClient, deleteMember, deleteProperty,
   recordPayment, sendReminder, setMaintenanceStatus, setPropertyStatus,
   updateBooking, updateClient, updateMember, updateProperty, updateReminders,
-} from './mutations.ts'
-import type { Booking, Client, Invoice, Property, TeamMember } from '../src/lib/types.ts'
-import { can } from '../src/lib/rbac.ts'
+} from './mutations.js'
+import type { Booking, Client, Invoice, Property, TeamMember } from '../src/lib/types.js'
+import { can } from '../src/lib/rbac.js'
 import {
   Forbidden, LastWayIn, NotLinked, OAUTH_COOKIE, MIN_PASSWORD, SESSION_COOKIE, Unauthorized,
   attachMember, beginOauth, clearFailures, clearOauthCookie, clearSessionCookie,
@@ -35,8 +35,8 @@ import {
   hashPassword, identitiesFor, lockedFor, memberForIdentity, noAccountsYet, recordFailure,
   rejectPassword, requireMember, requirePermission, setOauthCookie, setPassword, setSessionCookie,
   unlinkIdentity, verifyPassword, type Authed,
-} from './auth.ts'
-import { SsoError, configuredProviders } from './oidc.ts'
+} from './auth.js'
+import { SsoError, configuredProviders } from './oidc.js'
 
 /** What the client is allowed to know about an account. Never the hash. */
 const publicMember = (m: { id: string; name: string; role: string; title: string; email: string; phone: string; since: string }) =>

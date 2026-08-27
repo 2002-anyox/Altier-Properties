@@ -1,4 +1,4 @@
-import type { Role } from './types'
+import type { Role } from './types.js'
 
 export const ROLES: Array<{ id: Role; label: string; blurb: string }> = [
   { id: 'owner', label: 'Owner', blurb: 'Full portfolio, finances and team access' },

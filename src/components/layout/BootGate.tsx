@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
-import { Wordmark } from './Wordmark'
+import { Wordmark } from './Wordmark.js'
 import { Button } from '../ui'
-import { useStore } from '../../lib/store'
-import { diagnose, type Diagnosis } from '../../lib/api'
-import SignIn from '../../pages/SignIn'
+import { useStore } from '../../lib/store.js'
+import { diagnose, type Diagnosis } from '../../lib/api.js'
+import SignIn from '../../pages/SignIn.js'
 
 /**
  * Shown when there should be an API and there is not.

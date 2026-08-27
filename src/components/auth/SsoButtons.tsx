@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { auth, type SsoProvider } from '../../lib/api'
+import { auth, type SsoProvider } from '../../lib/api.js'
 
 /**
  * The marks, drawn rather than fetched.

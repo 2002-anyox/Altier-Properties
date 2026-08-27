@@ -5,11 +5,11 @@ import {
   ArrowRight, Building2, CalendarRange, CreditCard, CornerDownLeft, LayoutDashboard,
   Search, Users, Wrench,
 } from 'lucide-react'
-import { useStore } from '../../lib/store'
-import { can } from '../../lib/rbac'
+import { useStore } from '../../lib/store.js'
+import { can } from '../../lib/rbac.js'
 import { cx, useEscape, useLockBody } from '../ui'
-import { popVariants, swift } from '../../lib/motion'
-import { money } from '../../lib/format'
+import { popVariants, swift } from '../../lib/motion.js'
+import { money } from '../../lib/format.js'
 
 interface Cmd {
   id: string

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { UserPlus } from 'lucide-react'
 import { Button, Checkbox, Field, Input, Modal, Select, Textarea } from '../ui'
-import { useStore } from '../../lib/store'
+import { useStore } from '../../lib/store.js'
 import {
   clientDraftFrom, editClient, emptyClientDraft, newClient, type ClientDraft,
-} from '../../lib/create'
-import type { Client, ClientKind } from '../../lib/types'
+} from '../../lib/create.js'
+import type { Client, ClientKind } from '../../lib/types.js'
 
 const KINDS: Array<[ClientKind, string]> = [
   ['tenant', 'Tenant'],

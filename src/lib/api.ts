@@ -18,8 +18,8 @@
 
 import {
   BOOKINGS, CLIENTS, DEFAULT_REMINDERS, INVOICES, MAINTENANCE, PROPERTIES, TEAM,
-} from './data'
-import type { Booking, Client, Invoice, Portfolio, Property, Role, TeamMember } from './types'
+} from './data.js'
+import type { Booking, Client, Invoice, Portfolio, Property, Role, TeamMember } from './types.js'
 
 export type DataSource = 'database' | 'demo' | 'unreachable'
 

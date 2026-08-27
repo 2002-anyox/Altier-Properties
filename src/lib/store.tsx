@@ -2,19 +2,19 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import {
   BOOKINGS, CLIENTS, DEFAULT_REMINDERS, INVOICES, MAINTENANCE, PROPERTIES, TEAM, TODAY,
   buildNotifications, dayOffset, iso,
-} from './data'
+} from './data.js'
 import {
   IS_DEMO_BUILD, api, auth, emptyPortfolio, initialPortfolio, isSignedOut, loadPortfolio,
   probeSession, type DataSource, type Identity, type SessionMember,
-} from './api'
-import { statusForBooking } from './create'
-import { REGIONS, currencyDef, setPresentation } from './money'
-import { setLanguage, type Language } from './strings'
-import { takeSsoError } from './sso'
+} from './api.js'
+import { statusForBooking } from './create.js'
+import { REGIONS, currencyDef, setPresentation } from './money.js'
+import { setLanguage, type Language } from './strings.js'
+import { takeSsoError } from './sso.js'
 import type {
   AppNotification, Booking, Client, Invoice, MaintenanceRequest, MaintenanceStatus,
   Portfolio, Property, PropertyStatus, ReminderSettings, Role, TeamMember,
-} from './types'
+} from './types.js'
 
 type Theme = 'light' | 'dark'
 

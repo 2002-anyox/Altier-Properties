@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react'
 import clsx from 'clsx'
-import type { PropertyType } from '../lib/types'
+import type { PropertyType } from '../lib/types.js'
 
 /* Photography stands in for the real thing with a deterministic
    architectural composition — self-contained SVG, no network, and it

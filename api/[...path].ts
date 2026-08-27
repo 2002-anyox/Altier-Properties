@@ -35,8 +35,8 @@ async function getApp(): Promise<Handler> {
     )
   }
   const [{ connect }, { createApp }] = await Promise.all([
-    import('../server/db/client.ts'),
-    import('../server/app.ts'),
+    import('../server/db/client.js'),
+    import('../server/app.js'),
   ])
   const { db, driver } = await connect()
   return createApp(db, driver) as unknown as Handler

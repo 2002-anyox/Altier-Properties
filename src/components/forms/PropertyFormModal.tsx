@@ -3,13 +3,13 @@ import { Building2 } from 'lucide-react'
 import {
   Button, Checkbox, Field, Input, Modal, PROPERTY_STATUS_META, Select, Textarea,
 } from '../ui'
-import { useStore } from '../../lib/store'
+import { useStore } from '../../lib/store.js'
 import {
   AMENITY_CHOICES, editProperty, emptyPropertyDraft, newProperty, propertyDraftFrom,
   type PropertyDraft,
-} from '../../lib/create'
-import { BASE_CURRENCY } from '../../lib/money'
-import type { Property, PropertyStatus, PropertyType, TenancyMode } from '../../lib/types'
+} from '../../lib/create.js'
+import { BASE_CURRENCY } from '../../lib/money.js'
+import type { Property, PropertyStatus, PropertyType, TenancyMode } from '../../lib/types.js'
 
 const TYPES: Array<[PropertyType, string]> = [
   ['apartment', 'Apartment'],

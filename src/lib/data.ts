@@ -1,9 +1,9 @@
-import { presentation } from './money'
+import { presentation } from './money.js'
 import type {
   AppNotification, Booking, BookingSource, Client, Invoice, MaintenanceRequest,
   Property, PropertyDocument, PropertyStatus, PropertyType, ReminderSettings,
   TeamMember, TenancyMode,
-} from './types'
+} from './types.js'
 
 /* ------------------------------------------------------------------ *
  * Deterministic PRNG — the demo portfolio must look identical on every

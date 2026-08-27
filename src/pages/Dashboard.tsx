@@ -5,16 +5,16 @@ import {
   ArrowRight, Banknote, BedDouble, Building2, CalendarCheck, CalendarClock, CircleDollarSign,
   DoorOpen, Plus, Sparkles, TriangleAlert, Users, Wrench,
 } from 'lucide-react'
-import { PageHeader } from '../components/layout/PageHeader'
-import { StatTile } from '../components/StatTile'
+import { PageHeader } from '../components/layout/PageHeader.js'
+import { StatTile } from '../components/StatTile.js'
 import { AreaTrendChart, ChartFrame, DonutChart, VIZ, VIZ_STATUS } from '../components/charts'
 import { Button, Card, CardHeader, Chip, EmptyState, Meter, PROPERTY_STATUS_META, StatusChip, cx, statusLabel } from '../components/ui'
-import { currentMember, useStore } from '../lib/store'
-import { can } from '../lib/rbac'
-import { TODAY, daysBetween, iso } from '../lib/data'
-import { money, pct, relativeDay, shortDate } from '../lib/format'
-import { ageingBuckets, computeKpis, occupancyMix, revenueSeries, upcomingAvailability } from '../lib/derive'
-import { listVariants } from '../lib/motion'
+import { currentMember, useStore } from '../lib/store.js'
+import { can } from '../lib/rbac.js'
+import { TODAY, daysBetween, iso } from '../lib/data.js'
+import { money, pct, relativeDay, shortDate } from '../lib/format.js'
+import { ageingBuckets, computeKpis, occupancyMix, revenueSeries, upcomingAvailability } from '../lib/derive.js'
+import { listVariants } from '../lib/motion.js'
 
 export default function Dashboard() {
   const { state } = useStore()

@@ -5,15 +5,15 @@ import {
   BellOff, BellRing, CalendarClock, CheckCheck, DoorOpen, FileWarning, Home, Inbox,
   Receipt, Settings2, TriangleAlert, Wrench,
 } from 'lucide-react'
-import { PageHeader } from '../components/layout/PageHeader'
+import { PageHeader } from '../components/layout/PageHeader.js'
 import {
   Button, Card, CardHeader, Chip, EmptyState, Field, Modal, SearchInput, SegmentedControl,
   Select, Toggle, cx,
 } from '../components/ui'
-import { useStore } from '../lib/store'
-import { relativeDay, shortDate } from '../lib/format'
-import { itemVariants, listVariants } from '../lib/motion'
-import type { AppNotification, NotificationKind, NotificationPriority } from '../lib/types'
+import { useStore } from '../lib/store.js'
+import { relativeDay, shortDate } from '../lib/format.js'
+import { itemVariants, listVariants } from '../lib/motion.js'
+import type { AppNotification, NotificationKind, NotificationPriority } from '../lib/types.js'
 
 const KIND_META: Record<NotificationKind, { label: string; icon: React.ReactNode }> = {
   payment_due: { label: 'Payment due', icon: <Receipt size={15} /> },

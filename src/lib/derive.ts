@@ -1,8 +1,8 @@
-import { TODAY, addDays, daysBetween, iso } from './data'
-import { presentation } from './money'
+import { TODAY, addDays, daysBetween, iso } from './data.js'
+import { presentation } from './money.js'
 import type {
   Booking, ChargeType, Client, Invoice, MaintenanceRequest, Property, PropertyStatus,
-} from './types'
+} from './types.js'
 
 /**
  * Cash collected is not all the same thing, and treating it as one number

@@ -8,12 +8,12 @@
  * ------------------------------------------------------------------ */
 
 import { and, eq, sql } from 'drizzle-orm'
-import type { Db } from './db/client.ts'
-import * as t from './db/schema.ts'
+import type { Db } from './db/client.js'
+import * as t from './db/schema.js'
 import type {
   Booking, Client, Invoice, MaintenancePriority, MaintenanceStatus, Property,
   PropertyStatus, ReminderSettings, TeamMember,
-} from '../src/lib/types.ts'
+} from '../src/lib/types.js'
 
 const today = () => new Date().toISOString().slice(0, 10)
 

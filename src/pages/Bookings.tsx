@@ -4,20 +4,20 @@ import { Link } from 'react-router-dom'
 import {
   CalendarPlus, ClipboardList, DoorOpen, Globe, Pencil, Search, Trash2, Users,
 } from 'lucide-react'
-import { PageHeader } from '../components/layout/PageHeader'
+import { PageHeader } from '../components/layout/PageHeader.js'
 import {
   Avatar, Button, Card, Chip, Drawer, EmptyState, SearchInput, SegmentedControl, Select, cx,
 } from '../components/ui'
-import { useStore } from '../lib/store'
-import { BookingFormModal } from '../components/forms/BookingFormModal'
-import { ConfirmDelete } from '../components/forms/ConfirmDelete'
-import { endBooking } from '../lib/create'
-import { can } from '../lib/rbac'
-import { TODAY, daysBetween, iso } from '../lib/data'
-import { mediumDate, money, relativeDay, shortDate } from '../lib/format'
-import { itemVariants, listVariants } from '../lib/motion'
-import { isOpenEnded } from '../lib/derive'
-import type { Booking, BookingSource, BookingStatus, TenancyMode } from '../lib/types'
+import { useStore } from '../lib/store.js'
+import { BookingFormModal } from '../components/forms/BookingFormModal.js'
+import { ConfirmDelete } from '../components/forms/ConfirmDelete.js'
+import { endBooking } from '../lib/create.js'
+import { can } from '../lib/rbac.js'
+import { TODAY, daysBetween, iso } from '../lib/data.js'
+import { mediumDate, money, relativeDay, shortDate } from '../lib/format.js'
+import { itemVariants, listVariants } from '../lib/motion.js'
+import { isOpenEnded } from '../lib/derive.js'
+import type { Booking, BookingSource, BookingStatus, TenancyMode } from '../lib/types.js'
 
 const SOURCE_LABEL: Record<BookingSource, string> = {
   direct: 'Direct', airbnb: 'Airbnb', booking_com: 'Booking.com', agency: 'Agency', corporate: 'Corporate',

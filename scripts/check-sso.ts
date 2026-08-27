@@ -18,15 +18,15 @@ import { createSign, createVerify, generateKeyPairSync, type KeyObject } from 'n
 import { eq } from 'drizzle-orm'
 import {
   SsoError, configuredProviders, exchangeCode, providerFor, verifyIdToken,
-} from '../server/oidc.ts'
+} from '../server/oidc.js'
 import {
   LastWayIn, NotLinked, beginOauth, completeOauth, identitiesFor, memberForIdentity,
   setPassword, unlinkIdentity,
-} from '../server/auth.ts'
-import { MEMORY, connect } from '../server/db/client.ts'
-import { init } from '../server/db/init.ts'
-import { addMember } from '../server/mutations.ts'
-import * as t from '../server/db/schema.ts'
+} from '../server/auth.js'
+import { MEMORY, connect } from '../server/db/client.js'
+import { init } from '../server/db/init.js'
+import { addMember } from '../server/mutations.js'
+import * as t from '../server/db/schema.js'
 
 /* Hermetic: this owns its database for the length of the run, and never
    touches whatever DATABASE_URL happens to point at. */

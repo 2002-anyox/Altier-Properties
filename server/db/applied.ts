@@ -12,8 +12,8 @@
  * ------------------------------------------------------------------ */
 
 import { sql } from 'drizzle-orm'
-import type { Db } from './client.ts'
-import { EXPECTED_MIGRATIONS } from './expected-migrations.ts'
+import type { Db } from './client.js'
+import { EXPECTED_MIGRATIONS } from './expected-migrations.js'
 
 /** The migrations this build expects that the database has not applied. */
 export async function missingMigrations(db: Db): Promise<string[]> {

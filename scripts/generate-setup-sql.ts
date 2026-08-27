@@ -16,7 +16,7 @@
 
 import { createHash } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
-import { DEFAULT_REMINDERS } from '../src/lib/data.ts'
+import { DEFAULT_REMINDERS } from '../src/lib/data.js'
 
 const DIR = 'server/db/migrations'
 const OUT = 'docs/setup.sql'

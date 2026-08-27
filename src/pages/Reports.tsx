@@ -2,21 +2,21 @@ import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { Download, FileBarChart, Percent, TrendingUp } from 'lucide-react'
-import { PageHeader } from '../components/layout/PageHeader'
+import { PageHeader } from '../components/layout/PageHeader.js'
 import { AreaTrendChart, BarList, ChartFrame, ColumnChart, DonutChart, VIZ } from '../components/charts'
 import {
   Button, Card, CardHeader, Meter, PROPERTY_STATUS_META, SegmentedControl, Select, cx, statusLabel,
 } from '../components/ui'
-import { useStore } from '../lib/store'
-import { money, num, pct } from '../lib/format'
-import { exportCsv } from '../lib/csv'
-import { amountIn } from '../lib/money'
-import type { TenancyMode } from '../lib/types'
+import { useStore } from '../lib/store.js'
+import { money, num, pct } from '../lib/format.js'
+import { exportCsv } from '../lib/csv.js'
+import { amountIn } from '../lib/money.js'
+import type { TenancyMode } from '../lib/types.js'
 import {
   ageingBuckets, chargeClass, computeKpis, deferredPortion, earnedInMonth, occupancyMix,
   propertyPerformance, revenueSeries,
-} from '../lib/derive'
-import { itemVariants, listVariants } from '../lib/motion'
+} from '../lib/derive.js'
+import { itemVariants, listVariants } from '../lib/motion.js'
 
 const MODEL_LABEL: Record<TenancyMode, string> = {
   long_term: 'Fixed lease', rental: 'Open rental', short_stay: 'Short stay',

@@ -86,6 +86,14 @@ jobs:
       - name: Setup SQL is current
         run: npm run db:sql -- --check
 
+      # Every other check bundles the API before running it, which hides the
+      # one thing the host does differently: it compiles each file on its own,
+      # so a relative import survives into the output exactly as written and
+      # Node resolves it with no extension guessing. This compiles that way
+      # and serves a request through the result.
+      - name: The API runs unbundled
+        run: npm run check:unbundled
+
       # A database can hold a schema and still be the wrong one: the
       # properties table has existed since the first migration, so one that
       # is missing a later one passes a naive health check and fails much
