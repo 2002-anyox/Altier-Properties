@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "build:single": "tsc -b --noCheck && vite build --mode single",
     "check:accounting": "esbuild scripts/check-accounting.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/check-accounting.mjs --log-level=warning && node node_modules/.cache/check-accounting.mjs",
+    "check:sso": "esbuild scripts/check-sso.ts --bundle --platform=node --format=esm --packages=external --outfile=node_modules/.cache/check-sso.mjs --log-level=warning && node node_modules/.cache/check-sso.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "npm run --silent db:build && node node_modules/.cache/db/migrate.mjs",
     "db:seed": "npm run --silent db:build && node node_modules/.cache/db/seed-cli.mjs",
@@ -20,10 +21,11 @@
     "db:check": "npm run --silent db:build && node node_modules/.cache/db/verify.mjs",
     "api:build": "esbuild server/serve.ts --bundle --platform=node --format=esm --packages=external --outfile=node_modules/.cache/db/api.mjs --log-level=warning",
     "api": "npm run --silent api:build && node node_modules/.cache/db/api.mjs",
-    "smoke:api": "npm run --silent api:build && node scripts/smoke-api.mjs"
+    "smoke:api": "npm run --silent db:seed && npm run --silent api:build && node scripts/smoke-api.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
@@ -36,6 +38,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.7",
+    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^26.3.0",

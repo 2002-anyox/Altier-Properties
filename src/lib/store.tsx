@@ -3,10 +3,14 @@ import {
   BOOKINGS, CLIENTS, DEFAULT_REMINDERS, INVOICES, MAINTENANCE, PROPERTIES, TEAM, TODAY,
   buildNotifications, dayOffset, iso,
 } from './data'
-import { api, demoPortfolio, loadPortfolio, type DataSource } from './api'
+import {
+  api, auth, demoPortfolio, isSignedOut, loadPortfolio, probeSession,
+  type DataSource, type Identity, type SessionMember,
+} from './api'
 import { statusForBooking } from './create'
 import { REGIONS, currencyDef, setPresentation } from './money'
 import { setLanguage, type Language } from './strings'
+import { takeSsoError } from './sso'
 import type {
   AppNotification, Booking, Client, Invoice, MaintenanceRequest, MaintenanceStatus,
   Portfolio, Property, PropertyStatus, ReminderSettings, Role, TeamMember,
@@ -32,6 +36,16 @@ interface State {
   /** Where the portfolio came from, and whether it has arrived yet. */
   source: DataSource
   hydrated: boolean
+  /**
+   * Who is signed in, when a server is enforcing it. Null with a live API
+   * means the login screen; null in demo mode means there is nobody to be.
+   */
+  member: SessionMember | null
+  /** True only before any account has a password — the first-run window. */
+  setupNeeded: boolean
+  /** The ways the signed-in account can be opened. */
+  hasPassword: boolean
+  identities: Identity[]
 }
 
 type Action =
@@ -55,7 +69,9 @@ type Action =
   | { type: 'delete-property'; id: string }
   | { type: 'delete-client'; id: string }
   | { type: 'delete-booking'; id: string }
-  | { type: 'add-member'; member: TeamMember }
+  /* The password rides along so the server can create the account and its
+     credentials together; the reducer ignores it and it is never stored. */
+  | { type: 'add-member'; member: TeamMember; password?: string }
   | { type: 'update-member'; member: TeamMember }
   | { type: 'delete-member'; id: string }
   | { type: 'add-note'; clientId: string; text: string }
@@ -65,6 +81,10 @@ type Action =
   | { type: 'set-language'; language: Language }
   /** Replaces the portfolio with the server's authoritative copy. */
   | { type: 'sync'; portfolio: Portfolio; source?: DataSource }
+  | { type: 'signed-in'; member: SessionMember }
+  | { type: 'signed-out' }
+  | { type: 'setup-needed'; needed: boolean }
+  | { type: 'account'; hasPassword: boolean; identities: Identity[] }
   | { type: 'reset' }
 
 /** Notifications are derived, never stored, so they are rebuilt on every load. */
@@ -87,6 +107,10 @@ const stateFrom = (p: Portfolio, source: DataSource, hydrated: boolean): State =
   language: 'en',
   source,
   hydrated,
+  member: null,
+  setupNeeded: false,
+  hasPassword: false,
+  identities: [],
 })
 
 const seed = (): State => stateFrom(demoPortfolio(), 'demo', false)
@@ -314,11 +338,33 @@ function reducer(state: State, action: Action): State {
         // Preferences belong to the person, not the portfolio.
         role: state.role,
         currentUserId: state.currentUserId,
+        member: state.member,
+        setupNeeded: state.setupNeeded,
         locale: state.locale,
         currency: state.currency,
         language: state.language,
       }
     }
+    /* Signing in decides the role: it is the account's, not a preference,
+       and the server enforces the same matrix regardless of what is set
+       here. The switcher that used to change it is gone. */
+    case 'signed-in':
+      return {
+        ...state,
+        member: action.member,
+        role: action.member.role,
+        currentUserId: action.member.id,
+        setupNeeded: false,
+      }
+    case 'signed-out':
+      return { ...state, member: null, identities: [], hasPassword: false }
+    case 'setup-needed':
+      return { ...state, setupNeeded: action.needed }
+    /* How this account can be opened: a password, a linked Google or
+       Apple account, or both. Settings needs it to know whether removing
+       one would leave nobody able to get in. */
+    case 'account':
+      return { ...state, hasPassword: action.hasPassword, identities: action.identities }
     case 'reset':
       return { ...seed(), hydrated: true, role: state.role, currentUserId: state.currentUserId,
                locale: state.locale, currency: state.currency, language: state.language }
@@ -344,6 +390,20 @@ interface Ctx {
   dismissToast: (id: number) => void
   paletteOpen: boolean
   setPaletteOpen: (v: boolean) => void
+  /** Throws with the server's reason on failure, for the form to show. */
+  signIn: (email: string, password: string) => Promise<void>
+  signOut: () => Promise<void>
+  /** First run only: give one of the seeded accounts a password. */
+  claimAccount: (memberId: string, password: string, token?: string) => Promise<void>
+  /** Re-reads which ways in the account has, after linking or unlinking. */
+  refreshAccount: () => Promise<void>
+  /**
+   * Why a Google or Apple sign-in did not work. It arrives as a page load
+   * rather than a reply, so it is read once here and held for whichever
+   * screen ends up drawn.
+   */
+  ssoError: string | null
+  clearSsoError: () => void
 }
 
 const StoreContext = createContext<Ctx | null>(null)
@@ -438,14 +498,83 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const dismissToast = useCallback((id: number) => setToasts((prev) => prev.filter((x) => x.id !== id)), [])
 
-  /* Load the portfolio once. Without an API this resolves to the bundled
-     demo data, so the published build works with no server at all. */
+  /* Taken from the URL on the first render, before anything can navigate
+     and lose it. Read once: a refresh should not re-raise it. */
+  const [ssoError, setSsoError] = useState<string | null>(() => takeSsoError())
+  const clearSsoError = useCallback(() => setSsoError(null), [])
+
+  /* Boot in two steps, because the answers are different. First: is there
+     a server, and does it know us? Only then load the portfolio — asking
+     for it while signed out would fall back to demo data and quietly show
+     someone sample figures instead of the login screen. */
   useEffect(() => {
     let cancelled = false
-    loadPortfolio().then(({ portfolio, source }) => {
-      if (!cancelled) dispatch({ type: 'sync', portfolio, source })
+    probeSession().then((session) => {
+      if (cancelled) return
+      if (session) {
+        if (session.member) dispatch({ type: 'signed-in', member: session.member })
+        dispatch({ type: 'setup-needed', needed: session.setupNeeded })
+        dispatch({
+          type: 'account',
+          hasPassword: !!session.hasPassword,
+          identities: session.identities ?? [],
+        })
+        if (!session.member) {
+          // Signed out: nothing to load, and the gate will ask for a password.
+          dispatch({ type: 'sync', portfolio: demoPortfolio(), source: 'database' })
+          return
+        }
+      }
+      loadPortfolio().then(({ portfolio, source }) => {
+        if (!cancelled) dispatch({ type: 'sync', portfolio, source })
+      })
     })
     return () => { cancelled = true }
+  }, [])
+
+  /* A link attempted from Settings fails back to the app, not to the
+     sign-in screen — so somebody already signed in needs to be told in
+     the way the rest of the app tells them things. */
+  useEffect(() => {
+    if (!ssoError || !state.member) return
+    toast({ title: 'That account was not linked', body: ssoError, tone: 'critical' })
+    setSsoError(null)
+  }, [ssoError, state.member, toast])
+
+  /* Signing in and out. Both reload the portfolio, because what a role may
+     see differs and the previous answer is not theirs. */
+  /* Which ways in this account has. Re-read rather than guessed, because
+     linking one happens through a full page navigation and comes back as
+     a fresh boot, not as a reply we could have merged. */
+  const refreshAccount = useCallback(async () => {
+    const session = await auth.me()
+    dispatch({
+      type: 'account',
+      hasPassword: !!session.hasPassword,
+      identities: session.identities ?? [],
+    })
+  }, [])
+
+  const signIn = useCallback(async (email: string, password: string) => {
+    const { member } = await auth.login(email, password)
+    dispatch({ type: 'signed-in', member })
+    const { portfolio } = await loadPortfolio()
+    dispatch({ type: 'sync', portfolio, source: 'database' })
+    await refreshAccount().catch(() => { /* cosmetic; the session is real */ })
+  }, [refreshAccount])
+
+  const claimAccount = useCallback(async (memberId: string, password: string, token?: string) => {
+    const { member } = await auth.setup(memberId, password, token)
+    dispatch({ type: 'signed-in', member })
+    const { portfolio } = await loadPortfolio()
+    dispatch({ type: 'sync', portfolio, source: 'database' })
+    await refreshAccount().catch(() => { /* cosmetic; the session is real */ })
+  }, [refreshAccount])
+
+  const signOut = useCallback(async () => {
+    await auth.logout().catch(() => { /* the cookie is going either way */ })
+    dispatch({ type: 'signed-out' })
+    dispatch({ type: 'sync', portfolio: demoPortfolio(), source: 'database' })
   }, [])
 
   /* Which actions have to reach the server, and how. Anything absent here
@@ -472,7 +601,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       case 'delete-property': return () => api.deleteProperty(action.id)
       case 'delete-client': return () => api.deleteClient(action.id)
       case 'delete-booking': return () => api.deleteBooking(action.id)
-      case 'add-member': return () => api.addMember(action.member)
+      case 'add-member': return () => api.addMember(action.member, action.password)
       case 'update-member': return () => api.updateMember(action.member)
       case 'delete-member': return () => api.deleteMember(action.id)
       case 'update-property': return () => api.updateProperty(action.property)
@@ -499,6 +628,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     call().then(
       (portfolio) => dispatch({ type: 'sync', portfolio }),
       (error: Error) => {
+        /* A session that ended mid-edit is not a failed save to apologise
+           for; it is a sign-in to ask for. Anything else is worth saying. */
+        if (isSignedOut(error)) {
+          dispatch({ type: 'signed-out' })
+          return
+        }
         toast({ title: 'Change not saved', body: error.message, tone: 'critical' })
         api.reload().then(
           (portfolio) => dispatch({ type: 'sync', portfolio }),
@@ -519,8 +654,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       dismissToast,
       paletteOpen,
       setPaletteOpen,
+      signIn,
+      signOut,
+      claimAccount,
+      refreshAccount,
+      ssoError,
+      clearSsoError,
     }),
-    [state, theme, toasts, toast, dismissToast, paletteOpen, dispatchWithSync],
+    [state, theme, toasts, toast, dismissToast, paletteOpen, dispatchWithSync, signIn, signOut,
+     claimAccount, refreshAccount, ssoError, clearSsoError],
   )
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

@@ -22,6 +22,7 @@ import { relations, sql } from 'drizzle-orm'
 
 /* ------------------------------- enums ----------------------------- */
 export const roleEnum = pgEnum('role', ['owner', 'manager', 'staff', 'accountant'])
+export const authProviderEnum = pgEnum('auth_provider', ['google', 'apple'])
 export const propertyStatusEnum = pgEnum('property_status', [
   'available', 'occupied', 'reserved', 'maintenance', 'inactive',
 ])
@@ -72,7 +73,92 @@ export const teamMembers = pgTable('team_members', {
   email: text('email').notNull().unique(),
   phone: text('phone').notNull(),
   since: date('since', { mode: 'string' }).notNull(),
-})
+
+  /* Credentials. Null until an account is given a password — a person can
+     exist on the team without being able to sign in, which is what every
+     seeded member is until someone sets one. */
+  passwordHash: text('password_hash'),
+  passwordSetAt: timestamp('password_set_at', { withTimezone: true }),
+  /* Throttling lives on the row rather than in memory, because a serverless
+     instance forgets between requests and an attacker would not. */
+  failedAttempts: integer('failed_attempts').notNull().default(0),
+  lockedUntil: timestamp('locked_until', { withTimezone: true }),
+}, (t) => [
+  index('team_members_email_idx').on(t.email),
+])
+
+/**
+ * Sessions.
+ *
+ * The row holds the SHA-256 of the token, never the token itself, so a
+ * copy of this table cannot be used to sign in as anybody. Deleting a
+ * team member cascades here, which is what makes removing someone an
+ * immediate revocation rather than a note for later.
+ */
+export const sessions = pgTable('sessions', {
+  tokenHash: text('token_hash').primaryKey(),
+  memberId: text('member_id').notNull().references(() => teamMembers.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  userAgent: text('user_agent'),
+}, (t) => [
+  index('sessions_member_idx').on(t.memberId),
+  index('sessions_expiry_idx').on(t.expiresAt),
+])
+
+/**
+ * Linked sign-in accounts.
+ *
+ * A Google or Apple account is a *way in* to a team member, never a team
+ * member itself: the subject is matched against a row that an owner
+ * already created. Nothing here can bring a new person into the
+ * portfolio, which is the property that makes public identity providers
+ * safe to accept at all.
+ *
+ * Keyed on (provider, subject) because that pair is what the provider
+ * promises is stable — an email address is not: people change theirs, and
+ * Apple hands out a different one per app if asked.
+ */
+export const identities = pgTable('identities', {
+  provider: authProviderEnum('provider').notNull(),
+  subject: text('subject').notNull(),
+  memberId: text('member_id').notNull().references(() => teamMembers.id, { onDelete: 'cascade' }),
+  /* Kept for display only — which address was used, so an owner can see
+     why a link exists. Never read back as a credential. */
+  email: text('email'),
+  linkedAt: timestamp('linked_at', { withTimezone: true }).notNull().defaultNow(),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+}, (t) => [
+  primaryKey({ columns: [t.provider, t.subject] }),
+  index('identities_member_idx').on(t.memberId),
+])
+
+/**
+ * In-flight sign-in attempts.
+ *
+ * The `state` parameter has to survive a round trip through a provider we
+ * do not control, so it cannot live in memory: a serverless instance that
+ * starts the flow is rarely the one that finishes it. Rows are single-use
+ * and short-lived, and the PKCE verifier never leaves this table.
+ */
+export const oauthStates = pgTable('oauth_states', {
+  /* The SHA-256 of the state parameter, not the parameter. A leaked copy
+     of this table cannot be replayed into a sign-in. */
+  stateHash: text('state_hash').primaryKey(),
+  provider: authProviderEnum('provider').notNull(),
+  /* PKCE. Null for a provider that does not take one. */
+  verifier: text('verifier'),
+  nonce: text('nonce').notNull(),
+  /* Ties the callback to the browser that began the flow, so a state
+     handed to somebody else cannot sign them in as the attacker. */
+  browserHash: text('browser_hash').notNull(),
+  redirectUri: text('redirect_uri').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+}, (t) => [
+  index('oauth_states_expiry_idx').on(t.expiresAt),
+])
 
 /* ---------------------------- properties --------------------------- */
 export const properties = pgTable('properties', {

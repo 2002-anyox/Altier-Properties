@@ -397,10 +397,17 @@ export async function deleteBooking(db: Db, id: string) {
 
 /* -------------------------------- team ----------------------------- */
 
-export async function addMember(db: Db, member: TeamMember) {
+/**
+ * Creates the member and, optionally, their credentials in one statement.
+ * Setting the password afterwards would race the creation — the client
+ * cannot know the row exists yet — and leave an account nobody can use.
+ */
+export async function addMember(db: Db, member: TeamMember, passwordHash?: string) {
   await db.insert(t.teamMembers).values({
     id: member.id, name: member.name, role: member.role, title: member.title,
     email: member.email, phone: member.phone, since: member.since,
+    passwordHash: passwordHash ?? null,
+    passwordSetAt: passwordHash ? new Date() : null,
   })
 }
 
