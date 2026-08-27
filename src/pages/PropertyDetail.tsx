@@ -5,21 +5,21 @@ import {
   Bath, BedDouble, CalendarRange, Check, Download, FileText, Maximize2, MapPin, Pencil,
   Receipt, Star, Trash2, TrendingUp, User, Wrench,
 } from 'lucide-react'
-import { PageHeader } from '../components/layout/PageHeader'
-import { PropertyImage } from '../components/PropertyImage'
+import { PageHeader } from '../components/layout/PageHeader.js'
+import { PropertyImage } from '../components/PropertyImage.js'
 import { ChartFrame, ColumnChart, VIZ } from '../components/charts'
 import {
   Avatar, Button, Card, CardHeader, Chip, EmptyState, InvoiceChip, MaintenanceChip, Meter,
   PROPERTY_STATUS_META, PriorityChip, Select, StatusChip, Tabs, cx, statusLabel,
 } from '../components/ui'
-import { useStore } from '../lib/store'
-import { PropertyFormModal } from '../components/forms/PropertyFormModal'
-import { ConfirmDelete } from '../components/forms/ConfirmDelete'
-import { can } from '../lib/rbac'
-import { TODAY, daysBetween, iso } from '../lib/data'
-import { mediumDate, money, relativeDay, shortDate } from '../lib/format'
-import { itemVariants, listVariants } from '../lib/motion'
-import type { PropertyStatus } from '../lib/types'
+import { useStore } from '../lib/store.js'
+import { PropertyFormModal } from '../components/forms/PropertyFormModal.js'
+import { ConfirmDelete } from '../components/forms/ConfirmDelete.js'
+import { can } from '../lib/rbac.js'
+import { TODAY, daysBetween, iso } from '../lib/data.js'
+import { mediumDate, money, relativeDay, shortDate } from '../lib/format.js'
+import { itemVariants, listVariants } from '../lib/motion.js'
+import type { PropertyStatus } from '../lib/types.js'
 
 type Tab = 'overview' | 'occupancy' | 'financials' | 'maintenance' | 'documents' | 'activity'
 

@@ -11,9 +11,9 @@
  * ------------------------------------------------------------------ */
 
 import { sql } from 'drizzle-orm'
-import { DEFAULT_REMINDERS } from '../../src/lib/data.ts'
-import type { Db } from './client.ts'
-import * as t from './schema.ts'
+import { DEFAULT_REMINDERS } from '../../src/lib/data.js'
+import type { Db } from './client.js'
+import * as t from './schema.js'
 
 export async function init(db: Db) {
   const existing = await db.select({ id: t.reminderSettings.id }).from(t.reminderSettings)

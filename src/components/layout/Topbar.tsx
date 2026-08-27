@@ -5,13 +5,13 @@ import {
   Bell, Check, ChevronDown, KeyRound, LogOut, Menu, Moon, Search, Sun, UserCog,
 } from 'lucide-react'
 import clsx from 'clsx'
-import { currentMember, useStore } from '../../lib/store'
-import { ROLES, roleLabel } from '../../lib/rbac'
-import { t } from '../../lib/strings'
+import { currentMember, useStore } from '../../lib/store.js'
+import { ROLES, roleLabel } from '../../lib/rbac.js'
+import { t } from '../../lib/strings.js'
 import { Avatar, Button, IconButton, cx } from '../ui'
-import { popVariants, spring } from '../../lib/motion'
-import { relativeDay } from '../../lib/format'
-import type { NotificationPriority } from '../../lib/types'
+import { popVariants, spring } from '../../lib/motion.js'
+import { relativeDay } from '../../lib/format.js'
+import type { NotificationPriority } from '../../lib/types.js'
 
 const PRIORITY_DOT: Record<NotificationPriority, string> = {
   critical: 'bg-status-critical',

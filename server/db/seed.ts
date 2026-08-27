@@ -12,9 +12,9 @@
 import { sql } from 'drizzle-orm'
 import {
   BOOKINGS, CLIENTS, DEFAULT_REMINDERS, INVOICES, MAINTENANCE, PROPERTIES, TEAM,
-} from '../../src/lib/data.ts'
-import { connect, type Db } from './client.ts'
-import * as t from './schema.ts'
+} from '../../src/lib/data.js'
+import { connect, type Db } from './client.js'
+import * as t from './schema.js'
 
 /** Postgres caps bound parameters per statement; insert in slices. */
 async function insertAll<T>(db: Db, table: any, rows: T[], chunk = 400) {

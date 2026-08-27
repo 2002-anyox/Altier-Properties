@@ -8,7 +8,7 @@
  * Run with `npm run api`.
  * ------------------------------------------------------------------ */
 
-import { buildApp } from './app.ts'
+import { buildApp } from './app.js'
 
 const PORT = Number(process.env.API_PORT ?? 5174)
 

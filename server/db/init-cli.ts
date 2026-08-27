@@ -1,6 +1,6 @@
 /* Runner for the empty-portfolio initialiser. `npm run db:init` */
-import { connect } from './client.ts'
-import { counts, init } from './init.ts'
+import { connect } from './client.js'
+import { counts, init } from './init.js'
 
 const { db, driver, migrate, close } = await connect()
 console.log(`initialising via ${driver}${driver === 'pglite' ? ' (no DATABASE_URL set)' : ''}`)

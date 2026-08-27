@@ -11,11 +11,11 @@
  * record is indistinguishable in shape from a seeded one.
  * ------------------------------------------------------------------ */
 
-import { AMENITY_POOL, COMMERCIAL_AMENITIES, TODAY, addDays, iso } from './data'
+import { AMENITY_POOL, COMMERCIAL_AMENITIES, TODAY, addDays, iso } from './data.js'
 import type {
   Booking, BookingSource, Client, ClientKind, Invoice, Property,
   PropertyStatus, PropertyType, Role, TeamMember, TenancyMode,
-} from './types'
+} from './types.js'
 
 const addMonths = (from: string, months: number) => {
   const d = new Date(`${from}T00:00:00`)

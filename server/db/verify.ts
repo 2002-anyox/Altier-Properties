@@ -10,13 +10,13 @@
  * ------------------------------------------------------------------ */
 
 import { sql } from 'drizzle-orm'
-import { INVOICES, TODAY, iso } from '../../src/lib/data.ts'
-import { chargeClass, deferredPortion, earnedInMonth } from '../../src/lib/derive.ts'
-import type { Invoice } from '../../src/lib/types.ts'
-import { MEMORY, connect } from './client.ts'
-import { readPortfolio } from './read.ts'
-import * as t from './schema.ts'
-import { seed } from './seed.ts'
+import { INVOICES, TODAY, iso } from '../../src/lib/data.js'
+import { chargeClass, deferredPortion, earnedInMonth } from '../../src/lib/derive.js'
+import type { Invoice } from '../../src/lib/types.js'
+import { MEMORY, connect } from './client.js'
+import { readPortfolio } from './read.js'
+import * as t from './schema.js'
+import { seed } from './seed.js'
 
 const fail: string[] = []
 const ok = (cond: boolean, msg: string) => { if (!cond) fail.push(msg) }
@@ -76,7 +76,7 @@ console.log(`recognition check: 12 months, worst difference ${money(worst)}`)
 const openEnded = rows.length && await db.select({ n: sql<number>`count(*)::int` })
   .from(t.bookings).where(sql`${t.bookings.endsOn} IS NULL`)
 const openEndedDb = Number(openEnded ? openEnded[0].n : 0)
-const openEndedMem = (await import('../../src/lib/data.ts')).BOOKINGS.filter((b) => b.end === null).length
+const openEndedMem = (await import('../../src/lib/data.js')).BOOKINGS.filter((b) => b.end === null).length
 ok(openEndedDb === openEndedMem,
    `open-ended rentals: ${openEndedDb} in database, ${openEndedMem} generated`)
 ok(openEndedDb > 0, 'no open-ended rentals survived the round trip')
@@ -151,7 +151,7 @@ console.log(`constraint check: 5 invalid rows offered, all refused`)
       would not fail any constraint — it would just quietly show the wrong
       thing on every page — so compare what comes back to what went in. */
 const portfolio = await readPortfolio(db)
-const data = await import('../../src/lib/data.ts')
+const data = await import('../../src/lib/data.js')
 
 /** Order is cosmetic for these, so compare them as sets. */
 const normalise = (value: unknown): unknown => {

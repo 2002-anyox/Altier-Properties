@@ -5,17 +5,17 @@ import {
   BadgeCheck, Building2, Download, FileText, Mail, MessageSquare, NotebookPen, Pencil,
   Phone, Receipt, Send, Star, Trash2, Users,
 } from 'lucide-react'
-import { PageHeader } from '../components/layout/PageHeader'
+import { PageHeader } from '../components/layout/PageHeader.js'
 import {
   Avatar, Button, Card, CardHeader, Chip, EmptyState, InvoiceChip, Meter, StatusChip, Tabs,
   Textarea, cx,
 } from '../components/ui'
-import { useStore } from '../lib/store'
-import { ClientFormModal } from '../components/forms/ClientFormModal'
-import { ConfirmDelete } from '../components/forms/ConfirmDelete'
-import { can } from '../lib/rbac'
-import { mediumDate, money, relativeDay, shortDate } from '../lib/format'
-import { itemVariants, listVariants } from '../lib/motion'
+import { useStore } from '../lib/store.js'
+import { ClientFormModal } from '../components/forms/ClientFormModal.js'
+import { ConfirmDelete } from '../components/forms/ConfirmDelete.js'
+import { can } from '../lib/rbac.js'
+import { mediumDate, money, relativeDay, shortDate } from '../lib/format.js'
+import { itemVariants, listVariants } from '../lib/motion.js'
 
 type Tab = 'overview' | 'agreements' | 'payments' | 'documents' | 'communications'
 

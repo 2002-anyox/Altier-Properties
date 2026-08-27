@@ -4,21 +4,21 @@ import { Link, useSearchParams } from 'react-router-dom'
 import {
   BellRing, CheckCircle2, Download, Receipt, Search, TriangleAlert, Wallet,
 } from 'lucide-react'
-import { PageHeader } from '../components/layout/PageHeader'
+import { PageHeader } from '../components/layout/PageHeader.js'
 import { BarList, ChartFrame, VIZ } from '../components/charts'
 import {
   Avatar, Button, Card, Chip, Drawer, EmptyState, INVOICE_STATUS_META, InvoiceChip, SearchInput,
   SegmentedControl, Select, cx,
 } from '../components/ui'
-import { useStore } from '../lib/store'
-import { can } from '../lib/rbac'
-import { TODAY, daysBetween, iso } from '../lib/data'
-import { mediumDate, money, num, relativeDay, shortDate } from '../lib/format'
-import { exportCsv } from '../lib/csv'
-import { amountIn } from '../lib/money'
-import { ageingBuckets, computeKpis } from '../lib/derive'
-import { itemVariants, listVariants } from '../lib/motion'
-import type { ChargeType, Invoice, InvoiceStatus } from '../lib/types'
+import { useStore } from '../lib/store.js'
+import { can } from '../lib/rbac.js'
+import { TODAY, daysBetween, iso } from '../lib/data.js'
+import { mediumDate, money, num, relativeDay, shortDate } from '../lib/format.js'
+import { exportCsv } from '../lib/csv.js'
+import { amountIn } from '../lib/money.js'
+import { ageingBuckets, computeKpis } from '../lib/derive.js'
+import { itemVariants, listVariants } from '../lib/motion.js'
+import type { ChargeType, Invoice, InvoiceStatus } from '../lib/types.js'
 
 export default function Payments() {
   const { state, dispatch, toast } = useStore()

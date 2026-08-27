@@ -5,8 +5,8 @@
  * silently — a charge recognised twice, or a deposit leaking into revenue,
  * looks like ordinary growth on a chart.
  */
-import { INVOICES, TODAY, iso } from '../src/lib/data'
-import { chargeClass, deferredPortion, earnedInMonth } from '../src/lib/derive'
+import { INVOICES, TODAY, iso } from '../src/lib/data.js'
+import { chargeClass, deferredPortion, earnedInMonth } from '../src/lib/derive.js'
 
 const fail: string[] = []
 const ok = (cond: boolean, msg: string) => { if (!cond) fail.push(msg) }

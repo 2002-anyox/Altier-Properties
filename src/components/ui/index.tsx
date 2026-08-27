@@ -2,9 +2,9 @@ import React, { useEffect, useId, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import clsx from 'clsx'
 import { Check, ChevronDown, Search, X } from 'lucide-react'
-import { drawerVariants, popVariants, spring, swift } from '../../lib/motion'
-import { t } from '../../lib/strings'
-import type { InvoiceStatus, MaintenancePriority, MaintenanceStatus, PropertyStatus } from '../../lib/types'
+import { drawerVariants, popVariants, spring, swift } from '../../lib/motion.js'
+import { t } from '../../lib/strings.js'
+import type { InvoiceStatus, MaintenancePriority, MaintenanceStatus, PropertyStatus } from '../../lib/types.js'
 
 export const cx = clsx
 

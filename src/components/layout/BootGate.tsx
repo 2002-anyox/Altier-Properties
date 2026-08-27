@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
-import { Wordmark } from './Wordmark'
+import { Wordmark } from './Wordmark.js'
 import { Button } from '../ui'
-import { useStore } from '../../lib/store'
-import { diagnose } from '../../lib/api'
-import SignIn from '../../pages/SignIn'
+import { useStore } from '../../lib/store.js'
+import { diagnose, type Diagnosis } from '../../lib/api.js'
+import SignIn from '../../pages/SignIn.js'
 
 /**
  * Shown when there should be an API and there is not.
@@ -15,8 +15,8 @@ import SignIn from '../../pages/SignIn'
  * records are somebody else's. So this says what failed and where to look.
  */
 function Unreachable() {
-  const [detail, setDetail] = useState<string | null>(null)
-  useEffect(() => { void diagnose().then((d) => setDetail(d.detail)) }, [])
+  const [found, setFound] = useState<Diagnosis | null>(null)
+  useEffect(() => { void diagnose().then(setFound) }, [])
 
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-surface px-5 py-10">
@@ -41,13 +41,19 @@ function Unreachable() {
           <h1 className="font-display text-[21px] font-semibold leading-tight text-ink">
             The portfolio could not be loaded
           </h1>
-          <p className="mt-2.5 text-[13px] leading-relaxed text-ink-secondary">
-            {detail ?? 'Checking what went wrong…'}
+          <p className="mt-2.5 break-words text-[13px] leading-relaxed text-ink-secondary">
+            {found?.detail ?? 'Checking what went wrong…'}
           </p>
+          {found?.remedy && (
+            <p className="mt-3 rounded-xl border border-line bg-surface-inset/60 px-3.5 py-3 text-[12.5px] leading-relaxed text-ink-secondary">
+              {found.remedy}
+            </p>
+          )}
           <p className="mt-4 text-[12.5px] leading-relaxed text-ink-muted">
             Nothing is shown rather than sample figures, so there is no chance of
-            reading numbers that belong to nobody. Check <code className="text-ink-secondary">/api/health</code>{' '}
-            for the server&rsquo;s own account of the problem.
+            reading numbers that belong to nobody.{' '}
+            <code className="text-ink-secondary">/api/health</code> has the server&rsquo;s
+            own account of the problem.
           </p>
           <Button
             variant="primary"

@@ -107,6 +107,7 @@ npm run preview    # serve the production build
 npm run typecheck  # TypeScript, no emit
 npm run check:accounting  # revenue-recognition invariants
 npm run check:sso         # identity-token verification, against forged tokens
+npm run check:unbundled   # the API resolves when compiled a file at a time
 ```
 
 That runs against the bundled demo portfolio, entirely in the browser. To run it against a real
@@ -269,6 +270,25 @@ Check it landed by opening `/api/health` on the deployed URL:
 A 500 naming `DATABASE_URL` means step 3 has not. And if Settings → Profile
 still says **Sample data**, the app never reached the API at all — the browser's
 network tab on `/api/portfolio` will say why.
+
+### Why relative imports carry a `.js` extension
+
+`import { connect } from './db/client.js'` points at a file called
+`client.ts`. That looks wrong and is not: the extension names the file the
+compiler *emits*, which is what Node resolves at runtime, and TypeScript
+follows it back to the source. It is the same convention `moduleResolution:
+nodenext` requires.
+
+It matters because the host compiles each file on its own rather than
+bundling them, so every relative import survives into the output exactly as
+written — and Node's ESM resolver does no extension guessing. Written
+`'./db/client.ts'` it looks for a `.ts` file that is no longer there;
+written `'./db/client'` it looks for a file with no extension at all. Both
+are `ERR_MODULE_NOT_FOUND`, and the deployment answers 500 to every request
+while every local check passes, because every local check bundles first.
+
+`npm run check:unbundled` compiles the way the host compiles and serves a
+request through the result, so this cannot come back.
 
 ### Why the API is one function
 

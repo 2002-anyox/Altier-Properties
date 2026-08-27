@@ -2,16 +2,16 @@ import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { Building, Mail, Phone, Plus, Search, Star, UserPlus, Users } from 'lucide-react'
-import { PageHeader } from '../components/layout/PageHeader'
+import { PageHeader } from '../components/layout/PageHeader.js'
 import {
   Avatar, Button, Card, Chip, EmptyState, SearchInput, SegmentedControl, Select, cx,
 } from '../components/ui'
-import { useStore } from '../lib/store'
-import { can } from '../lib/rbac'
-import { mediumDate, money } from '../lib/format'
-import { itemVariants, listVariants } from '../lib/motion'
-import { ClientFormModal } from '../components/forms/ClientFormModal'
-import type { Client, ClientKind } from '../lib/types'
+import { useStore } from '../lib/store.js'
+import { can } from '../lib/rbac.js'
+import { mediumDate, money } from '../lib/format.js'
+import { itemVariants, listVariants } from '../lib/motion.js'
+import { ClientFormModal } from '../components/forms/ClientFormModal.js'
+import type { Client, ClientKind } from '../lib/types.js'
 
 const KIND_LABEL: Record<ClientKind, string> = { tenant: 'Tenant', guest: 'Guest', corporate: 'Corporate', owner: 'Owner' }
 

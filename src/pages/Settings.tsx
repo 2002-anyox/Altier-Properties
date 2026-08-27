@@ -4,21 +4,21 @@ import {
   Check, Coins, Globe2, KeyRound, Link2, Moon, Palette, Pencil, RotateCcw, ShieldCheck, Sun,
   Trash2, Unlink, UserPlus, Users2,
 } from 'lucide-react'
-import { PageHeader } from '../components/layout/PageHeader'
+import { PageHeader } from '../components/layout/PageHeader.js'
 import {
   Avatar, Button, Card, CardHeader, Chip, Field, Input, Select, Tabs, Toggle, cx,
 } from '../components/ui'
-import { ReminderModal } from './Notifications'
-import { MemberFormModal } from '../components/forms/MemberFormModal'
-import { SsoButtons, useSsoProviders } from '../components/auth/SsoButtons'
-import { ConfirmDelete } from '../components/forms/ConfirmDelete'
-import { currentMember, useStore } from '../lib/store'
-import { auth } from '../lib/api'
-import { ROLES, can, roleLabel, type Permission } from '../lib/rbac'
-import { mediumDate, money, num } from '../lib/format'
-import { BASE_CURRENCY, CURRENCIES, REGIONS, currencyDef, regionDef } from '../lib/money'
-import { LANGUAGES, type Language } from '../lib/strings'
-import type { Role, TeamMember } from '../lib/types'
+import { ReminderModal } from './Notifications.js'
+import { MemberFormModal } from '../components/forms/MemberFormModal.js'
+import { SsoButtons, useSsoProviders } from '../components/auth/SsoButtons.js'
+import { ConfirmDelete } from '../components/forms/ConfirmDelete.js'
+import { currentMember, useStore } from '../lib/store.js'
+import { auth } from '../lib/api.js'
+import { ROLES, can, roleLabel, type Permission } from '../lib/rbac.js'
+import { mediumDate, money, num } from '../lib/format.js'
+import { BASE_CURRENCY, CURRENCIES, REGIONS, currencyDef, regionDef } from '../lib/money.js'
+import { LANGUAGES, type Language } from '../lib/strings.js'
+import type { Role, TeamMember } from '../lib/types.js'
 
 type Tab = 'profile' | 'localisation' | 'team' | 'roles' | 'reminders' | 'appearance'
 

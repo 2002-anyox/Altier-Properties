@@ -1,6 +1,6 @@
 /* Runner for the seeder. `npm run db:seed` */
-import { connect } from './client.ts'
-import { seed } from './seed.ts'
+import { connect } from './client.js'
+import { seed } from './seed.js'
 
 const { db, driver, migrate, close } = await connect()
 console.log(`seeding via ${driver}${driver === 'pglite' ? ' (no DATABASE_URL set)' : ''}`)

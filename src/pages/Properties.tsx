@@ -4,18 +4,18 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Bath, BedDouble, Building2, LayoutGrid, List, MapPin, Maximize2, Plus, Search, SlidersHorizontal, Star, X,
 } from 'lucide-react'
-import { PageHeader } from '../components/layout/PageHeader'
-import { PropertyImage } from '../components/PropertyImage'
+import { PageHeader } from '../components/layout/PageHeader.js'
+import { PropertyImage } from '../components/PropertyImage.js'
 import {
   Button, Card, Chip, EmptyState, PROPERTY_STATUS_META, SearchInput, SegmentedControl, Select,
   StatusChip, cx, statusLabel,
 } from '../components/ui'
-import { useStore } from '../lib/store'
-import { can } from '../lib/rbac'
-import { money } from '../lib/format'
-import { itemVariants, listVariants } from '../lib/motion'
-import { PropertyFormModal } from '../components/forms/PropertyFormModal'
-import type { Property, PropertyStatus, PropertyType, TenancyMode } from '../lib/types'
+import { useStore } from '../lib/store.js'
+import { can } from '../lib/rbac.js'
+import { money } from '../lib/format.js'
+import { itemVariants, listVariants } from '../lib/motion.js'
+import { PropertyFormModal } from '../components/forms/PropertyFormModal.js'
+import type { Property, PropertyStatus, PropertyType, TenancyMode } from '../lib/types.js'
 
 type View = 'grid' | 'list' | 'map'
 type SortKey = 'name' | 'price-desc' | 'price-asc' | 'yield' | 'status'

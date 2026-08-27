@@ -4,17 +4,17 @@ import { Link } from 'react-router-dom'
 import {
   CircleDollarSign, Columns3, LayoutList, Plus, Search, Timer, User, Wrench,
 } from 'lucide-react'
-import { PageHeader } from '../components/layout/PageHeader'
+import { PageHeader } from '../components/layout/PageHeader.js'
 import {
   Button, Card, Chip, Drawer, EmptyState, Field, Input, MAINTENANCE_STATUS_META, MaintenanceChip,
   Modal, PRIORITY_META, PriorityChip, SearchInput, SegmentedControl, Select, Textarea, cx,
 } from '../components/ui'
-import { useStore } from '../lib/store'
-import { can } from '../lib/rbac'
-import { TODAY, dayOffset, daysBetween, iso } from '../lib/data'
-import { mediumDate, money, relativeDay, shortDate } from '../lib/format'
-import { itemVariants, listVariants } from '../lib/motion'
-import type { MaintenancePriority, MaintenanceRequest, MaintenanceStatus } from '../lib/types'
+import { useStore } from '../lib/store.js'
+import { can } from '../lib/rbac.js'
+import { TODAY, dayOffset, daysBetween, iso } from '../lib/data.js'
+import { mediumDate, money, relativeDay, shortDate } from '../lib/format.js'
+import { itemVariants, listVariants } from '../lib/motion.js'
+import type { MaintenancePriority, MaintenanceRequest, MaintenanceStatus } from '../lib/types.js'
 
 const COLUMNS: MaintenanceStatus[] = ['reported', 'scheduled', 'in_progress', 'awaiting_parts', 'completed']
 

@@ -17,13 +17,13 @@ import {
 import { promisify } from 'node:util'
 import { and, eq, lt, sql } from 'drizzle-orm'
 import type { NextFunction, Request, Response } from 'express'
-import { can, type Permission } from '../src/lib/rbac.ts'
-import type { Role, TeamMember } from '../src/lib/types.ts'
-import type { Db } from './db/client.ts'
+import { can, type Permission } from '../src/lib/rbac.js'
+import type { Role, TeamMember } from '../src/lib/types.js'
+import type { Db } from './db/client.js'
 import {
   SsoError, authorizeUrl, exchangeCode, providerFor, verifyIdToken, type Claims,
-} from './oidc.ts'
-import * as t from './db/schema.ts'
+} from './oidc.js'
+import * as t from './db/schema.js'
 
 const scrypt = promisify(scryptCb) as (
   password: string, salt: Buffer, keylen: number,

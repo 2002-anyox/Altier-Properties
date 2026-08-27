@@ -1,5 +1,5 @@
-import { TODAY, daysBetween, iso } from './data'
-import { presentation } from './money'
+import { TODAY, daysBetween, iso } from './data.js'
+import { presentation } from './money.js'
 
 /**
  * Amounts are held in shillings and presented in the chosen currency.

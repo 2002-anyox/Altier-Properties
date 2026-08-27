@@ -8,12 +8,12 @@
  * ------------------------------------------------------------------ */
 
 import { asc } from 'drizzle-orm'
-import type { Db } from './client.ts'
-import * as t from './schema.ts'
+import type { Db } from './client.js'
+import * as t from './schema.js'
 import type {
   Booking, Client, Invoice, MaintenanceRequest, Portfolio, Property,
   PropertyDocument, ReminderSettings, TeamMember,
-} from '../../src/lib/types.ts'
+} from '../../src/lib/types.js'
 
 /** Postgres `time` comes back as HH:MM:SS; the domain uses HH:MM. */
 const hhmm = (v: string) => v.slice(0, 5)

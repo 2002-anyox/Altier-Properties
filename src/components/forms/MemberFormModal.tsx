@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { UserPlus } from 'lucide-react'
 import { Button, Field, Input, Modal, Select } from '../ui'
-import { useStore } from '../../lib/store'
-import { api } from '../../lib/api'
+import { useStore } from '../../lib/store.js'
+import { api } from '../../lib/api.js'
 import {
   editMember, emptyMemberDraft, memberDraftFrom, newMember, type MemberDraft,
-} from '../../lib/create'
-import { ROLES, roleLabel } from '../../lib/rbac'
-import type { Role, TeamMember } from '../../lib/types'
+} from '../../lib/create.js'
+import { ROLES, roleLabel } from '../../lib/rbac.js'
+import type { Role, TeamMember } from '../../lib/types.js'
 
 export function MemberFormModal({
   open, onClose, member,

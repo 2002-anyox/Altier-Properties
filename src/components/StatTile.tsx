@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { ArrowDownRight, ArrowUpRight } from 'lucide-react'
 import clsx from 'clsx'
 import { Sparkline } from './charts'
-import { itemVariants } from '../lib/motion'
+import { itemVariants } from '../lib/motion.js'
 import { useCountUp } from './ui'
 
 export function StatTile({

@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
-import { EASE } from '../../lib/motion'
+import { EASE } from '../../lib/motion.js'
 
 export function PageHeader({
   eyebrow, title, description, actions, breadcrumbs,

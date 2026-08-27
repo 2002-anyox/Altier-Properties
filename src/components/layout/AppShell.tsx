@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Outlet, useLocation } from 'react-router-dom'
-import { MobileSidebar, SidebarContent } from './Sidebar'
-import { Topbar } from './Topbar'
-import { CommandPalette } from './CommandPalette'
-import { useStore } from '../../lib/store'
+import { MobileSidebar, SidebarContent } from './Sidebar.js'
+import { Topbar } from './Topbar.js'
+import { CommandPalette } from './CommandPalette.js'
+import { useStore } from '../../lib/store.js'
 import { Toaster } from '../ui'
-import { t } from '../../lib/strings'
-import { pageVariants } from '../../lib/motion'
+import { t } from '../../lib/strings.js'
+import { pageVariants } from '../../lib/motion.js'
 
 export function AppShell() {
   const [navOpen, setNavOpen] = useState(false)

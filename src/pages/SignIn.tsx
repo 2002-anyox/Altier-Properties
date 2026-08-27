@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { KeyRound, LogIn, ShieldCheck } from 'lucide-react'
 import { Button, Field, Input } from '../components/ui'
-import { Wordmark } from '../components/layout/Wordmark'
-import { useStore } from '../lib/store'
-import { SsoButtons, useSsoProviders } from '../components/auth/SsoButtons'
+import { Wordmark } from '../components/layout/Wordmark.js'
+import { useStore } from '../lib/store.js'
+import { SsoButtons, useSsoProviders } from '../components/auth/SsoButtons.js'
 
 /**
  * The door. Two states: an ordinary sign-in, and — on a database where no
