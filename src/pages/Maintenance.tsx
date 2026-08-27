@@ -26,7 +26,7 @@ export default function Maintenance() {
   const [propertyId, setPropertyId] = useState('all')
   const [open, setOpen] = useState<MaintenanceRequest | null>(null)
   const [creating, setCreating] = useState(false)
-  const [draft, setDraft] = useState({ title: '', propertyId: state.properties[0]?.id ?? '', priority: 'medium' as MaintenancePriority, description: '', vendor: 'Kizza & Sons Contractors', dueOn: dayOffset(7) })
+  const [draft, setDraft] = useState({ title: '', propertyId: state.properties[0]?.id ?? '', priority: 'medium' as MaintenancePriority, description: '', vendor: '', dueOn: dayOffset(7) })
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -87,7 +87,7 @@ export default function Maintenance() {
       <PageHeader
         eyebrow="Operations"
         title="Maintenance"
-        description="Every job from report to sign-off — with priority, vendor, cost and a timeline you can hand to an owner."
+        description="Every job from report to sign-off, with priority, vendor, cost and a timeline you can hand to an owner."
         actions={
           <>
             <SegmentedControl
@@ -149,12 +149,25 @@ export default function Maintenance() {
 
       {rows.length === 0 ? (
         <Card>
-          <EmptyState
-            icon={<Search size={22} />}
-            title="No jobs match"
-            body="Nothing on the board matches this filter. Clear the priority or pick a different property."
-            action={<Button variant="secondary" onClick={() => { setQuery(''); setPriority('all'); setPropertyId('all') }}>Reset filters</Button>}
-          />
+          {state.maintenance.length === 0 ? (
+            <EmptyState
+              icon={<Wrench size={22} />}
+              title="Nothing to fix"
+              body={state.properties.length === 0
+                ? 'Jobs are raised against a property, so add one first.'
+                : 'No jobs have been raised. Anything reported here moves across the board as it is scheduled, worked and closed.'}
+              action={can(state.role, 'edit:maintenance') && state.properties.length > 0
+                ? <Button variant="primary" icon={<Plus size={15} />} onClick={() => setCreating(true)}>Raise a job</Button>
+                : undefined}
+            />
+          ) : (
+            <EmptyState
+              icon={<Search size={22} />}
+              title="No jobs match"
+              body="Nothing on the board matches this filter. Clear the priority or pick a different property."
+              action={<Button variant="secondary" onClick={() => { setQuery(''); setPriority('all'); setPropertyId('all') }}>Reset filters</Button>}
+            />
+          )}
         </Card>
       ) : view === 'board' ? (
         <div className="scroll-x -mx-4 px-4 pb-2 sm:-mx-6 sm:px-6">

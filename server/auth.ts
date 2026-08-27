@@ -266,12 +266,6 @@ export async function noAccountsYet(db: Db) {
   return (row?.n ?? 0) === 0
 }
 
-/** Members without a password, for the first-run picker. */
-export const claimableMembers = (db: Db) =>
-  db.select({ id: t.teamMembers.id, name: t.teamMembers.name, role: t.teamMembers.role, title: t.teamMembers.title })
-    .from(t.teamMembers)
-    .where(sql`${t.teamMembers.passwordHash} IS NULL`)
-
 export async function findByEmail(db: Db, email: string) {
   const rows = await db.select().from(t.teamMembers)
     .where(and(sql`lower(${t.teamMembers.email}) = ${email.trim().toLowerCase()}`))

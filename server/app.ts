@@ -11,6 +11,7 @@
  * `npm run api`) and a serverless function in production (api/index.ts).
  * ------------------------------------------------------------------ */
 
+import { randomUUID } from 'node:crypto'
 import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import express, { type NextFunction, type Request, type Response } from 'express'
@@ -28,7 +29,7 @@ import type { Booking, Client, Invoice, Property, TeamMember } from '../src/lib/
 import { can } from '../src/lib/rbac.ts'
 import {
   Forbidden, LastWayIn, NotLinked, OAUTH_COOKIE, MIN_PASSWORD, SESSION_COOKIE, Unauthorized,
-  attachMember, beginOauth, claimableMembers, clearFailures, clearOauthCookie, clearSessionCookie,
+  attachMember, beginOauth, clearFailures, clearOauthCookie, clearSessionCookie,
   completeOauth, createSession, destroyAllSessions, destroySession, equaliseTiming, findByEmail,
   hashPassword, identitiesFor, lockedFor, memberForIdentity, noAccountsYet, recordFailure,
   rejectPassword, requireMember, requirePermission, setOauthCookie, setPassword, setSessionCookie,
@@ -121,16 +122,14 @@ export function createApp(db: Db, driver: string) {
     })
   }))
 
-  /** The accounts a first-run claim may pick from. Closed once one exists. */
-  app.get('/api/auth/claimable', route(async (_req, res) => {
-    if (!await noAccountsYet(db)) throw new Forbidden('This portfolio is already set up.')
-    res.json({ members: await claimableMembers(db) })
-  }))
-
   /**
-   * First run only. Claims one of the seeded team members by giving it a
-   * password. The window closes the instant any account has one, so this
-   * cannot be used to mint a second way in later.
+   * First run only: creates the owner account.
+   *
+   * A production database arrives with no people in it at all, so this is
+   * the one route that can add one without already being signed in. The
+   * window closes the instant any account has a password, which makes it
+   * a bootstrap rather than a registration form — there is no second way
+   * to reach it and nothing to reopen it.
    */
   app.post('/api/auth/setup', route(async (req, res) => {
     if (!await noAccountsYet(db)) throw new Forbidden('This portfolio is already set up.')
@@ -142,14 +141,30 @@ export function createApp(db: Db, driver: string) {
       throw new Forbidden('That setup token is not right.')
     }
 
-    const memberId = String(req.body?.memberId ?? '')
+    const name = String(req.body?.name ?? '').trim()
+    const email = String(req.body?.email ?? '').trim()
     const password = String(req.body?.password ?? '')
-    const [member] = await db.select().from(teamMembers).where(eq(teamMembers.id, memberId))
-    if (!member) throw new BadRequest('Choose which account to claim.')
-    if (member.passwordHash) throw new Forbidden('That account already has a password.')
+    if (name.length < 2) throw new BadRequest('Give the account a name.')
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new BadRequest('That does not look like an email address.')
 
-    const problem = rejectPassword(password, member)
+    const problem = rejectPassword(password, { name, email })
     if (problem) throw new BadRequest(problem)
+
+    /* A database seeded with the sample portfolio for development already
+       has people in it, none of them with passwords. Take over the row if
+       the address matches rather than colliding with its unique index. */
+    const existing = await findByEmail(db, email)
+    const member: TeamMember = {
+      id: existing?.id ?? `tm-${randomUUID().slice(0, 8)}`,
+      name,
+      role: 'owner',
+      title: existing?.title || 'Owner',
+      email,
+      phone: existing?.phone ?? '',
+      since: existing?.since ?? new Date().toISOString().slice(0, 10),
+    }
+    if (existing) await updateMember(db, member.id, member)
+    else await addMember(db, member)
 
     await setPassword(db, member.id, password)
     const { token, expiresAt } = await createSession(db, member.id, req.get('user-agent'))

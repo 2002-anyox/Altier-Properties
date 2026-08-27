@@ -1,32 +1,27 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { KeyRound, LogIn, ShieldCheck } from 'lucide-react'
-import { Button, Field, Input, Select } from '../components/ui'
+import { Button, Field, Input } from '../components/ui'
 import { Wordmark } from '../components/layout/Wordmark'
 import { useStore } from '../lib/store'
-import { auth } from '../lib/api'
 import { SsoButtons, useSsoProviders } from '../components/auth/SsoButtons'
-import type { Role } from '../lib/types'
-
-interface Claimable { id: string; name: string; role: Role; title: string }
 
 /**
- * The door. Two states: an ordinary sign-in, and — only while no account
- * anywhere has a password — a first-run claim that turns one of the seeded
- * team members into a real account. That window closes permanently the
- * moment the first password exists, so it cannot mint a second way in.
+ * The door. Two states: an ordinary sign-in, and — on a database where no
+ * account has a password yet — creating the owner. That second state
+ * closes for good the moment the first password exists, so it is a
+ * bootstrap rather than a registration form.
  */
 export default function SignIn() {
-  const { state, signIn, claimAccount, ssoError, clearSsoError } = useStore()
+  const { state, signIn, createOwner, ssoError, clearSsoError } = useStore()
   const setup = state.setupNeeded
   const providers = useSsoProviders()
 
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [token, setToken] = useState('')
-  const [memberId, setMemberId] = useState('')
-  const [claimable, setClaimable] = useState<Claimable[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [leaving, setLeaving] = useState(false)
@@ -35,19 +30,10 @@ export default function SignIn() {
      already waiting rather than being raised by anything on this screen. */
   const shown = error ?? ssoError
 
-  useEffect(() => {
-    if (!setup) return
-    auth.claimable()
-      .then(({ members }) => {
-        setClaimable(members)
-        setMemberId((current) => current || members.find((m) => m.role === 'owner')?.id || members[0]?.id || '')
-      })
-      .catch(() => setClaimable([]))
-  }, [setup])
-
   const mismatch = setup && confirm.length > 0 && password !== confirm
+  const emailLooksRight = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
   const ready = setup
-    ? !!memberId && password.length >= 10 && password === confirm
+    ? name.trim().length > 1 && emailLooksRight && password.length >= 10 && password === confirm
     : email.trim().length > 0 && password.length > 0
 
   const submit = async (e: React.FormEvent) => {
@@ -57,8 +43,13 @@ export default function SignIn() {
     setError(null)
     clearSsoError()
     try {
-      if (setup) await claimAccount(memberId, password, token.trim() || undefined)
-      else await signIn(email, password)
+      if (setup) {
+        await createOwner({
+          name: name.trim(), email: email.trim(), password, token: token.trim() || undefined,
+        })
+      } else {
+        await signIn(email, password)
+      }
     } catch (err) {
       setError((err as Error).message)
       setPassword('')
@@ -84,35 +75,52 @@ export default function SignIn() {
 
         <div className="card card-pad">
           <h1 className="font-display text-[22px] font-semibold leading-tight text-ink">
-            {setup ? 'Set up Altier' : 'Sign in'}
+            {setup ? 'Create your account' : 'Sign in'}
           </h1>
           <p className="mt-2 text-[13px] leading-relaxed text-ink-secondary">
             {setup
-              ? 'Nobody can sign in yet. Claim your account by giving it a password — this only appears once.'
+              ? 'This portfolio is empty and nobody can sign in yet. The account you make here is the owner, and this page will not offer it again.'
               : 'This portfolio holds client records. Sign in to continue.'}
           </p>
 
           <form onSubmit={submit} className="mt-6 grid gap-4">
-            {setup ? (
+            {setup && (
+              <Field label="Your name" id="si-name">
+                <Input
+                  id="si-name" autoComplete="name" autoFocus
+                  value={name} onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Ronald Okello"
+                />
+              </Field>
+            )}
+
+            <Field
+              label="Email"
+              id="si-email"
+              hint={setup ? 'You sign in with this, and it is what a linked Google or Apple account is matched against.' : undefined}
+            >
+              <Input
+                id="si-email" type="email" autoComplete="username" autoFocus={!setup}
+                value={email} onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+            </Field>
+
+            <Field
+              label={setup ? 'Choose a password' : 'Password'}
+              id="si-password"
+              hint={setup ? 'At least 10 characters. Length beats punctuation.' : undefined}
+            >
+              <Input
+                id="si-password" type="password"
+                autoComplete={setup ? 'new-password' : 'current-password'}
+                value={password} onChange={(e) => setPassword(e.target.value)}
+              />
+            </Field>
+
+            {setup && (
               <>
-                <Field label="Which account is yours" id="si-member">
-                  <Select id="si-member" value={memberId} onChange={(e) => setMemberId(e.target.value)}>
-                    {claimable.map((m) => (
-                      <option key={m.id} value={m.id}>{m.name} — {m.title}</option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="Choose a password" id="si-password" hint="At least 10 characters. Length beats punctuation.">
-                  <Input
-                    id="si-password" type="password" autoComplete="new-password" autoFocus
-                    value={password} onChange={(e) => setPassword(e.target.value)}
-                  />
-                </Field>
-                <Field
-                  label="Confirm it"
-                  id="si-confirm"
-                  error={mismatch ? 'Those two do not match.' : undefined}
-                >
+                <Field label="Confirm it" id="si-confirm" error={mismatch ? 'Those two do not match.' : undefined}>
                   <Input
                     id="si-confirm" type="password" autoComplete="new-password"
                     value={confirm} onChange={(e) => setConfirm(e.target.value)}
@@ -120,22 +128,6 @@ export default function SignIn() {
                 </Field>
                 <Field label="Setup token" id="si-token" hint="Only if SETUP_TOKEN was set on the server. Leave blank otherwise.">
                   <Input id="si-token" value={token} onChange={(e) => setToken(e.target.value)} />
-                </Field>
-              </>
-            ) : (
-              <>
-                <Field label="Email" id="si-email">
-                  <Input
-                    id="si-email" type="email" autoComplete="username" autoFocus
-                    value={email} onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@altier.co.ug"
-                  />
-                </Field>
-                <Field label="Password" id="si-password">
-                  <Input
-                    id="si-password" type="password" autoComplete="current-password"
-                    value={password} onChange={(e) => setPassword(e.target.value)}
-                  />
                 </Field>
               </>
             )}
@@ -157,12 +149,12 @@ export default function SignIn() {
               icon={setup ? <KeyRound size={15} /> : <LogIn size={15} />}
               disabled={!ready || busy}
             >
-              {busy ? 'One moment…' : setup ? 'Claim account and sign in' : 'Sign in'}
+              {busy ? 'One moment…' : setup ? 'Create account and sign in' : 'Sign in'}
             </Button>
           </form>
 
-          {/* Only after the first account has a password: until then there
-              is nobody for a Google or Apple account to *be*. */}
+          {/* Only after the owner exists: until then there is nobody for a
+              Google or Apple account to be. */}
           {!setup && providers.length > 0 && (
             <>
               <div className="my-5 flex items-center gap-3" aria-hidden>
@@ -186,7 +178,7 @@ export default function SignIn() {
           <ShieldCheck size={14} className="mt-px shrink-0" aria-hidden />
           <span>
             {setup
-              ? 'Do this now, before sharing the address. Until an account has a password, anyone who finds this page can claim one.'
+              ? 'Do this now, before sharing the address. Until an account exists, whoever opens this page can make themselves the owner.'
               : 'Sessions last two weeks. Changing your password signs out every other device.'}
           </span>
         </p>

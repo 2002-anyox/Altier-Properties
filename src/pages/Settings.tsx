@@ -12,7 +12,7 @@ import { ReminderModal } from './Notifications'
 import { MemberFormModal } from '../components/forms/MemberFormModal'
 import { SsoButtons, useSsoProviders } from '../components/auth/SsoButtons'
 import { ConfirmDelete } from '../components/forms/ConfirmDelete'
-import { useStore } from '../lib/store'
+import { currentMember, useStore } from '../lib/store'
 import { auth } from '../lib/api'
 import { ROLES, can, roleLabel, type Permission } from '../lib/rbac'
 import { mediumDate, money, num } from '../lib/format'
@@ -45,7 +45,7 @@ export default function Settings() {
   const [unlinking, setUnlinking] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('profile')
   const [tuning, setTuning] = useState(false)
-  const me = state.team.find((t) => t.id === state.currentUserId) ?? state.team[0]
+  const me = currentMember(state)
   const live = state.source === 'database'
   const [memberOpen, setMemberOpen] = useState(false)
   const [member, setMember] = useState<TeamMember | undefined>()
@@ -266,7 +266,7 @@ export default function Settings() {
               <p className="mt-4 text-[12px] leading-relaxed text-ink-muted">
                 {live
                   ? 'Changes are written to the database and shared with everyone on this portfolio.'
-                  : 'No database is connected, so this is the bundled sample portfolio. Changes stay in this browser tab.'}
+                  : 'This is the single-file demo, which carries a sample portfolio and no server. Changes stay in this browser tab.'}
               </p>
               <Button
                 variant="secondary"
@@ -277,7 +277,7 @@ export default function Settings() {
                   dispatch({ type: 'reset' })
                   toast(live
                     ? { title: 'Reloaded', body: 'The portfolio has been re-read from the database.', tone: 'default' }
-                    : { title: 'Demo data reset', body: 'The sample portfolio has been restored to its original state.', tone: 'default' })
+                    : { title: 'Sample data reset', body: 'The demo portfolio is back to how it started.', tone: 'default' })
                 }}
               >
                 {live ? 'Reload from database' : 'Reset demo data'}
@@ -324,7 +324,7 @@ export default function Settings() {
                   </Select>
                 </Field>
 
-                <Field label="Interface language" id="set-language" hint="Sample data stays in the language it was entered.">
+                <Field label="Interface language" id="set-language" hint="Records you have already saved keep the language they were entered in.">
                   <Select
                     id="set-language"
                     value={state.language}
@@ -458,7 +458,7 @@ export default function Settings() {
               <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink"><ShieldCheck size={16} className="text-gold" /> Role-based access</h3>
               <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-ink-secondary">
                 {state.member
-                  ? 'Your role comes from your account, and the server enforces the same matrix it draws below — a permission you do not hold is refused there, not merely hidden here.'
+                  ? 'Your role comes from your account. The server enforces the same matrix it draws below, so a permission you do not hold is refused there and not simply hidden here.'
                   : 'Access is enforced across navigation, pages and actions. With no database behind it there is nobody to be signed in as, so you can try each role from the avatar menu.'}
               </p>
               {state.member ? (
@@ -622,7 +622,7 @@ export default function Settings() {
               <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink"><Users2 size={16} className="text-gold" /> Accessibility</h3>
               <ul className="mt-4 space-y-3 text-[13px] text-ink-secondary">
                 {[
-                  'Motion follows your system reduced-motion setting — animation never gates an action.',
+                  'Motion follows your system reduced-motion setting. Animation never gates an action.',
                   'Every chart carries a table view, a legend and direct labels; colour never carries meaning alone.',
                   'Keyboard: ⌘K or / opens the command palette, Esc closes any overlay, Tab reaches every control.',
                   'Focus rings are a single gold outline at 2px offset, visible on both themes.',

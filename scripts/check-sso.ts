@@ -25,6 +25,7 @@ import {
 } from '../server/auth.ts'
 import { MEMORY, connect } from '../server/db/client.ts'
 import { init } from '../server/db/init.ts'
+import { addMember } from '../server/mutations.ts'
 import * as t from '../server/db/schema.ts'
 
 /* Hermetic: this owns its database for the length of the run, and never
@@ -301,7 +302,20 @@ async function main() {
   await init(db)
 
   const REDIRECT = 'https://altier.example/api/auth/oauth/google/callback'
-  const [owner] = await db.select().from(t.teamMembers).where(eq(t.teamMembers.role, 'owner'))
+
+  /* An initialised database has nobody in it, exactly as a real one does,
+     so the people this section needs are created here rather than
+     borrowed from sample data that production never has. */
+  const owner = {
+    id: 'tm-sso-owner', name: 'Nakato Owner', role: 'owner' as const, title: 'Owner',
+    email: 'nakato@altier.co.ug', phone: '', since: '2026-01-01',
+  }
+  const colleague = {
+    id: 'tm-sso-staff', name: 'Brian Kizito', role: 'staff' as const, title: 'Caretaker',
+    email: 'brian.kizito@altier.co.ug', phone: '', since: '2026-01-01',
+  }
+  await addMember(db, owner)
+  await addMember(db, colleague)
 
   /** Walks the flow to the point where the provider would answer. */
   const signIn = async (over: Overrides['claims'] = {}) => {
@@ -352,10 +366,10 @@ async function main() {
   )
   check(
     'and no team member was created for them',
-    (await db.select().from(t.teamMembers)).length === 7,
+    (await db.select().from(t.teamMembers)).length === 2,
   )
 
-  const unconfirmed = await signIn({ sub: 'yet-another', email: 'brian.kizito@altier.co.ug', email_verified: false })
+  const unconfirmed = await signIn({ sub: 'yet-another', email: colleague.email, email_verified: false })
   await refuses(
     'an unverified address is refused even when it matches',
     completeOauth(db, 'google', unconfirmed.state, 'c', unconfirmed.browserSecret)

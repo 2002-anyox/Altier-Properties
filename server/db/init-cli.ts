@@ -9,10 +9,10 @@ await migrate()
 const { created } = await init(db)
 const held = await counts(db)
 console.log(created
-  ? 'empty portfolio ready — reminder settings and the team are in place'
+  ? 'empty portfolio ready — reminder settings are in place'
   : 'already initialised — nothing changed')
 for (const [name, n] of Object.entries(held)) console.log(`  ${name.padEnd(10)} ${String(n).padStart(5)}`)
 console.log(created && Object.values(held).every((n) => n === 0)
-  ? '\nAdd your first property from the Properties page.'
+  ? '\nOpen the app and create the first owner account.'
   : '')
 await close()

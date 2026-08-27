@@ -5,7 +5,7 @@ import {
   Bell, Check, ChevronDown, KeyRound, LogOut, Menu, Moon, Search, Sun, UserCog,
 } from 'lucide-react'
 import clsx from 'clsx'
-import { useStore } from '../../lib/store'
+import { currentMember, useStore } from '../../lib/store'
 import { ROLES, roleLabel } from '../../lib/rbac'
 import { t } from '../../lib/strings'
 import { Avatar, Button, IconButton, cx } from '../ui'
@@ -37,7 +37,7 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
   }, [bellOpen, roleOpen])
 
   const unread = useMemo(() => state.notifications.filter((n) => !n.read), [state.notifications])
-  const me = state.team.find((t) => t.id === state.currentUserId) ?? state.team[0]
+  const me = currentMember(state)
 
   return (
     <header className="glass sticky top-0 z-40 border-b border-line">

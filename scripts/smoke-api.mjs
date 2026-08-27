@@ -108,16 +108,27 @@ try {
   ok(/before using single sign-on/.test(tooEarly),
      `Google sign-in is refused while no account has a password yet (${tooEarly})`)
 
-  /* The run seeds first (see npm run smoke:api), so the team exists with no
-     passwords and the first-run window is open. Claim an account through it. */
+  /* Nobody has a password yet, so the first-run window is open. It creates
+     the owner rather than claiming a seeded one — a production database
+     arrives with no people in it at all. */
   const PASSWORD = 'smoke-test-password'
-  const claimable = (await get('/auth/claimable').then((r) => r.json())).members
-  const pick = claimable.find((m) => m.role === 'owner')
-  const claimed = await get('/auth/setup', jsonInit({ memberId: pick.id, password: PASSWORD }))
-  ok(claimed.status === 200, `first-run setup claims an account (got ${claimed.status})`)
+  const OWNER = { name: 'Smoke Owner', email: 'smoke-owner@example.com', password: PASSWORD }
 
-  const reclaim = await get('/auth/setup', jsonInit({ memberId: pick.id, password: 'another-password-x' }))
-  ok(reclaim.status === 403, `and the window shuts behind it (got ${reclaim.status})`)
+  const noName = await get('/auth/setup', jsonInit({ ...OWNER, name: '' }))
+  ok(noName.status === 400, `setup insists on a name (got ${noName.status})`)
+  const badEmail = await get('/auth/setup', jsonInit({ ...OWNER, email: 'not-an-email' }))
+  ok(badEmail.status === 400, `and on a real address (got ${badEmail.status})`)
+  const shortPassword = await get('/auth/setup', jsonInit({ ...OWNER, password: 'short' }))
+  ok(shortPassword.status === 400, `and on a long enough password (got ${shortPassword.status})`)
+
+  const created = await get('/auth/setup', jsonInit(OWNER))
+  ok(created.status === 200, `first-run setup creates the owner (got ${created.status})`)
+  const owner = (await created.json()).member
+  ok(owner.role === 'owner' && owner.email === OWNER.email,
+     `who is an owner with the address given (${owner.role}, ${owner.email})`)
+
+  const again = await get('/auth/setup', jsonInit({ ...OWNER, email: 'someone-else@example.com' }))
+  ok(again.status === 403, `and the window shuts behind it (got ${again.status})`)
 
   const ownerEmail = (await get('/auth/me').then((r) => r.json())).member.email
   const wrong = await get('/auth/login', jsonInit({ email: ownerEmail, password: 'not-it' }))

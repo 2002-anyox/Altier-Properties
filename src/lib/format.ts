@@ -21,7 +21,13 @@ export const money = (n: number, compact = false) => {
 export const num = (n: number, digits = 0) =>
   new Intl.NumberFormat(presentation.locale, { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(n)
 
-export const pct = (n: number, digits = 0) => `${num(n, digits)}%`
+/**
+ * A percentage, or an em dash when there is nothing to take a percentage
+ * of. A null here means the question has no answer — not that the answer
+ * is zero — and the two must not look the same on screen.
+ */
+export const pct = (n: number | null | undefined, digits = 0) =>
+  (n === null || n === undefined ? '—' : `${num(n, digits)}%`)
 
 export const shortDate = (d: string) =>
   new Date(d + 'T00:00:00').toLocaleDateString(presentation.locale, { day: 'numeric', month: 'short' })

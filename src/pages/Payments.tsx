@@ -13,7 +13,9 @@ import {
 import { useStore } from '../lib/store'
 import { can } from '../lib/rbac'
 import { TODAY, daysBetween, iso } from '../lib/data'
-import { mediumDate, money, relativeDay, shortDate } from '../lib/format'
+import { mediumDate, money, num, relativeDay, shortDate } from '../lib/format'
+import { exportCsv } from '../lib/csv'
+import { amountIn } from '../lib/money'
 import { ageingBuckets, computeKpis } from '../lib/derive'
 import { itemVariants, listVariants } from '../lib/motion'
 import type { ChargeType, Invoice, InvoiceStatus } from '../lib/types'
@@ -83,10 +85,17 @@ export default function Payments() {
     setOpenInvoice(null)
   }
 
-  const sendReminder = (inv: Invoice) => {
+  /* This records the reminder against the client's thread; it does not
+     send anything. Saying "emailed" when no mail server is configured
+     would have somebody waiting on a message that never went. */
+  const logReminder = (inv: Invoice) => {
     dispatch({ type: 'send-reminder', invoiceId: inv.id })
     const c = state.clients.find((x) => x.id === inv.clientId)
-    toast({ title: 'Reminder sent', body: `A payment reminder was emailed to ${c?.name}.`, tone: 'default' })
+    toast({
+      title: 'Reminder logged',
+      body: `Recorded on ${c?.name ?? 'the client'}'s file. Send it from your own mail or phone.`,
+      tone: 'default',
+    })
   }
 
   const openClient = openInvoice ? state.clients.find((c) => c.id === openInvoice.clientId) : undefined
@@ -97,8 +106,36 @@ export default function Payments() {
       <PageHeader
         eyebrow="Operations"
         title="Payments & invoices"
-        description="Rent, bookings, deposits and ancillary charges in one ledger — with what is paid, pending, overdue and still to come."
-        actions={<Button variant="secondary" icon={<Download size={15} />} onClick={() => toast({ title: 'Export queued', body: 'A CSV of the current filter would download here.' })}>Export</Button>}
+        description="Rent, bookings, deposits and ancillary charges in one ledger, showing what is paid, pending, overdue and still to come."
+        actions={
+          <Button
+            variant="secondary"
+            icon={<Download size={15} />}
+            disabled={rows.length === 0}
+            onClick={() => {
+              /* What is on screen, not the whole ledger: the filters are
+                 the point of the export. */
+              const n = exportCsv('altier-charges', rows, [
+                { header: 'Invoice', value: (i) => i.number },
+                { header: 'Status', value: (i) => i.status },
+                { header: 'Type', value: (i) => i.type },
+                { header: 'Client', value: (i) => state.clients.find((c) => c.id === i.clientId)?.name ?? '' },
+                { header: 'Property', value: (i) => state.properties.find((p) => p.id === i.propertyId)?.name ?? '' },
+                { header: 'Issued', value: (i) => i.issuedOn },
+                { header: 'Due', value: (i) => i.dueOn },
+                { header: `Amount (${state.currency})`, value: (i) => amountIn(i.amount) },
+                { header: `Paid (${state.currency})`, value: (i) => amountIn(i.paidAmount) },
+                { header: `Outstanding (${state.currency})`, value: (i) => amountIn(i.amount - i.paidAmount) },
+                { header: 'Method', value: (i) => i.method ?? '' },
+                { header: 'Paid on', value: (i) => i.paidOn ?? '' },
+                { header: 'Memo', value: (i) => i.memo },
+              ])
+              toast({ title: 'Export downloaded', body: `${num(n)} charges, as they are filtered here.`, tone: 'success' })
+            }}
+          >
+            Export
+          </Button>
+        }
       />
 
       <motion.div variants={listVariants} initial="initial" animate="animate" className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -134,6 +171,7 @@ export default function Payments() {
         <ChartFrame
           title="Overdue balance by age"
           subtitle="How long money has been outstanding"
+          empty={state.invoices.length === 0 ? 'Nothing is outstanding, because nothing has been billed yet.' : undefined}
           table={
             <table className="w-full text-left text-[12.5px]">
               <thead className="text-ink-muted"><tr className="border-b border-line"><th className="py-2 pr-4 font-medium">Bucket</th><th className="py-2 pr-4 text-right font-medium">Balance</th><th className="py-2 text-right font-medium">Invoices</th></tr></thead>
@@ -199,12 +237,23 @@ export default function Payments() {
 
       {rows.length === 0 ? (
         <Card>
-          <EmptyState
-            icon={<Search size={22} />}
-            title="No charges match"
-            body="Nothing in the ledger matches this combination. Clear the status filter or widen the charge type."
-            action={<Button variant="secondary" onClick={() => { setQuery(''); setType('all'); setStatus('all') }}>Reset filters</Button>}
-          />
+          {/* Charges are never typed in directly — they come from agreements,
+              so the way out of an empty ledger is to create one. */}
+          {state.invoices.length === 0 ? (
+            <EmptyState
+              icon={<Receipt size={22} />}
+              title="The ledger is empty"
+              body="Charges are raised by agreements: rent, deposits and advances appear here as soon as one exists."
+              action={<Link to="/bookings"><Button variant="secondary">Go to agreements</Button></Link>}
+            />
+          ) : (
+            <EmptyState
+              icon={<Search size={22} />}
+              title="No charges match"
+              body="Nothing in the ledger matches this combination. Clear the status filter or widen the charge type."
+              action={<Button variant="secondary" onClick={() => { setQuery(''); setType('all'); setStatus('all') }}>Reset filters</Button>}
+            />
+          )}
         </Card>
       ) : (
         <Card className="overflow-hidden">
@@ -253,8 +302,8 @@ export default function Payments() {
                       <td className="px-5 py-3 text-right sm:px-6" onClick={(e) => e.stopPropagation()}>
                         {can(state.role, 'edit:payments') && i.status !== 'paid' ? (
                           <span className="inline-flex gap-1">
-                            <Button size="sm" variant="ghost" onClick={() => sendReminder(i)} title="Send payment reminder">
-                              <BellRing size={14} /><span className="sr-only">Send reminder for {i.number}</span>
+                            <Button size="sm" variant="ghost" onClick={() => logReminder(i)} title="Log a payment reminder">
+                              <BellRing size={14} /><span className="sr-only">Log a reminder for {i.number}</span>
                             </Button>
                             <Button size="sm" variant="secondary" onClick={() => recordPayment(i)}>Record</Button>
                           </span>
@@ -270,7 +319,7 @@ export default function Payments() {
           </div>
           {rows.length > 60 && (
             <p className="border-t border-line px-5 py-3 text-[12px] text-ink-muted sm:px-6">
-              Showing the first 60 of {rows.length} matching charges — narrow the filters to see the rest.
+              Showing the first 60 of {rows.length} matching charges. Narrow the filters to see the rest.
             </p>
           )}
         </Card>
@@ -284,7 +333,7 @@ export default function Payments() {
         footer={
           openInvoice && can(state.role, 'edit:payments') && openInvoice.status !== 'paid' ? (
             <>
-              <Button variant="secondary" icon={<BellRing size={14} />} onClick={() => sendReminder(openInvoice)}>Send reminder</Button>
+              <Button variant="secondary" icon={<BellRing size={14} />} onClick={() => logReminder(openInvoice)}>Log a reminder</Button>
               <Button variant="primary" icon={<CheckCircle2 size={14} />} onClick={() => recordPayment(openInvoice)}>Record payment</Button>
             </>
           ) : (

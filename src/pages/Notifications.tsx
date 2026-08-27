@@ -80,7 +80,7 @@ export default function Notifications() {
       <PageHeader
         eyebrow="Operations"
         title="Notification centre"
-        description="Approaching due dates, overdue balances, lease expiries, arrivals, vacancy exposure and maintenance deadlines — everything that needs a decision, ranked."
+        description="Approaching due dates, overdue balances, lease expiries, arrivals, vacancy exposure and maintenance deadlines. Everything that needs a decision, ranked."
         actions={
           <>
             <Button variant="secondary" icon={<Settings2 size={15} />} onClick={() => setTuning(true)}>
@@ -149,13 +149,19 @@ export default function Notifications() {
         <Card>
           <EmptyState
             icon={<BellOff size={22} />}
-            title={unread === 0 && read === 'unread' ? 'You are all caught up' : 'Nothing matches'}
+            title={state.notifications.length === 0
+              ? 'Nothing needs your attention'
+              : unread === 0 && read === 'unread' ? 'You are all caught up' : 'Nothing matches'}
             body={
-              unread === 0 && read === 'unread'
-                ? 'Every reminder has been read. New alerts appear here as due dates approach and jobs fall behind.'
-                : 'No notifications match this combination of filters. Try widening the type or priority.'
+              state.notifications.length === 0
+                ? 'Every alert here is worked out from your own records: due dates approaching, rent lapsing, leases ending, jobs falling behind. Nothing is outstanding.'
+                : unread === 0 && read === 'unread'
+                  ? 'Every reminder has been read. New alerts appear here as due dates approach and jobs fall behind.'
+                  : 'No notifications match this combination of filters. Try widening the type or priority.'
             }
-            action={<Button variant="secondary" onClick={() => { setRead('all'); setPriority('all'); setKind('all'); setQuery('') }}>Show everything</Button>}
+            action={state.notifications.length === 0
+              ? undefined
+              : <Button variant="secondary" onClick={() => { setRead('all'); setPriority('all'); setKind('all'); setQuery('') }}>Show everything</Button>}
           />
         </Card>
       ) : (
