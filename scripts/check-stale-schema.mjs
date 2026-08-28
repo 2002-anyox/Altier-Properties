@@ -57,7 +57,7 @@ await client.query('INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_
   [hashOf(first.tag), first.when])
 await client.end()
 
-const build = spawn('npx', ['esbuild', 'api/[...path].ts', '--bundle', '--platform=node',
+const build = spawn('npx', ['esbuild', 'api/index.ts', '--bundle', '--platform=node',
   '--format=esm', '--packages=external', '--outfile=node_modules/.cache/vercel-fn.mjs',
   '--log-level=warning'], { stdio: 'inherit' })
 await new Promise((res, rej) => build.on('exit', (c) => (c === 0 ? res() : rej(new Error(`esbuild exited ${c}`)))))

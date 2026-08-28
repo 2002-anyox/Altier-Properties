@@ -26,7 +26,32 @@ export const MEMORY = 'memory://'
 
 export type Db = Awaited<ReturnType<typeof connect>>['db']
 
+/**
+ * A connection string as pasted, made usable.
+ *
+ * Hosting dashboards take the *value* of an environment variable, but the
+ * documentation everyone copies from shows a shell line:
+ *
+ *   DATABASE_URL="postgresql://…/postgres"
+ *
+ * Paste that whole line and the quotes are stored as part of the value,
+ * so the database name becomes `postgres"` and Postgres answers 3D000 —
+ * "database does not exist" — which reads like the database is missing
+ * rather than like a stray character. A URL can never begin or end with a
+ * quote, so stripping one is unambiguous, and the same paste often brings
+ * a `DATABASE_URL=` prefix and a trailing newline with it.
+ */
+export function tidyUrl(raw: string): string {
+  let url = raw.trim()
+  url = url.replace(/^(?:export\s+)?DATABASE_URL\s*=\s*/i, '')
+  /* Only a matched pair: an unpaired quote is a password character. */
+  const first = url[0]
+  if ((first === '"' || first === "'") && url.endsWith(first)) url = url.slice(1, -1)
+  return url.trim()
+}
+
 export async function connect(url = process.env.DATABASE_URL) {
+  url = url ? tidyUrl(url) : url
   if (url) {
     const { Pool } = await import('pg')
     /* A serverless instance handles one request at a time, so one connection
@@ -38,7 +63,10 @@ export async function connect(url = process.env.DATABASE_URL) {
       connectionString: url,
       max: serverless ? 1 : 10,
       idleTimeoutMillis: serverless ? 10_000 : 30_000,
-      connectionTimeoutMillis: 10_000,
+      /* Comfortably inside a serverless function's own limit, so a database
+         that will not answer produces a diagnosis rather than the platform
+         killing the invocation and answering with its own error page. */
+      connectionTimeoutMillis: serverless ? 6_000 : 10_000,
     })
     const db = drizzlePg(pool, { schema })
     return {
