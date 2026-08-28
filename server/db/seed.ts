@@ -1,9 +1,13 @@
 /* ------------------------------------------------------------------ *
  * Seeder
  *
- * Loads the demo portfolio into the database using the very generator the
- * app runs on, so the seeded data is exactly the portfolio the UI shows —
- * anchored to today, with due dates, arrivals and arrears all live.
+ * Loads the sample portfolio from scripts/fixture into a development
+ * database, so the checks have something with a year of agreements,
+ * charges and repairs in it to run against.
+ *
+ * Development only. Nothing here ships: the fixture lives outside src/
+ * precisely so that no build can reach it, and a real deployment starts
+ * with an empty database that its first owner fills in.
  *
  * Exported as a function with no side effects on import; the runner is
  * server/db/seed-cli.ts. Idempotent: it truncates first.
@@ -11,8 +15,9 @@
 
 import { sql } from 'drizzle-orm'
 import {
-  BOOKINGS, CLIENTS, DEFAULT_REMINDERS, INVOICES, MAINTENANCE, PROPERTIES, TEAM,
-} from '../../src/lib/data.js'
+  BOOKINGS, CLIENTS, INVOICES, MAINTENANCE, PROPERTIES, TEAM,
+} from '../../scripts/fixture/portfolio.js'
+import { DEFAULT_REMINDERS } from '../../src/lib/defaults.js'
 import { connect, type Db } from './client.js'
 import * as t from './schema.js'
 

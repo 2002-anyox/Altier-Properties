@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { viteSingleFile } from 'vite-plugin-singlefile'
 
 /* The dev server forwards /api to the Express process (npm run api), so the
    client can use same-origin paths and never needs a CORS round trip or a
@@ -8,8 +7,11 @@ import { viteSingleFile } from 'vite-plugin-singlefile'
    different backend. */
 const API_TARGET = process.env.VITE_API_TARGET ?? 'http://localhost:5174'
 
-export default defineConfig(({ mode }) => ({
-  plugins: [react(), ...(mode === 'single' ? [viteSingleFile()] : [])],
+/* One build, and it carries no records. Everything on screen comes from
+   the deployment's own database over /api; there is nothing bundled to
+   fall back to, by design. */
+export default defineConfig({
+  plugins: [react()],
   base: './',
   server: {
     proxy: {
@@ -17,7 +19,7 @@ export default defineConfig(({ mode }) => ({
     },
   },
   build: {
-    outDir: mode === 'single' ? 'dist-single' : 'dist',
+    outDir: 'dist',
     chunkSizeWarningLimit: 1600,
   },
-}))
+})

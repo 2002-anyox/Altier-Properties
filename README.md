@@ -110,8 +110,8 @@ npm run check:sso         # identity-token verification, against forged tokens
 npm run check:unbundled   # the API resolves when compiled a file at a time
 ```
 
-That runs against the bundled demo portfolio, entirely in the browser. To run it against a real
-database instead, seed one and start the API alongside the dev server:
+The dev server alone has nothing to show: the app holds no records of its own and asks the API for
+everything. Start one alongside it, against a database with something in it:
 
 ```bash
 npm run db:seed    # development only: sample records into Postgres (or PGlite)
@@ -119,10 +119,14 @@ npm run api        # http://localhost:5174
 npm run dev        # in a second terminal
 ```
 
-The dev server proxies `/api` to the API process, so nothing needs configuring. Settings → Profile
-says which of the two is in play — **Live database** or **Sample data** — and every change is
-written through. If the API is not running the app falls back to the bundled portfolio rather than
-failing, which is exactly how the published single-file build works.
+The dev server proxies `/api` to the API process, so nothing needs configuring. Every change is
+written through to the database. If the API is not running the app says so and stops — there is
+no bundled portfolio to fall back to.
+
+`npm run db:seed` loads a sample portfolio from `scripts/fixture/` into a **development** database
+so the checks have a year of agreements and charges to run against. It lives outside `src/` for a
+reason: nothing under `src/` may import it, so no build can reach it. `npm run check:nodata` greps
+the built bundle for the names in that fixture and fails if it finds one.
 
 ### How it fits together
 
@@ -270,19 +274,16 @@ refused. **[docs/SIGN-IN-WITH-GOOGLE-AND-APPLE.md](docs/SIGN-IN-WITH-GOOGLE-AND-
 has the console-by-console setup, including the fact that Apple needs a paid
 developer account.
 
-There is no sample data in a real deployment, and no fallback to any. If the
-API cannot be reached the app says so and stops, rather than quietly serving
-the bundled portfolio — a wrong connection string that shows twenty-four
-plausible properties is the kind of fault nobody thinks to check for. The one
-exception is the single-file build (`npm run build:single`), which has no
-server by design, carries its own sample portfolio, and keeps the role switcher
-as a way to see what each role reaches.
+The build carries no records at all, so there is nothing to fall back to even
+by accident. If the API cannot be reached the app says so and stops — a wrong
+connection string that shows twenty-four plausible properties is the kind of
+fault nobody thinks to check for. `npm run check:nodata` enforces it in CI by
+searching the built bundle for names that exist only in the test fixture.
 
 ## Deploying
 
-The published build works with no server at all — it falls back to the bundled
-portfolio and keeps every change in the browser tab. That is fine for a demo and
-useless for running a business, so a real deployment needs a database behind it.
+The build is the app and nothing else: it holds no records, so it needs a
+database behind it before it can show anybody anything.
 
 Three steps, once:
 
@@ -329,9 +330,9 @@ Check it landed by opening `/api/health` on the deployed URL:
 ```
 
 `"schema": "missing"` means step 2 has not been run against that database.
-A 500 naming `DATABASE_URL` means step 3 has not. And if Settings → Profile
-still says **Sample data**, the app never reached the API at all — the browser's
-network tab on `/api/portfolio` will say why.
+A 500 naming `DATABASE_URL` means step 3 has not. And if the app shows the
+"portfolio could not be loaded" screen instead of a sign-in, it never reached
+the API at all — the browser's network tab on `/api/portfolio` will say why.
 
 ### Pasting the connection string
 
@@ -428,10 +429,10 @@ smoke test and the production build on every pull request and on every push to `
 
 ## Database
 
-The app runs off the bundled generated portfolio unless an API is reachable. `server/db/` is the
-persistence layer beneath it: a Postgres schema, migrations, and a seeder that loads the demo
-portfolio using the very generator the UI runs on — so the seeded database holds exactly the data
-the interface shows, anchored to today.
+Everything on screen comes from Postgres. `server/db/` is that layer: the schema, the migrations,
+the reader that reassembles rows into the objects the pages work on, and a seeder that loads the
+`scripts/fixture/` portfolio into a development database so the checks have something to run
+against. The fixture is dated relative to today, so due dates, arrivals and arrears stay live.
 
 ```bash
 npm run db:generate   # regenerate migrations after changing the schema
@@ -477,11 +478,10 @@ Invariants the database enforces rather than trusting the application to maintai
 | `bookings_open_ended_is_rental` | only a rental may omit an end date |
 | `maintenance_completed_consistent` | a job is completed exactly when it has a completion date |
 
-Requires Node 18 or newer. There is no backend: the sample portfolio — 24 properties across Kampala,
-Wakiso and Entebbe, priced in Ugandan shillings — is generated deterministically at load and anchored
-to today's date, so due dates, arrivals and overdue balances are always live.
-Role and reminder preferences persist in `localStorage`; **Settings → Profile → Reset demo data**
-restores everything.
+Requires Node 20 or newer, and a database — the app carries no records of its own. Amounts are held
+in Ugandan shillings and converted at display time. Region, currency and language preferences persist
+in `localStorage`; **Settings → Profile → Reload from database** re-reads everything from the
+server.
 
 ## Stack
 

@@ -86,7 +86,7 @@ export function MemberFormModal({
           <Input
             id="mf-name" value={draft.name} autoFocus
             onChange={(e) => set('name', e.target.value)}
-            placeholder="e.g. Ronald Okello"
+            placeholder="Their full name"
           />
         </Field>
 
@@ -102,7 +102,7 @@ export function MemberFormModal({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Email" id="mf-email">
-            <Input id="mf-email" type="email" value={draft.email} onChange={(e) => set('email', e.target.value)} placeholder="name@altier.co.ug" />
+            <Input id="mf-email" type="email" value={draft.email} onChange={(e) => set('email', e.target.value)} placeholder="name@example.com" />
           </Field>
           <Field label="Direct line" id="mf-phone">
             <Input id="mf-phone" value={draft.phone} onChange={(e) => set('phone', e.target.value)} placeholder="+256 7…" />
@@ -139,9 +139,9 @@ export function MemberFormModal({
         )}
 
         <p className="rounded-xl border border-line bg-surface-inset/50 p-3 text-[12px] leading-relaxed text-ink-muted">
-          {live
-            ? 'The server enforces this role, not just the interface: a permission it does not hold is refused there too.'
-            : 'With no database behind it there is nobody to sign in as, so roles here only demonstrate what each one may reach.'}
+          The server enforces this role, not just the interface: a permission it does
+          not hold is refused there too, and the database narrows what their queries
+          return on top of that.
         </p>
       </div>
     </Modal>

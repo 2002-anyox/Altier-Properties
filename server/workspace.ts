@@ -15,7 +15,7 @@
 
 import { randomBytes, createHash, randomUUID } from 'node:crypto'
 import { and, eq, inArray, sql } from 'drizzle-orm'
-import { DEFAULT_REMINDERS } from '../src/lib/data.js'
+import { DEFAULT_REMINDERS } from '../src/lib/defaults.js'
 import type { Db } from './db/client.js'
 import * as t from './db/schema.js'
 import type { Role } from '../src/lib/types.js'

@@ -1,52 +1,28 @@
 /* ------------------------------------------------------------------ *
  * API client
  *
- * Three states, and the app says which one it is in rather than papering
+ * Two states, and the app says which one it is in rather than papering
  * over the difference:
  *
  *   database    — an API answered, so the portfolio is real and every
  *                 change is written back
  *   unreachable — there should be an API and there is not, which is a
  *                 fault to report, not a reason to invent records
- *   demo        — the single-file build, which has no server by design
- *                 and carries a sample portfolio inside it
  *
- * Only `--mode single` produces the demo. A normal build never falls back
- * to sample data: showing somebody twenty-four properties they do not own,
- * because a connection string was wrong, is worse than showing nothing.
+ * There is no third. This build carries no sample records of any kind, so
+ * there is nothing to fall back to even by accident: showing somebody
+ * twenty-four properties they do not own, because a connection string was
+ * wrong, is worse than showing nothing. What ships is the app; the
+ * records are whatever their own database holds.
  * ------------------------------------------------------------------ */
 
-import {
-  BOOKINGS, CLIENTS, DEFAULT_REMINDERS, INVOICES, MAINTENANCE, PROPERTIES, TEAM,
-} from './data.js'
+import { DEFAULT_REMINDERS } from './defaults.js'
 import type { Booking, Client, Invoice, Portfolio, Property, Role, TeamMember } from './types.js'
 
-export type DataSource = 'database' | 'demo' | 'unreachable'
+export type DataSource = 'database' | 'unreachable'
 
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api'
-const STANDALONE = import.meta.env.MODE === 'single'
 const PROBE_TIMEOUT_MS = 4000
-
-/** The sample portfolio, reachable only from the single-file build. */
-export const demoPortfolio = (): Portfolio => ({
-  properties: PROPERTIES,
-  clients: CLIENTS,
-  bookings: BOOKINGS,
-  invoices: INVOICES,
-  maintenance: MAINTENANCE,
-  team: TEAM,
-  reminders: DEFAULT_REMINDERS,
-})
-
-/** True only for the `--mode single` build, which ships its own portfolio. */
-export const IS_DEMO_BUILD = STANDALONE
-
-/**
- * What the app holds before anything has been fetched. Empty everywhere
- * except the single-file demo, which has no server to fetch from.
- */
-export const initialPortfolio = (): Portfolio =>
-  (STANDALONE ? demoPortfolio() : emptyPortfolio())
 
 /**
  * Nothing at all, which is what a new deployment holds and what the app
@@ -118,17 +94,15 @@ async function request(path: string, init?: RequestInit): Promise<Portfolio> {
   return body
 }
 
-/** Loads the portfolio, falling back to the bundled demo data. */
 /**
  * Is there an API here at all, and if so who are we.
  *
  * Kept separate from loading the portfolio because the answers differ: no
- * API means the bundled demo, while an API that refuses us means a login
- * screen. Treating the second as the first would silently show sample
- * data to someone who was simply signed out.
+ * API at all is a deployment fault, while an API that refuses us is
+ * simply somebody who needs to sign in, and the two need different
+ * screens.
  */
 export async function probeSession(): Promise<Session | null> {
-  if (STANDALONE) return null
   try {
     const res = await fetch(`${BASE}/auth/me`, {
       credentials: 'same-origin',
@@ -143,7 +117,6 @@ export async function probeSession(): Promise<Session | null> {
 }
 
 export async function loadPortfolio(): Promise<{ portfolio: Portfolio; source: DataSource }> {
-  if (STANDALONE) return { portfolio: demoPortfolio(), source: 'demo' }
   try {
     const res = await fetch(`${BASE}/portfolio`, {
       credentials: 'same-origin',

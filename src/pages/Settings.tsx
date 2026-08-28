@@ -243,14 +243,13 @@ export default function Settings() {
                   <dd>
                     {live
                       ? <Chip className="bg-[rgb(var(--c-status-good)/0.12)] text-[rgb(var(--c-status-good))]" dot="bg-status-good">Live database</Chip>
-                      : <Chip className="bg-surface-inset text-ink-secondary" dot="bg-ink-muted">Sample data</Chip>}
+                      : <Chip className="bg-[rgb(var(--c-status-critical)/0.12)] text-[rgb(var(--c-status-critical))]" dot="bg-status-critical">Not connected</Chip>}
                   </dd>
                 </div>
               </dl>
               <p className="mt-4 text-[12px] leading-relaxed text-ink-muted">
-                {live
-                  ? 'Changes are written to the database and shared with everyone on this portfolio.'
-                  : 'This is the single-file demo, which carries a sample portfolio and no server. Changes stay in this browser tab.'}
+                Changes are written to the database and shared with everyone on this
+                portfolio. Nothing on this screen is stored anywhere else.
               </p>
               <Button
                 variant="secondary"
@@ -259,12 +258,14 @@ export default function Settings() {
                 icon={<RotateCcw size={14} />}
                 onClick={() => {
                   dispatch({ type: 'reset' })
-                  toast(live
-                    ? { title: 'Reloaded', body: 'The portfolio has been re-read from the database.', tone: 'default' }
-                    : { title: 'Sample data reset', body: 'The demo portfolio is back to how it started.', tone: 'default' })
+                  toast({
+                    title: 'Reloaded',
+                    body: 'The portfolio has been re-read from the database.',
+                    tone: 'default',
+                  })
                 }}
               >
-                {live ? 'Reload from database' : 'Reset demo data'}
+                Reload from database
               </Button>
             </Card>
           </div>
@@ -368,7 +369,8 @@ export default function Settings() {
                 </div>
               </dl>
               <p className="mt-4 rounded-lg border border-gold/40 bg-gold-soft/40 p-3 text-[11.5px] leading-relaxed text-gold-ink">
-                These are indicative demo rates. A live deployment would read them from a rates provider and
+                These conversion rates are fixed in the build, not fetched. A deployment that
+                bills in more than one currency should read them from a rates provider and
                 stamp each invoice with the rate used when it was raised, so historic figures never drift.
               </p>
             </Card>

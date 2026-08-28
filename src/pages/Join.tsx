@@ -126,7 +126,7 @@ export default function Join({ token }: { token: string }) {
                       <Input
                         id="jn-name" autoComplete="name" autoFocus
                         value={name} onChange={(e) => setName(e.target.value)}
-                        placeholder="e.g. Aisha Namutebi"
+                        placeholder="Your full name"
                       />
                     </Field>
                     <Field

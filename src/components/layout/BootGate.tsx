@@ -80,8 +80,7 @@ export function BootGate({ children }: { children: React.ReactNode }) {
   /* A fault is reported, never papered over with sample data. */
   if (state.hydrated && state.source === 'unreachable') return <Unreachable />
 
-  /* A live API with nobody signed in is the door, not the dashboard. The
-     single-file demo has no server to sign in to, so this never applies. */
+  /* An API with nobody signed in is the door, not the dashboard. */
   if (state.hydrated && state.source === 'database' && !state.member) {
     /* Except for somebody arriving on an invitation link, who has no
        account yet and would find the sign-in form a dead end. Read off

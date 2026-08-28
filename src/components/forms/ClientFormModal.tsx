@@ -78,7 +78,7 @@ export function ClientFormModal({
           <Input
             id="cf-name" value={draft.name} autoFocus
             onChange={(e) => set('name', e.target.value)}
-            placeholder="e.g. Miriam Nakabugo"
+            placeholder="Their full name, or the company's"
           />
         </Field>
 

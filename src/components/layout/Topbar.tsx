@@ -137,8 +137,7 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
             </AnimatePresence>
           </div>
 
-          {/* Signed in: who you are, and the way out. Signed out (demo only):
-              the role switcher, which demonstrates the access model. */}
+          {/* Who you are, which workspace you are in, and the way out. */}
           <div className="relative">
             <button
               onClick={() => { setRoleOpen((v) => !v); setBellOpen(false) }}

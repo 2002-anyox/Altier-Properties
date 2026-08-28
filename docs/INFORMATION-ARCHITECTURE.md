@@ -101,9 +101,9 @@ in the survey surfaces it.
 display time; region controls date and number formatting; language controls the interface chrome.
 None of the three rewrites a stored figure.
 
-The demo portfolio is 24 properties across Kampala, Wakiso and Entebbe: prime lettings in Kololo and
-Nakasero, open-ended rentals in Ntinda, Najjera, Kansanga and Kira, short stays in Bugolobi, Muyenga
-and on the Entebbe lakeshore, and commercial space in Nakasero, on Kampala Road and at Namanve.
+The test fixture in `scripts/fixture/` is 24 invented properties across Kampala, Wakiso and Entebbe —
+prime lettings, open-ended rentals, short stays and commercial space — which is what the checks run
+against. It is not part of the build and never reaches a browser; a real deployment starts empty.
 
 **Property status** is a five-state system used consistently across every surface, always paired with
 a label so colour never carries the meaning alone:

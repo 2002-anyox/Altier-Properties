@@ -90,7 +90,7 @@ export function PropertyFormModal({
           <Input
             id="pf-name" value={draft.name} autoFocus
             onChange={(e) => set('name', e.target.value)}
-            placeholder="e.g. Kololo Terrace 4B"
+            placeholder="The name you call it by"
           />
         </Field>
 

@@ -1,10 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { TODAY, dayOffset, iso } from './dates.js'
+import { buildNotifications } from './notify.js'
 import {
-  BOOKINGS, CLIENTS, DEFAULT_REMINDERS, INVOICES, MAINTENANCE, PROPERTIES, TEAM, TODAY,
-  buildNotifications, dayOffset, iso,
-} from './data.js'
-import {
-  IS_DEMO_BUILD, api, auth, emptyPortfolio, initialPortfolio, isSignedOut, loadPortfolio,
+  api, auth, emptyPortfolio, isSignedOut, loadPortfolio,
   probeSession, workspace, type DataSource, type Identity, type Membership, type SessionMember,
 } from './api.js'
 import { statusForBooking } from './create.js'
@@ -38,7 +36,7 @@ interface State {
   hydrated: boolean
   /**
    * Who is signed in, when a server is enforcing it. Null with a live API
-   * means the login screen; null in demo mode means there is nobody to be.
+   * means the login screen.
    */
   member: SessionMember | null
   /** True only before any account has a password — the first-run window. */
@@ -150,8 +148,10 @@ export function currentMember(state: State): TeamMember {
   }
 }
 
-const seed = (): State =>
-  stateFrom(initialPortfolio(), IS_DEMO_BUILD ? 'demo' : 'database', false)
+/* Nothing until the server answers. There is no bundled portfolio to
+   start from, so the first frame is empty and the boot gate holds the app
+   behind it until the real one arrives. */
+const seed = (): State => stateFrom(emptyPortfolio(), 'database', false)
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -502,7 +502,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (parsed.language) base.language = parsed.language
       }
     } catch {
-      /* storage unavailable — the demo still runs */
+      /* storage unavailable — a preference is not worth failing over */
     }
     return base
   })
@@ -554,8 +554,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   /* Boot in two steps, because the answers are different. First: is there
      a server, and does it know us? Only then load the portfolio — asking
-     for it while signed out would fall back to demo data and quietly show
-     someone sample figures instead of the login screen. */
+     for it while signed out would answer with nothing and look like an
+     empty portfolio rather than a login screen. */
   useEffect(() => {
     let cancelled = false
     probeSession().then((session) => {
@@ -700,7 +700,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const dispatchWithSync = useCallback<React.Dispatch<Action>>((action) => {
     const live = stateRef.current.source === 'database'
     /* With a database behind it, "reset" means re-reading the server rather
-       than restoring the bundled demo, so the local reducer is skipped. */
+       than restoring anything local, so the reducer is skipped. */
     if (!(live && action.type === 'reset')) dispatch(action)
     if (!live) return
     const call = requestFor(action)

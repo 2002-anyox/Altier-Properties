@@ -131,3 +131,10 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # The sample portfolio used to live under src/, imported by the store,
+      # so every browser downloaded twenty-four properties belonging to
+      # nobody. It is a fixture outside src/ now, and this greps the built
+      # bundle for the names in it so that cannot come back unnoticed.
+      - name: Nothing invented ships
+        run: npm run check:nodata

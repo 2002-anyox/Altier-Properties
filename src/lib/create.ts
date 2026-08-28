@@ -11,7 +11,8 @@
  * record is indistinguishable in shape from a seeded one.
  * ------------------------------------------------------------------ */
 
-import { AMENITY_POOL, COMMERCIAL_AMENITIES, TODAY, addDays, iso } from './data.js'
+import { TODAY, addDays, iso } from './dates.js'
+import { AMENITY_POOL, COMMERCIAL_AMENITIES } from './defaults.js'
 import type {
   Booking, BookingSource, Client, ClientKind, Invoice, Property,
   PropertyStatus, PropertyType, Role, TeamMember, TenancyMode,
