@@ -2,25 +2,44 @@
  * Vercel entry point
  *
  * The same Express app the local process runs, mounted as a serverless
- * function. The catch-all filename is deliberate: Vercel routes every
- * /api/* path to this file natively, so no rewrite sits between the
- * request and the app to rewrite the path out from under it.
+ * function.
  *
- * The app and its connection pool are built once per warm instance and
- * reused, which is what keeps a request from opening a new Postgres
- * connection every time.
+ * Routing is declared in vercel.json rather than inferred from the
+ * filename. A catch-all name like `api/[...path].ts` reads as one, but
+ * the platform routed only single-segment paths to it: /api/health
+ * answered while /api/auth/me got a 404 that never reached this code. An
+ * explicit rewrite leaves nothing to infer.
+ *
+ * The rewrite also carries the original path as a query parameter,
+ * because whether a rewrite preserves the request URL is exactly the
+ * kind of platform detail that cost a day here. Carried, it is restored;
+ * absent — running locally, where no rewrite exists — the URL is already
+ * right and nothing is touched.
  *
  * Nothing is imported at module scope. An import that throws while the
  * module is loading cannot be caught by anything inside it, and the
- * platform answers with its own page — FUNCTION_INVOCATION_FAILED and
- * no further detail, which is the least diagnosable failure there is.
- * Loading the app inside the handler turns that into a reply that says
- * what went wrong.
+ * platform answers with its own page and no further detail.
  * ------------------------------------------------------------------ */
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void
+
+/** The parameter vercel.json uses to carry the path through the rewrite. */
+const CARRIED = '__altier_path'
+
+/** Puts the requested path back, whatever the rewrite did with it. */
+function restorePath(req: IncomingMessage) {
+  const [pathname, search = ''] = (req.url ?? '/').split('?')
+  const params = new URLSearchParams(search)
+  const carried = params.get(CARRIED)
+  if (carried === null) return
+  params.delete(CARRIED)
+  const query = params.toString()
+  /* The captured group excludes the /api prefix the source matched. */
+  req.url = `/api/${carried}${query ? `?${query}` : ''}`
+  void pathname
+}
 
 let pending: Promise<Handler> | null = null
 
@@ -44,6 +63,7 @@ async function getApp(): Promise<Handler> {
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {
+    restorePath(req)
     pending ??= getApp()
     const app = await pending
     app(req, res)

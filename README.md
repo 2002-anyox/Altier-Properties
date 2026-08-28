@@ -257,7 +257,7 @@ database at the first migration through it twice.
 
 **3. Set `DATABASE_URL` in the hosting project's environment variables** and
 redeploy. On Vercel that is Settings → Environment Variables; `vercel.json` and
-`api/[...path].ts` are already in the repository, so the API deploys with the
+`api/index.ts` are already in the repository, so the API deploys with the
 site.
 
 Check it landed by opening `/api/health` on the deployed URL:
@@ -312,6 +312,23 @@ putting its own "Failed query: …" on `message` and the real complaint on
 hides the cause — which is how a wrong password, an unreachable host and
 an absent table all came to look identical.
 
+### Why routing is declared, not inferred
+
+`api/index.ts` plus a rewrite in `vercel.json`, rather than a catch-all
+filename. `api/[...path].ts` reads as a catch-all and was not treated as
+one: `/api/health` reached the function while `/api/auth/me` got a 404
+from the platform that never touched this code. One path segment routed,
+two did not.
+
+The rewrite carries the original path as a parameter and the handler puts
+it back, because whether a rewrite preserves the request URL is a
+platform detail rather than a guarantee. Carried, it is restored;
+absent — running locally, where no rewrite exists — the URL is already
+right and nothing is touched.
+
+`npm run check:unbundled` dispatches through that rewrite and asserts
+paths one, two and three segments deep all arrive whole.
+
 ### Why relative imports carry a `.js` extension
 
 `import { connect } from './db/client.js'` points at a file called
@@ -333,7 +350,7 @@ request through the result, so this cannot come back.
 
 ### Why the API is one function
 
-`api/[...path].ts` mounts the same Express app the local process runs. The
+`api/index.ts` mounts the same Express app the local process runs. The
 catch-all filename is deliberate: Vercel routes every `/api/*` path to it
 natively, so no rewrite sits between the request and the app. The app also
 re-adds the `/api` prefix if the platform strips it, so it behaves the same

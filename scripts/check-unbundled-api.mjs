@@ -30,7 +30,7 @@ const run = (cmd, args) => new Promise((res, rej) => {
 /* One file in, one file out — no --bundle. Kept inside node_modules so
    package resolution works the way it does on the host. */
 console.log('compiling the API one file at a time, as the host does…')
-await run('npx', ['esbuild', 'api/[...path].ts', 'server/*.ts', 'server/db/*.ts', 'src/lib/*.ts',
+await run('npx', ['esbuild', 'api/index.ts', 'server/*.ts', 'server/db/*.ts', 'src/lib/*.ts',
   '--outdir=' + OUT, '--outbase=.', '--format=esm', '--platform=node', '--log-level=error'])
 
 let failed = false
@@ -41,7 +41,7 @@ const check = (label, ok, detail = '') => {
 
 let handler
 try {
-  handler = (await import(`../${OUT}/api/[...path].js`)).default
+  handler = (await import(`../${OUT}/api/index.js`)).default
 } catch (error) {
   check('the compiled entry loads', false, `${error.code}: ${error.message.split('\n')[0]}`)
   console.log('\nUNBUNDLED API CHECK FAILED\n')
@@ -49,7 +49,20 @@ try {
 }
 check('the compiled entry loads', true)
 
-const server = createServer((req, res) => handler(req, res))
+/**
+ * Dispatch the way vercel.json routes: every /api/* path is rewritten to
+ * the single function, carrying the original path as a parameter. Calling
+ * the handler directly would test a path production never takes.
+ */
+const CARRIED = '__altier_path'
+const server = createServer((req, res) => {
+  const match = /^\/api\/(.*)$/.exec(req.url ?? '')
+  if (match) {
+    const [path, query] = match[1].split('?')
+    req.url = `/api?${CARRIED}=${path}${query ? `&${query}` : ''}`
+  }
+  handler(req, res)
+})
 await new Promise((res) => server.listen(0, '127.0.0.1', res))
 const { port } = server.address()
 
@@ -63,6 +76,19 @@ try {
   check('and every import in it resolves', body.code !== 'ERR_MODULE_NOT_FOUND', body.error ?? '')
   check('so health answers for itself', typeof body.driver === 'string' || typeof body.schema === 'string',
     JSON.stringify(body).slice(0, 120))
+
+  /* The fault that took the deployment down for a day: one path segment
+     routed, two did not. Every depth has to arrive, and a 404 from the
+     platform's shape — an unrouted request — must never be one of them. */
+  for (const path of ['auth/me', 'auth/providers', 'team/tm-01/password']) {
+    const deep = await fetch(`http://127.0.0.1:${port}/api/${path}`)
+    const text = await deep.text()
+    /* A 404 is fine when the route takes another verb, but only if the app
+       saw the whole path: Express names it back. Accepting any 404 would
+       pass even with the path lost, which is the failure being tested. */
+    const arrived = deep.status !== 404 || text.includes(`/api/${path}`)
+    check(`/api/${path} arrives whole (${deep.status})`, arrived, text.slice(0, 90))
+  }
 } finally {
   server.close()
 }
