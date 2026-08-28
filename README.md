@@ -146,6 +146,12 @@ guessing. Every mutation endpoint answers with the refreshed portfolio for that 
 | `POST /api/clients` | add a client |
 | `POST /api/bookings` | open an agreement, with its opening charges |
 | `PUT /api/settings/reminders` | change reminder timing |
+| `GET /api/workspace` | the plan, the seats it covers, how many are spent, and who is still to accept |
+| `POST /api/workspace/invitations` | invite somebody; 402 with the seat figures when the plan is full |
+| `DELETE /api/workspace/invitations/:id` | withdraw one, giving the seat back |
+| `POST /api/clients/:id/portal` | open a tenant's portal login |
+| `DELETE /api/clients/:id/portal` | close it again |
+| `GET /api/admin/organizations` | every workspace and its size — Altier's own support staff only |
 
 Plus the ones outside the gate: `GET /api/auth/me`, `POST /api/auth/login`,
 `POST /api/auth/logout`, and `GET /api/auth/claimable` + `POST /api/auth/setup`
@@ -165,9 +171,38 @@ owner. That window shuts permanently the moment any account has a password.
 do, whoever opens the page first becomes the owner. Set `SETUP_TOKEN` in the
 environment if you would rather the first account also need a secret.
 
-Afterwards, an owner adds people from Settings → Team and sets their initial
-password there. Tell them out of band, and ask them to change it from Settings →
-Profile; changing a password signs out every other device.
+Afterwards, an owner works from **Team & access**. Two ways in:
+
+- **Invite** them, which is the usual one. They get a link, choose their own
+  password, and the seat is held from the moment the invitation goes out until
+  they accept or it is withdrawn. Altier has no mail server, so the link is
+  handed back to you to pass on rather than claimed to have been sent.
+- **Add directly**, for somebody with no email you can reach — you set their
+  first password and tell them out of band. Refused if the address already has
+  an Altier account, because attaching a stranger's login to your workspace
+  would hand you a password reset for an account that may open somebody else's
+  books.
+
+Either way a manager or staff member needs properties assigned, or they sign in
+to an empty portfolio: those assignments are what the database reads to decide
+what their queries return. Owners and accountants see the whole workspace and
+have none.
+
+Renters are separate, on **Tenants & guests**. A portal login there opens one
+person's own agreement, charges and documents, and on every plan but a
+specially configured one it costs no seat.
+
+| Plan | Seats |
+|---|---|
+| Starter | 3 |
+| Professional | 10 |
+| Enterprise | unlimited |
+
+The limit is stored on the workspace's subscription rather than read from that
+table, so a number agreed with one customer survives a change to the published
+plans. Pending invitations count against it. Running out answers 402 — the
+request was fine, the subscription is what is in the way — and the interface
+shows what the next plan gives rather than an error.
 
 | | |
 |---|---|
