@@ -21,6 +21,7 @@ const plusMonths = (from, n) => {
   return d.toISOString().slice(0, 10)
 }
 const BASE = `http://127.0.0.1:${PORT}/api`
+const TENANT_PASSWORD = 'a-tenant-portal-password'
 const fail = []
 const ok = (cond, msg) => { console.log(`  ${cond ? 'ok  ' : 'FAIL'}  ${msg}`); if (!cond) fail.push(msg) }
 
@@ -419,19 +420,70 @@ try {
     .then((r) => r.json())
   ok(givenBack.seats.remaining === 1, 'withdrawing one gives the seat back')
 
-  /* A tenant's portal login is not a paid seat. */
+  /* A tenant's portal login: free, and narrow. This walks it end to end,
+     because the two ways it has broken were both invisible from the
+     owner's side — a policy that handed a renter the other renters'
+     charges, and one that closed a settings row the reader insisted on
+     and answered the whole portfolio with a 500. */
   const tenantOf = stillThere.clients.find((c) => c.email && c.kind === 'tenant')
   if (tenantOf) {
     const before = await get('/workspace').then((r) => r.json())
-    const portal = await get(`/clients/${tenantOf.id}/portal`, json({}))
+    const portal = await get(`/clients/${tenantOf.id}/portal`, json({ password: TENANT_PASSWORD }))
     ok(portal.status === 200, `portal access opens for a tenant (got ${portal.status})`)
     const after = await get('/workspace').then((r) => r.json())
     ok(after.seats.used === before.seats.used,
        `and costs no seat (${before.seats.used} before, ${after.seats.used} after)`)
     ok(after.seats.tenants === before.seats.tenants + 1,
        `though it is counted as a portal login (${after.seats.tenants})`)
+
+    /* What the owner can see of this tenant, to measure the portal against. */
+    const ownerView = await get('/portfolio').then((r) => r.json())
+    const theirBookings = ownerView.bookings.filter((b) => b.clientId === tenantOf.id).length
+    const theirInvoices = ownerView.invoices.filter((i) => i.clientId === tenantOf.id).length
+
+    const ownerHere = cookie
+    cookie = ''
+    const asTenant = await get('/auth/login', jsonInit({
+      email: tenantOf.email, password: TENANT_PASSWORD,
+    }))
+    ok(asTenant.status === 200, `the tenant can sign in (got ${asTenant.status})`)
+    ok((await asTenant.json()).member?.role === 'tenant', 'as a tenant, not as staff')
+
+    const theirs = await get('/portfolio')
+    ok(theirs.status === 200, `and their portfolio loads (got ${theirs.status})`)
+    const portalView = await theirs.json()
+    ok(portalView.bookings.length === theirBookings,
+       `holding their agreements and no one else's (${portalView.bookings.length} of ${ownerView.bookings.length})`)
+    ok(portalView.invoices.length === theirInvoices,
+       `and their charges (${portalView.invoices.length} of ${ownerView.invoices.length})`)
+    ok(portalView.bookings.every((b) => b.clientId === tenantOf.id)
+       && portalView.invoices.every((i) => i.clientId === tenantOf.id),
+       'every row of it with their name on')
+    ok(portalView.team.length === 0 && portalView.maintenance.length === 0,
+       `and neither the staff list nor the repair board (${portalView.team.length} staff, ${portalView.maintenance.length} jobs)`)
+
+    const peek = await get('/workspace')
+    ok(peek.status === 403, `a tenant cannot open Team & access (got ${peek.status})`)
+    const meddle = await get('/team', jsonInit({
+      id: 'om-evil', name: 'Mallory', role: 'owner', title: 'x',
+      email: 'mallory@example.com', phone: 'x', since: today,
+    }))
+    ok(meddle.status === 403, `nor add themselves to the team (got ${meddle.status})`)
+
+    cookie = ownerHere
     const closed = await get(`/clients/${tenantOf.id}/portal`, { method: 'DELETE' })
-    ok(closed.status === 200, `and it can be closed again (got ${closed.status})`)
+    ok(closed.status === 200, `and the owner can close it again (got ${closed.status})`)
+
+    cookie = ''
+    const afterClosing = await get('/auth/login', jsonInit({
+      email: tenantOf.email, password: TENANT_PASSWORD,
+    }))
+    const stillIn = afterClosing.status === 200
+      ? (await get('/portfolio')).status
+      : afterClosing.status
+    ok(stillIn === 403 || stillIn === 401,
+       `after which that login reaches nothing (got ${stillIn})`)
+    cookie = ownerHere
   }
 
   /* Accepting the invitation, in what is effectively another browser:

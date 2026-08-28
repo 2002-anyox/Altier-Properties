@@ -1,5 +1,5 @@
 import { MotionConfig } from 'framer-motion'
-import { HashRouter, MemoryRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { HashRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { ShieldAlert } from 'lucide-react'
 import { StoreProvider, useStore } from './lib/store.js'
 import { AppShell } from './components/layout/AppShell.js'
@@ -21,6 +21,7 @@ import Settings from './pages/Settings.js'
 import Team from './pages/Team.js'
 import Tenants from './pages/Tenants.js'
 import Admin from './pages/Admin.js'
+import Portal from './pages/Portal.js'
 
 function Guard({ permission, children }: { permission: Permission; children: React.ReactNode }) {
   const { state } = useStore()
@@ -38,38 +39,53 @@ function Guard({ permission, children }: { permission: Permission; children: Rea
   )
 }
 
-/* The single-file build is embedded in a host page that owns the address bar,
-   so it routes in memory and never touches location. Ordinary builds keep hash
-   routing, which survives a refresh and supports deep links. */
-const Router = import.meta.env.MODE === 'single' ? MemoryRouter : HashRouter
+/**
+ * The app, or the portal.
+ *
+ * A tenant login is not a member of staff with fewer buttons: they open
+ * this a few times a year to see what they owe and when their stay ends,
+ * and everything the operator app is built around — the portfolio, the
+ * calendar, the maintenance board — is somebody else's business. So they
+ * get their own page rather than a narrowed version of this one, which
+ * is also why there is no router around it: there is nowhere to go.
+ */
+function Surface() {
+  const { state } = useStore()
+  if (state.member?.role === 'tenant') return <Portal />
+  return (
+    /* Hash routing, which survives a refresh and supports deep links
+       without the host having to rewrite unknown paths. */
+    <HashRouter>
+      <Routes>
+        <Route element={<AppShell />}>
+          <Route index element={<Dashboard />} />
+          <Route path="availability" element={<Guard permission="view:calendar"><Availability /></Guard>} />
+          <Route path="properties" element={<Guard permission="view:properties"><Properties /></Guard>} />
+          <Route path="properties/:id" element={<Guard permission="view:properties"><PropertyDetail /></Guard>} />
+          <Route path="bookings" element={<Guard permission="view:bookings"><Bookings /></Guard>} />
+          <Route path="clients" element={<Guard permission="view:clients"><Clients /></Guard>} />
+          <Route path="clients/:id" element={<Guard permission="view:clients"><ClientDetail /></Guard>} />
+          <Route path="payments" element={<Guard permission="view:payments"><Payments /></Guard>} />
+          <Route path="maintenance" element={<Guard permission="view:maintenance"><Maintenance /></Guard>} />
+          <Route path="notifications" element={<Notifications />} />
+          <Route path="reports" element={<Guard permission="view:reports"><Reports /></Guard>} />
+          <Route path="team" element={<Guard permission="manage:team"><Team /></Guard>} />
+          <Route path="tenants" element={<Guard permission="view:clients"><Tenants /></Guard>} />
+          <Route path="admin" element={<Admin />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+    </HashRouter>
+  )
+}
 
 export default function App() {
   return (
     <StoreProvider>
       <MotionConfig reducedMotion="user">
         <BootGate>
-          <Router>
-            <Routes>
-              <Route element={<AppShell />}>
-                <Route index element={<Dashboard />} />
-                <Route path="availability" element={<Guard permission="view:calendar"><Availability /></Guard>} />
-                <Route path="properties" element={<Guard permission="view:properties"><Properties /></Guard>} />
-                <Route path="properties/:id" element={<Guard permission="view:properties"><PropertyDetail /></Guard>} />
-                <Route path="bookings" element={<Guard permission="view:bookings"><Bookings /></Guard>} />
-                <Route path="clients" element={<Guard permission="view:clients"><Clients /></Guard>} />
-                <Route path="clients/:id" element={<Guard permission="view:clients"><ClientDetail /></Guard>} />
-                <Route path="payments" element={<Guard permission="view:payments"><Payments /></Guard>} />
-                <Route path="maintenance" element={<Guard permission="view:maintenance"><Maintenance /></Guard>} />
-                <Route path="notifications" element={<Notifications />} />
-                <Route path="reports" element={<Guard permission="view:reports"><Reports /></Guard>} />
-                <Route path="team" element={<Guard permission="manage:team"><Team /></Guard>} />
-                <Route path="tenants" element={<Guard permission="view:clients"><Tenants /></Guard>} />
-                <Route path="admin" element={<Admin />} />
-                <Route path="settings" element={<Settings />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Route>
-            </Routes>
-          </Router>
+          <Surface />
         </BootGate>
       </MotionConfig>
     </StoreProvider>

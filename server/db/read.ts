@@ -8,6 +8,7 @@
  * ------------------------------------------------------------------ */
 
 import { and, asc, eq, ne } from 'drizzle-orm'
+import { DEFAULT_REMINDERS } from '../../src/lib/defaults.js'
 import type { Db } from './client.js'
 import * as t from './schema.js'
 import type {
@@ -177,8 +178,14 @@ export async function readPortfolio(db: Db, organizationId: string): Promise<Por
     propertyIds: (assignments.get(m.id) ?? []).map((a) => a.propertyId),
   }))
 
+  /* A tenant portal login cannot read the workspace's reminder settings —
+     those are the landlord's alert timings, and no business of theirs.
+     The defaults stand in, because every screen that reads this expects
+     an object and refusing the whole portfolio over an absent settings
+     row would lock a tenant out of their own records. */
   const s = settingsRows[0]
-  if (!s) throw new Error('This workspace has no reminder settings row.')
+  if (!s) return { properties, clients, bookings, invoices, maintenance, team, reminders: DEFAULT_REMINDERS }
+
   const reminders: ReminderSettings = {
     rentDueLeadDays: s.rentDueLeadDays,
     leaseExpiryLeadDays: s.leaseExpiryLeadDays,
