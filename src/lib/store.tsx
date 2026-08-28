@@ -379,7 +379,12 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         member: action.member,
-        role: action.member.role,
+        /* Null while somebody is signed in and belongs to no workspace —
+           an account whose membership an owner has just removed. Staff is
+           the narrowest role there is, so the interface offers least
+           until the server says otherwise, and the server is the one
+           refusing anyway. */
+        role: action.member.role ?? 'staff',
         currentUserId: action.member.id,
         setupNeeded: false,
       }

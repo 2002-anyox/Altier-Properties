@@ -81,7 +81,7 @@ dashboard leads with revenue *earned* on that accrual basis and shows cash colle
 buying time ahead, and deposits separately — so a six-month advance cannot masquerade as growth, and
 a quiet collection month cannot masquerade as decline.
 
-**Role-based access** for Owner, Property Manager, Staff and Accountant, enforced in the navigation,
+**Role-based access** for Owner, Property Manager, Accountant, Staff and tenant portal logins, enforced in the navigation,
 at the route and on individual actions and figures. Switch role from the avatar menu to see it.
 
 ## Design
@@ -174,7 +174,7 @@ Profile; changing a password signs out every other device.
 | Passwords | scrypt (`node:crypto`), OWASP N=2^15 r=8 p=3, per-password salt |
 | Sessions | opaque 32-byte token in an httpOnly, SameSite=Lax cookie; 14 days |
 | Storage | only the SHA-256 of the token is stored, so the table is not a key ring |
-| Revocation | removing a team member cascades to their sessions immediately |
+| Revocation | removing somebody from a workspace ends their sessions in it immediately; the policies stop answering them the moment the membership row goes |
 | Throttling | 8 failed attempts locks an account for 15 minutes, recorded on the row so it survives across serverless instances |
 | Enumeration | an unknown email and a wrong password give the same message, and take the same time |
 
@@ -183,18 +183,45 @@ receives no charges at all from `GET /api/portfolio` — they are withheld rathe
 than hidden — and a request it may not make is answered 403. The smoke test
 asserts both, and was verified to fail when the gate is removed.
 
+### One workspace cannot see another
+
+Altier holds many customers in one database, and the wall between them is in
+the database rather than in the API's `WHERE` clauses.
+
+Every business row carries an `organization_id`, and every one of those tables
+has row-level security switched on and forced. The API connects as the owning
+role, and each request then runs inside a transaction that drops to
+`altier_app` — a role that bypasses nothing — and says who is asking and which
+workspace they claim. The claim is only a proposal: the policy looks the pairing
+up in `organization_members` and agrees only if a row says the membership is
+real and active. So a bug in a route can name a workspace that is not theirs and
+see an empty portfolio; it cannot see somebody else's.
+
+The same policies narrow further by role. An owner and an accountant see the
+whole workspace; a manager and a staff member see the properties they are
+assigned and the agreements, charges, jobs and clients attached to those; a
+tenant sees their own agreement and charges and nothing else.
+
+`npm run check:isolation` is the proof. It connects as `altier_app`, claims to
+be four different people — including one claiming a workspace they have no
+membership in — and counts what unfiltered `SELECT count(*)` returns from nine
+tables. It also tries three writes that would widen access, such as assigning
+one's own staff a property belonging to another workspace, and insists each is
+refused. Replacing the workspace function with one that believes what it is told
+makes it fail.
+
 ### Google and Apple
 
 Both are supported, and both are optional — set no environment variables and
 Altier works exactly as above, with passwords only. Set them and the sign-in
 page grows a button per provider it has keys for.
 
-A Google or Apple account is a **way into an existing team member**, never a
-way to create one. An owner adds somebody in Settings → Team with their real
+A Google or Apple account is a **way into an account that already exists**,
+never a way to create one. An owner adds or invites somebody with their real
 email; that person presses *Continue with Google*; the verified address is
-matched against the team, and an address that matches nobody is refused. Nobody
-can sign themselves up, and single sign-on stays closed until the first account
-has a password.
+matched against the accounts here, and an address that matches nobody is
+refused. Nobody can sign themselves up, and single sign-on stays closed until
+the first account has a password.
 
 The flow is written directly against both providers in `server/oidc.ts` — the
 OpenID Connect authorization-code flow, PKCE on Google, a one-time state row

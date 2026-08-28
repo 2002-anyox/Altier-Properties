@@ -7,7 +7,7 @@
  * less than the round trips per-page queries would need.
  * ------------------------------------------------------------------ */
 
-import { asc } from 'drizzle-orm'
+import { and, asc, eq, ne } from 'drizzle-orm'
 import type { Db } from './client.js'
 import * as t from './schema.js'
 import type {
@@ -30,27 +30,66 @@ function groupBy<T, K extends keyof T>(rows: T[], key: K) {
   return map
 }
 
-export async function readPortfolio(db: Db): Promise<Portfolio> {
+/**
+ * Everything one workspace can see, as the person asking sees it.
+ *
+ * The organization is named on every top-level query, and the database
+ * narrows each one again through its own policies — to the workspace, and
+ * within it to the properties this membership reaches. So a manager with
+ * three properties assigned gets three properties and the charges against
+ * them, from the same code that gives an owner the whole portfolio. The
+ * filter here is not the protection; it is what makes the query say out
+ * loud what it is for.
+ */
+export async function readPortfolio(db: Db, organizationId: string): Promise<Portfolio> {
   const [
     teamRows, propertyRows, amenityRows, noteRows, propertyDocRows, spellRows,
     clientRows, clientPropertyRows, clientDocRows, commRows,
     bookingRows, invoiceRows, requestRows, eventRows, settingsRows,
+    assignmentRows,
   ] = await Promise.all([
-    db.select().from(t.teamMembers).orderBy(asc(t.teamMembers.id)),
-    db.select().from(t.properties).orderBy(asc(t.properties.id)),
+    /* Staff only. A tenant's portal login is a membership too, and it does
+       not belong on the team list. */
+    db.select({
+      id: t.organizationMembers.id,
+      name: t.profiles.name,
+      role: t.organizationMembers.role,
+      title: t.organizationMembers.title,
+      email: t.profiles.email,
+      phone: t.profiles.phone,
+      since: t.organizationMembers.since,
+    })
+      .from(t.organizationMembers)
+      .innerJoin(t.profiles, eq(t.profiles.id, t.organizationMembers.profileId))
+      .where(and(
+        eq(t.organizationMembers.organizationId, organizationId),
+        ne(t.organizationMembers.role, 'tenant'),
+      ))
+      .orderBy(asc(t.organizationMembers.id)),
+    db.select().from(t.properties)
+      .where(eq(t.properties.organizationId, organizationId))
+      .orderBy(asc(t.properties.id)),
     db.select().from(t.propertyAmenities).orderBy(asc(t.propertyAmenities.amenity)),
     db.select().from(t.propertyNotes).orderBy(asc(t.propertyNotes.position)),
     db.select().from(t.propertyDocuments).orderBy(asc(t.propertyDocuments.id)),
     db.select().from(t.occupancySpells).orderBy(asc(t.occupancySpells.id)),
-    db.select().from(t.clients).orderBy(asc(t.clients.id)),
+    db.select().from(t.clients)
+      .where(eq(t.clients.organizationId, organizationId))
+      .orderBy(asc(t.clients.id)),
     db.select().from(t.clientProperties),
     db.select().from(t.clientDocuments).orderBy(asc(t.clientDocuments.id)),
     db.select().from(t.communications).orderBy(asc(t.communications.at)),
-    db.select().from(t.bookings).orderBy(asc(t.bookings.id)),
-    db.select().from(t.invoices),
-    db.select().from(t.maintenanceRequests).orderBy(asc(t.maintenanceRequests.id)),
+    db.select().from(t.bookings)
+      .where(eq(t.bookings.organizationId, organizationId))
+      .orderBy(asc(t.bookings.id)),
+    db.select().from(t.invoices).where(eq(t.invoices.organizationId, organizationId)),
+    db.select().from(t.maintenanceRequests)
+      .where(eq(t.maintenanceRequests.organizationId, organizationId))
+      .orderBy(asc(t.maintenanceRequests.id)),
     db.select().from(t.maintenanceEvents).orderBy(asc(t.maintenanceEvents.position)),
-    db.select().from(t.reminderSettings).limit(1),
+    db.select().from(t.reminderSettings)
+      .where(eq(t.reminderSettings.organizationId, organizationId)).limit(1),
+    db.select().from(t.memberProperties),
   ])
 
   const amenities = groupBy(amenityRows, 'propertyId')
@@ -61,6 +100,7 @@ export async function readPortfolio(db: Db): Promise<Portfolio> {
   const clientDocs = groupBy(clientDocRows, 'clientId')
   const comms = groupBy(commRows, 'clientId')
   const events = groupBy(eventRows, 'requestId')
+  const assignments = groupBy(assignmentRows, 'memberId')
 
   const asDocument = (d: typeof propertyDocRows[number] | typeof clientDocRows[number]): PropertyDocument => ({
     id: d.id, name: d.name, category: d.category,
@@ -134,10 +174,11 @@ export async function readPortfolio(db: Db): Promise<Portfolio> {
   const team: TeamMember[] = teamRows.map((m) => ({
     id: m.id, name: m.name, role: m.role, title: m.title,
     email: m.email, phone: m.phone, since: m.since,
+    propertyIds: (assignments.get(m.id) ?? []).map((a) => a.propertyId),
   }))
 
   const s = settingsRows[0]
-  if (!s) throw new Error('reminder_settings is empty — has the database been seeded?')
+  if (!s) throw new Error('This workspace has no reminder settings row.')
   const reminders: ReminderSettings = {
     rentDueLeadDays: s.rentDueLeadDays,
     leaseExpiryLeadDays: s.leaseExpiryLeadDays,

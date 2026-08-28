@@ -16,6 +16,12 @@ import {
 import { connect, type Db } from './client.js'
 import * as t from './schema.js'
 
+/* The sample portfolio is one workspace. Fixed identifiers, so re-seeding
+   replaces it rather than accumulating a new copy each time. */
+export const SEED_ORG = 'org-demo-000001'
+const ORG = SEED_ORG
+const ORG_NAME = 'Altier Properties'
+
 /** Postgres caps bound parameters per statement; insert in slices. */
 async function insertAll<T>(db: Db, table: any, rows: T[], chunk = 400) {
   for (let i = 0; i < rows.length; i += chunk) {
@@ -33,19 +39,43 @@ export async function seed(db: Db) {
       ${t.maintenanceEvents}, ${t.maintenanceRequests}, ${t.invoices}, ${t.bookings},
       ${t.communications}, ${t.clientDocuments}, ${t.clientProperties}, ${t.clients},
       ${t.occupancySpells}, ${t.propertyDocuments}, ${t.propertyNotes},
-      ${t.propertyAmenities}, ${t.properties}, ${t.teamMembers}, ${t.reminderSettings}
+      ${t.propertyAmenities}, ${t.properties}, ${t.memberProperties},
+      ${t.invitationProperties}, ${t.invitations}, ${t.organizationMembers},
+      ${t.profiles}, ${t.reminderSettings}, ${t.subscriptions}, ${t.organizations}
     RESTART IDENTITY CASCADE
   `)
 
   const counts: Record<string, number> = {}
 
-  counts.teamMembers = await insertAll(db, t.teamMembers, TEAM.map((m) => ({
-    id: m.id, name: m.name, role: m.role, title: m.title,
-    email: m.email, phone: m.phone, since: m.since,
+  await db.insert(t.organizations).values({ id: ORG, name: ORG_NAME, slug: 'altier-demo' })
+  counts.organizations = 1
+
+  /* Professional, so the sample workspace has room for its seven people
+     and three seats left to demonstrate the limit with. */
+  await db.insert(t.subscriptions).values({
+    organizationId: ORG,
+    plan: 'professional',
+    status: 'active',
+    seatLimit: 10,
+    currentPeriodStart: new Date().toISOString().slice(0, 10),
+  })
+  counts.subscriptions = 1
+
+  /* One login per person, one membership per person, and the membership
+     keeps the id the rest of the sample data refers to — a property's
+     manager and a job's assignee both name a membership. */
+  counts.profiles = await insertAll(db, t.profiles, TEAM.map((m) => ({
+    id: `pr-${m.id}`, name: m.name, email: m.email, phone: m.phone,
+  })))
+
+  counts.organizationMembers = await insertAll(db, t.organizationMembers, TEAM.map((m) => ({
+    id: m.id, organizationId: ORG, profileId: `pr-${m.id}`,
+    role: m.role, title: m.title, status: 'active' as const, since: m.since,
   })))
 
   counts.properties = await insertAll(db, t.properties, PROPERTIES.map((p) => ({
-    id: p.id, code: p.code, name: p.name, type: p.type, mode: p.mode, status: p.status,
+    id: p.id, organizationId: ORG, code: p.code, name: p.name,
+    type: p.type, mode: p.mode, status: p.status,
     addressLine1: p.address.line1, district: p.address.district,
     city: p.address.city, country: p.address.country,
     mapX: p.address.x, mapY: p.address.y,
@@ -55,50 +85,60 @@ export async function seed(db: Db) {
     yieldPct: p.yieldPct, notes: p.notes, photoSeed: p.photoSeed,
   })))
 
+  counts.memberProperties = await insertAll(db, t.memberProperties,
+    TEAM.flatMap((m) => (m.propertyIds ?? []).map((propertyId) => ({
+      memberId: m.id, propertyId,
+    }))))
+
   counts.propertyAmenities = await insertAll(db, t.propertyAmenities,
-    PROPERTIES.flatMap((p) => p.amenities.map((amenity) => ({ propertyId: p.id, amenity }))))
+    PROPERTIES.flatMap((p) => p.amenities.map((amenity) => ({
+      organizationId: ORG, propertyId: p.id, amenity,
+    }))))
 
   counts.propertyNotes = await insertAll(db, t.propertyNotes,
     PROPERTIES.flatMap((p) => p.maintenanceNotes.map((note, i) => ({
-      id: `${p.id}-note-${i}`, propertyId: p.id, position: i, note,
+      id: `${p.id}-note-${i}`, organizationId: ORG, propertyId: p.id, position: i, note,
     }))))
 
   counts.propertyDocuments = await insertAll(db, t.propertyDocuments,
     PROPERTIES.flatMap((p) => p.documents.map((d) => ({
-      id: d.id, propertyId: p.id, name: d.name, category: d.category,
+      id: d.id, organizationId: ORG, propertyId: p.id, name: d.name, category: d.category,
       sizeKb: d.sizeKb, uploadedAt: d.uploadedAt, uploadedBy: d.uploadedBy,
     }))))
 
   counts.occupancySpells = await insertAll(db, t.occupancySpells,
     PROPERTIES.flatMap((p) => p.occupancyHistory.map((h) => ({
-      id: h.id, propertyId: p.id, clientName: h.clientName,
+      id: h.id, organizationId: ORG, propertyId: p.id, clientName: h.clientName,
       startsOn: h.from, endsOn: h.to, mode: h.mode, revenue: h.revenue,
     }))))
 
   counts.clients = await insertAll(db, t.clients, CLIENTS.map((c) => ({
-    id: c.id, name: c.name, kind: c.kind, email: c.email, phone: c.phone,
+    id: c.id, organizationId: ORG, name: c.name, kind: c.kind, email: c.email, phone: c.phone,
     nationality: c.nationality, since: c.since, status: c.status,
     notes: c.notes, emergencyContact: c.emergencyContact,
     lifetimeValue: c.lifetimeValue, rating: c.rating,
   })))
 
   counts.clientProperties = await insertAll(db, t.clientProperties,
-    CLIENTS.flatMap((c) => c.propertyIds.map((propertyId) => ({ clientId: c.id, propertyId }))))
+    CLIENTS.flatMap((c) => c.propertyIds.map((propertyId) => ({
+      organizationId: ORG, clientId: c.id, propertyId,
+    }))))
 
   counts.clientDocuments = await insertAll(db, t.clientDocuments,
     CLIENTS.flatMap((c) => c.idDocuments.map((d) => ({
-      id: d.id, clientId: c.id, name: d.name, category: d.category,
+      id: d.id, organizationId: ORG, clientId: c.id, name: d.name, category: d.category,
       sizeKb: d.sizeKb, uploadedAt: d.uploadedAt, uploadedBy: d.uploadedBy,
     }))))
 
   counts.communications = await insertAll(db, t.communications,
     CLIENTS.flatMap((c) => c.communications.map((m) => ({
-      id: m.id, clientId: c.id, channel: m.channel, direction: m.direction,
+      id: m.id, organizationId: ORG, clientId: c.id, channel: m.channel, direction: m.direction,
       subject: m.subject, preview: m.preview, at: m.at, author: m.author,
     }))))
 
   counts.bookings = await insertAll(db, t.bookings, BOOKINGS.map((b) => ({
-    id: b.id, reference: b.reference, propertyId: b.propertyId, clientId: b.clientId,
+    id: b.id, organizationId: ORG, reference: b.reference,
+    propertyId: b.propertyId, clientId: b.clientId,
     mode: b.mode, status: b.status, startsOn: b.start, endsOn: b.end,
     rate: b.rate, deposit: b.deposit, advanceMonths: b.advanceMonths,
     paidThrough: b.paidThrough, noticeDays: b.noticeDays, guests: b.guests,
@@ -107,7 +147,8 @@ export async function seed(db: Db) {
   })))
 
   counts.invoices = await insertAll(db, t.invoices, INVOICES.map((i) => ({
-    id: i.id, number: i.number, propertyId: i.propertyId, clientId: i.clientId,
+    id: i.id, organizationId: ORG, number: i.number,
+    propertyId: i.propertyId, clientId: i.clientId,
     bookingId: i.bookingId, type: i.type, issuedOn: i.issuedOn, dueOn: i.dueOn,
     amount: i.amount, earnsFrom: i.earnsFrom, earnsTo: i.earnsTo,
     paidAmount: i.paidAmount, status: i.status, method: i.method,
@@ -115,7 +156,8 @@ export async function seed(db: Db) {
   })))
 
   counts.maintenanceRequests = await insertAll(db, t.maintenanceRequests, MAINTENANCE.map((m) => ({
-    id: m.id, reference: m.reference, propertyId: m.propertyId, title: m.title,
+    id: m.id, organizationId: ORG, reference: m.reference,
+    propertyId: m.propertyId, title: m.title,
     description: m.description, category: m.category, priority: m.priority,
     status: m.status, vendor: m.vendor, trade: m.trade, assigneeId: m.assigneeId,
     reportedBy: m.reportedBy, reportedOn: m.reportedOn, dueOn: m.dueOn,
@@ -124,13 +166,13 @@ export async function seed(db: Db) {
 
   counts.maintenanceEvents = await insertAll(db, t.maintenanceEvents,
     MAINTENANCE.flatMap((m) => m.timeline.map((e, i) => ({
-      id: `${m.id}-event-${i}`, requestId: m.id, position: i,
+      id: `${m.id}-event-${i}`, organizationId: ORG, requestId: m.id, position: i,
       at: e.at, label: e.label, by: e.by,
     }))))
 
   const r = DEFAULT_REMINDERS
   await db.insert(t.reminderSettings).values({
-    id: 1,
+    organizationId: ORG,
     rentDueLeadDays: r.rentDueLeadDays,
     leaseExpiryLeadDays: r.leaseExpiryLeadDays,
     checkInLeadHours: r.checkInLeadHours,

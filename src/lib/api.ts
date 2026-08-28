@@ -73,8 +73,21 @@ function isPortfolio(value: unknown): value is Portfolio {
 
 /** A failure the caller may want to distinguish, not just report. */
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number) { super(message) }
+  constructor(
+    message: string,
+    readonly status: number,
+    /** Seat figures, when the refusal was the subscription's doing. */
+    readonly seats?: SeatUsage,
+  ) { super(message) }
 }
+
+/**
+ * The plan is full, or lapsed. Worth its own question because the answer
+ * is an upgrade prompt rather than an error: nothing went wrong, the
+ * workspace simply has no room for another person.
+ */
+export const needsUpgrade = (error: unknown) =>
+  error instanceof ApiError && error.status === 402
 
 /** Signed out mid-session. The store listens for this and shows the door. */
 export const isSignedOut = (error: unknown) =>
@@ -89,9 +102,11 @@ async function send(path: string, init?: RequestInit): Promise<unknown> {
   })
   const body = await res.json().catch(() => null)
   if (!res.ok) {
+    const failure = body as { error?: string; seats?: SeatUsage } | null
     throw new ApiError(
-      (body as { error?: string } | null)?.error ?? `Request failed (${res.status})`,
+      failure?.error ?? `Request failed (${res.status})`,
       res.status,
+      failure?.seats,
     )
   }
   return body
@@ -237,6 +252,9 @@ export async function diagnose(): Promise<Diagnosis> {
 
 export interface Session {
   member: SessionMember | null
+  /** The workspace this session is looking at, and the others available. */
+  workspace?: Membership | null
+  workspaces?: Membership[]
   /** True only before anybody has a password: the first-run window. */
   setupNeeded: boolean
   /** False for an account that only ever signs in with Google or Apple. */
@@ -260,13 +278,96 @@ export interface SsoProvider {
 }
 
 export interface SessionMember {
+  /** The membership's identifier — what a property's managerId names. */
   id: string
   name: string
-  role: Role
+  /** Null while somebody is signed in but belongs to no workspace. */
+  role: Role | null
   title: string
   email: string
   phone: string
   since: string
+  /** Altier's own support staff. Never true for a customer. */
+  isSuperAdmin?: boolean
+}
+
+/** What one workspace's subscription is paying for, and how much is spent. */
+export interface SeatUsage {
+  plan: 'starter' | 'professional' | 'enterprise'
+  planLabel: string
+  status: 'trialing' | 'active' | 'past_due' | 'cancelled'
+  /** Null means unlimited. */
+  limit: number | null
+  used: number
+  remaining: number | null
+  pending: number
+  tenants: number
+  tenantsCountAsSeats: boolean
+  open: boolean
+}
+
+export interface OpenInvitation {
+  id: string
+  email: string
+  role: Role
+  title: string
+  status: string
+  expiresAt: string
+  createdAt: string
+}
+
+export interface WorkspaceView {
+  organization: { id: string; name: string; slug: string } | null
+  seats: SeatUsage
+  invitations: OpenInvitation[]
+}
+
+/** A workspace this account can open. */
+export interface Membership {
+  id: string
+  organizationId: string
+  organizationName: string
+  role: Role
+  title: string
+  status: string
+}
+
+export interface PortalLogin {
+  clientId: string | null
+  memberId: string
+  email: string
+  hasPassword: boolean
+  since: string
+}
+
+export const workspace = {
+  read: () => send('/workspace') as Promise<WorkspaceView>,
+  invite: (input: { email: string; role: Role; title?: string; propertyIds?: string[] }) =>
+    send('/workspace/invitations', { method: 'POST', body: JSON.stringify(input) }) as Promise<{
+      invitation: { id: string; email: string; role: Role }
+      /** Handed over rather than emailed: Altier has no mail server. */
+      link: string
+      seats: SeatUsage
+      invitations: OpenInvitation[]
+    }>,
+  revoke: (id: string) =>
+    send(`/workspace/invitations/${id}`, { method: 'DELETE' }) as Promise<{
+      seats: SeatUsage; invitations: OpenInvitation[]
+    }>,
+  switchTo: (organizationId: string) =>
+    send('/auth/workspace', {
+      method: 'POST', body: JSON.stringify({ organizationId }),
+    }) as Promise<{ member: SessionMember }>,
+}
+
+export const portal = {
+  list: () => send('/clients/portal') as Promise<{ portal: PortalLogin[] }>,
+  grant: (clientId: string, password?: string) =>
+    send(`/clients/${clientId}/portal`, {
+      method: 'POST', body: JSON.stringify({ password }),
+    }) as Promise<{ portal: PortalLogin[] }>,
+  revoke: (clientId: string) =>
+    send(`/clients/${clientId}/portal`, { method: 'DELETE' }) as Promise<{ portal: PortalLogin[] }>,
 }
 
 export const auth = {
@@ -285,6 +386,16 @@ export const auth = {
   logout: () => send('/auth/logout', { method: 'POST' }),
   changePassword: (current: string, next: string) =>
     send('/auth/password', { method: 'PUT', body: JSON.stringify({ current, next }) }),
+  /** Reading an invitation before accepting it — open to a stranger. */
+  invitation: (token: string) =>
+    send(`/auth/invitation/${token}`) as Promise<{
+      invitation: { organization: string; email: string; role: Role; title: string; expiresAt: string }
+      hasAccount: boolean
+    }>,
+  join: (token: string, input: { name?: string; password?: string }) =>
+    send(`/auth/invitation/${token}`, {
+      method: 'POST', body: JSON.stringify(input),
+    }) as Promise<{ member: SessionMember }>,
 }
 
 export const api = {

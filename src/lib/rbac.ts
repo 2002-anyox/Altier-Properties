@@ -5,7 +5,12 @@ export const ROLES: Array<{ id: Role; label: string; blurb: string }> = [
   { id: 'manager', label: 'Property Manager', blurb: 'Properties, bookings, clients and maintenance' },
   { id: 'staff', label: 'Staff', blurb: 'Operations: turnovers, maintenance and check-ins' },
   { id: 'accountant', label: 'Accountant', blurb: 'Payments, invoices and financial reporting' },
+  { id: 'tenant', label: 'Tenant or guest', blurb: 'Portal access to their own agreement and charges' },
 ]
+
+/** The roles an owner can hand out from Team & Access. A tenant login is
+ *  created from the tenant's own record, not from the staff list. */
+export const STAFF_ROLE_OPTIONS = ROLES.filter((r) => r.id !== 'tenant')
 
 /** Every permission the UI gates on. Kept flat and readable on purpose. */
 export type Permission =
@@ -44,6 +49,14 @@ const MATRIX: Record<Role, Permission[]> = {
   accountant: [
     'view:dashboard', 'view:properties', 'view:calendar', 'view:bookings', 'view:clients',
     'view:payments', 'edit:payments', 'view:reports', 'view:financials', 'manage:settings',
+  ],
+  /* A tenant reaches the same endpoints as everybody else and sees almost
+     nothing through them: the database returns only the rows tied to the
+     agreement they hold. The short list here is the second lock, not the
+     first — it keeps a tenant out of the routes that have no per-person
+     answer at all, like the team list and the settings. */
+  tenant: [
+    'view:dashboard', 'view:bookings', 'view:payments', 'view:maintenance',
   ],
 }
 

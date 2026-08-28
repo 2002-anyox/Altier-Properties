@@ -112,7 +112,15 @@ try {
      the owner rather than claiming a seeded one — a production database
      arrives with no people in it at all. */
   const PASSWORD = 'smoke-test-password'
-  const OWNER = { name: 'Smoke Owner', email: 'smoke-owner@example.com', password: PASSWORD }
+  /* The seeded owner's address. Setup takes over a row that already has
+     a workspace rather than opening an empty second one, so everything
+     below this line runs against the sample portfolio — which is what
+     makes the mutations further down worth testing. */
+  const OWNER = {
+    name: 'Nakato Ssemakula',
+    email: 'nakato.ssemakula@altier.co.ug',
+    password: PASSWORD,
+  }
 
   const noName = await get('/auth/setup', jsonInit({ ...OWNER, name: '' }))
   ok(noName.status === 400, `setup insists on a name (got ${noName.status})`)
@@ -366,6 +374,18 @@ try {
    * ------------------------------------------------------------------- */
   const ownerCookie = cookie
   const staff = portfolio.team.find((m) => m.role === 'staff')
+
+  /* Two properties, chosen from the twenty-odd in the workspace. What
+     comes back below is the test: not "fewer than everything" but exactly
+     these, because the database is filtering on this list, not the API. */
+  const assigned = portfolio.properties.slice(0, 2).map((p) => p.id)
+  const withProperties = await get(`/team/${staff.id}`, put({ ...staff, propertyIds: assigned }))
+    .then((r) => r.json())
+  ok(
+    (withProperties.team?.find((m) => m.id === staff.id)?.propertyIds ?? []).length === 2,
+    'a staff member can be assigned properties',
+  )
+
   await get(`/team/${staff.id}/password`, {
     method: 'PUT', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ password: 'staff-smoke-password' }),
@@ -376,7 +396,16 @@ try {
   const staffPortfolio = await get('/portfolio').then((r) => r.json())
   ok(staffPortfolio.invoices.length === 0,
      `staff receive no charges at all (got ${staffPortfolio.invoices.length}) — withheld, not hidden`)
-  ok(staffPortfolio.properties.length > 0, 'but they still receive the properties they work on')
+  ok(
+    staffPortfolio.properties.length === 2
+    && staffPortfolio.properties.every((p) => assigned.includes(p.id)),
+    `they receive the two properties they were assigned and no others `
+    + `(got ${staffPortfolio.properties.length} of ${portfolio.properties.length})`,
+  )
+  ok(
+    staffPortfolio.clients.length < portfolio.clients.length,
+    `and only the clients holding those (${staffPortfolio.clients.length} of ${portfolio.clients.length})`,
+  )
 
   const payAttempt = await get('/invoices/i-01/payment', { method: 'POST' })
   ok(payAttempt.status === 403, `staff cannot record a payment (got ${payAttempt.status})`)

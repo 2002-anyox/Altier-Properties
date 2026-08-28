@@ -733,6 +733,31 @@ export const MAINTENANCE: MaintenanceRequest[] = (() => {
 })()
 
 /* --------------------------- preferences -------------------------- */
+/**
+ * Who works on what.
+ *
+ * Filled in here rather than written into the list above, because it is
+ * already recorded twice over: a property names its manager, and a
+ * maintenance job names the person doing it. Deriving the assignments
+ * from those keeps the sample portfolio consistent with itself.
+ *
+ * It also makes the sample usable. Assignments are what the database
+ * reads to decide what a manager or staff member's queries return, so
+ * without this, signing in as anybody but the owner or the accountant
+ * would show an empty portfolio.
+ */
+for (const member of TEAM) {
+  /* Empty for an owner and an accountant, and it means what it says: no
+     per-property restriction, because they see the whole workspace. */
+  if (member.role !== 'manager' && member.role !== 'staff') {
+    member.propertyIds = []
+    continue
+  }
+  const managed = PROPERTIES.filter((p) => p.managerId === member.id).map((p) => p.id)
+  const worked = MAINTENANCE.filter((m) => m.assigneeId === member.id).map((m) => m.propertyId)
+  member.propertyIds = [...new Set([...managed, ...worked])].sort()
+}
+
 export const DEFAULT_REMINDERS: ReminderSettings = {
   rentDueLeadDays: 5,
   leaseExpiryLeadDays: 60,

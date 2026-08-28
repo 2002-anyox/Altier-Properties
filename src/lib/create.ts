@@ -475,7 +475,7 @@ export const memberDraftFrom = (m: TeamMember): MemberDraft => ({
 
 export function newMember(draft: MemberDraft): TeamMember {
   return {
-    id: uid('tm'),
+    id: uid('om'),
     name: draft.name.trim(),
     role: draft.role,
     title: draft.title.trim() || roleTitle(draft.role),
@@ -497,9 +497,10 @@ export function editMember(existing: TeamMember, draft: MemberDraft): TeamMember
 }
 
 /** A sensible job title when someone does not supply one. */
-const roleTitle = (role: Role) => ({
+const roleTitle = (role: Role): string => ({
   owner: 'Principal',
   manager: 'Property Manager',
   staff: 'Portfolio Assistant',
   accountant: 'Accountant',
+  tenant: 'Tenant portal',
 }[role])

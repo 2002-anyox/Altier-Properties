@@ -16,7 +16,7 @@ import type { Invoice } from '../../src/lib/types.js'
 import { MEMORY, connect } from './client.js'
 import { readPortfolio } from './read.js'
 import * as t from './schema.js'
-import { seed } from './seed.js'
+import { SEED_ORG, seed } from './seed.js'
 
 const fail: string[] = []
 const ok = (cond: boolean, msg: string) => { if (!cond) fail.push(msg) }
@@ -150,7 +150,7 @@ console.log(`constraint check: 5 invalid rows offered, all refused`)
 /* 9. The reader is the exact inverse of the seeder. A mis-mapped column
       would not fail any constraint — it would just quietly show the wrong
       thing on every page — so compare what comes back to what went in. */
-const portfolio = await readPortfolio(db)
+const portfolio = await readPortfolio(db, SEED_ORG)
 const data = await import('../../src/lib/data.js')
 
 /** Order is cosmetic for these, so compare them as sets. */
