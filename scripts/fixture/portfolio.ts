@@ -311,10 +311,27 @@ export const CLIENTS: Client[] = (() => {
 })()
 
 /* ----------------------------- bookings --------------------------- */
+
+/**
+ * When a stay was arrived at and left, read off what it already says.
+ *
+ * A running agreement was arrived at when it began; a finished one was
+ * left when it ended; one not yet started has neither, which is what
+ * "upcoming" means. Applied to the whole list at the end rather than
+ * written into each shape, so there is one rule instead of five.
+ */
+const withArrivals = (bookings: Array<Omit<Booking, 'arrivedOn' | 'departedOn'>>): Booking[] => bookings.map((b) => ({
+  ...b,
+  arrivedOn: b.status === 'in_progress' || b.status === 'completed' ? b.start : null,
+  departedOn: b.status === 'completed' ? (b.end ?? b.start) : null,
+}))
+
 const SOURCES: BookingSource[] = ['direct', 'airbnb', 'booking_com', 'agency', 'corporate']
 
 export const BOOKINGS: Booking[] = (() => {
-  const out: Booking[] = []
+  /* Built without arrivals, which withArrivals fills in from the status
+     once every shape has been pushed. */
+  const out: Array<Omit<Booking, 'arrivedOn' | 'departedOn'>> = []
   let n = 0
   const activeClients = CLIENTS.filter((c) => c.status !== 'past')
   const addMonths = (from: string, months: number) => {
@@ -458,7 +475,7 @@ export const BOOKINGS: Booking[] = (() => {
   // One cancellation makes the pipeline believable — never a live or past stay
   const cancellable = out.findIndex((b) => b.status === 'upcoming' && b.mode === 'short_stay')
   if (cancellable >= 0) out[cancellable] = { ...out[cancellable], status: 'cancelled', notes: 'Guest cancelled — within the free-cancellation window.' }
-  return out
+  return withArrivals(out)
 })()
 
 /* ---------------------------- invoices ---------------------------- */

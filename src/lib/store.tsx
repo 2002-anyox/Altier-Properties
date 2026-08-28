@@ -72,6 +72,8 @@ type Action =
   | { type: 'update-client'; client: Client }
   | { type: 'update-booking'; booking: Booking }
   | { type: 'end-booking'; booking: Booking }
+  | { type: 'check-in'; id: string; on: string }
+  | { type: 'check-out'; id: string; on: string }
   | { type: 'delete-property'; id: string }
   | { type: 'delete-client'; id: string }
   | { type: 'delete-booking'; id: string }
@@ -262,6 +264,31 @@ function reducer(state: State, action: Action): State {
           p.id === action.booking.propertyId
             ? { ...p, status: 'available' as const, availableFrom: action.booking.end }
             : p),
+      }
+    /* Arriving holds the unit; leaving frees it from the day they went.
+       Applied here as well as on the server so the board moves under the
+       press rather than after the round trip. */
+    case 'check-in':
+      return {
+        ...state,
+        bookings: state.bookings.map((b) =>
+          (b.id === action.id ? { ...b, arrivedOn: action.on, status: 'in_progress' as const } : b)),
+        properties: state.properties.map((p) =>
+          (p.id === state.bookings.find((b) => b.id === action.id)?.propertyId
+            ? { ...p, status: 'occupied' as const, availableFrom: null }
+            : p)),
+      }
+    case 'check-out':
+      return {
+        ...state,
+        bookings: state.bookings.map((b) =>
+          (b.id === action.id
+            ? { ...b, departedOn: action.on, status: 'completed' as const }
+            : b)),
+        properties: state.properties.map((p) =>
+          (p.id === state.bookings.find((b) => b.id === action.id)?.propertyId
+            ? { ...p, status: 'available' as const, availableFrom: action.on }
+            : p)),
       }
     /* Removing a property takes its whole record with it — the database
        cascades, and the screen has to agree or it will look like the
@@ -678,6 +705,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       case 'update-client': return () => api.updateClient(action.client)
       case 'update-booking': return () => api.updateBooking(action.booking)
       case 'end-booking': return () => api.updateBooking(action.booking)
+      case 'check-in': return () => api.checkIn(action.id, action.on)
+      case 'check-out': return () => api.checkOut(action.id, action.on)
       case 'delete-property': return () => api.deleteProperty(action.id)
       case 'delete-client': return () => api.deleteClient(action.id)
       case 'delete-booking': return () => api.deleteBooking(action.id)

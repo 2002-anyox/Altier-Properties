@@ -157,8 +157,19 @@ export interface Booking {
   noticeDays: number
   guests: number
   source: BookingSource
+  /** The times of day arrival and departure are expected. */
   checkIn: string
   checkOut: string
+  /**
+   * When they actually arrived and actually left, or null.
+   *
+   * Separate from `start` and `end`, which are what was agreed. A guest
+   * who arrives a day late or leaves a week early should not have the
+   * agreement rewritten around them — the dates stand, and these say what
+   * happened against them.
+   */
+  arrivedOn: string | null
+  departedOn: string | null
   notes: string
   createdAt: string
 }

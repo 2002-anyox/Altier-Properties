@@ -43,6 +43,13 @@
       "when": 1787900200000,
       "tag": "0005_tenant_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787900300000,
+      "tag": "0006_arrivals",
+      "breakpoints": true
     }
   ]
 }

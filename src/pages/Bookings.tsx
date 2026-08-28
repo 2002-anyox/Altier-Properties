@@ -1,12 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import {
-  CalendarPlus, ClipboardList, DoorOpen, Globe, Pencil, Search, Trash2, Users,
+  CalendarPlus, ClipboardList, DoorOpen, Globe, LogIn, LogOut, Pencil, Search, Trash2, Users,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader.js'
 import {
-  Avatar, Button, Card, Chip, Drawer, EmptyState, SearchInput, SegmentedControl, Select, cx,
+  Avatar, Button, Card, Chip, Drawer, EmptyState, Field, Input, Modal, SearchInput,
+  SegmentedControl, Select, cx,
 } from '../components/ui'
 import { useStore } from '../lib/store.js'
 import { BookingFormModal } from '../components/forms/BookingFormModal.js'
@@ -47,6 +48,8 @@ export default function Bookings() {
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Booking | null>(null)
   const [ending, setEnding] = useState<Booking | null>(null)
+  const [arriving, setArriving] = useState<Booking | null>(null)
+  const [leaving, setLeaving] = useState<Booking | null>(null)
   const [removing, setRemoving] = useState<Booking | null>(null)
 
   const property = (b: Booking | null) => state.properties.find((p) => p.id === b?.propertyId)
@@ -239,7 +242,19 @@ export default function Bookings() {
                 {selected.status !== 'completed' && selected.status !== 'cancelled' && (
                   <Button variant="secondary" icon={<DoorOpen size={14} />} onClick={() => setEnding(selected)}>End</Button>
                 )}
-                <Button variant="primary" icon={<Pencil size={14} />} onClick={() => { setEditing(selected); setSelected(null) }}>
+                {/* Arriving and leaving, in the order they happen. Only one
+                    is ever offered, because only one is ever next. */}
+                {!selected.arrivedOn && selected.status !== 'cancelled' && (
+                  <Button variant="primary" icon={<LogIn size={14} />} onClick={() => setArriving(selected)}>
+                    Check in
+                  </Button>
+                )}
+                {selected.arrivedOn && !selected.departedOn && (
+                  <Button variant="primary" icon={<LogOut size={14} />} onClick={() => setLeaving(selected)}>
+                    Check out
+                  </Button>
+                )}
+                <Button variant="secondary" icon={<Pencil size={14} />} onClick={() => { setEditing(selected); setSelected(null) }}>
                   Edit
                 </Button>
               </>
@@ -277,6 +292,16 @@ export default function Bookings() {
               ) : (
                 <Detail label="Guests" value={String(selected.guests)} />
               )}
+              <Detail
+                label="Arrived"
+                value={selected.arrivedOn ? mediumDate(selected.arrivedOn) : 'Not yet checked in'}
+              />
+              <Detail
+                label="Left"
+                value={selected.departedOn
+                  ? mediumDate(selected.departedOn)
+                  : selected.arrivedOn ? 'Still here' : '—'}
+              />
               <Detail label="Created" value={mediumDate(selected.createdAt)} />
             </dl>
 
@@ -339,6 +364,19 @@ export default function Bookings() {
         }}
       />
 
+      <ArrivalModal
+        booking={arriving}
+        kind="in"
+        onClose={() => setArriving(null)}
+        onDone={() => { setArriving(null); setSelected(null) }}
+      />
+      <ArrivalModal
+        booking={leaving}
+        kind="out"
+        onClose={() => setLeaving(null)}
+        onDone={() => { setLeaving(null); setSelected(null) }}
+      />
+
       <ConfirmDelete
         open={!!removing}
         onClose={() => setRemoving(null)}
@@ -363,5 +401,130 @@ function Detail({ label, value }: { label: string; value: React.ReactNode }) {
       <dt className="text-[11.5px] uppercase tracking-[0.08em] text-ink-muted">{label}</dt>
       <dd className="mt-1 text-[13px] text-ink-secondary">{value}</dd>
     </div>
+  )
+}
+
+
+/**
+ * Recording an arrival or a departure.
+ *
+ * The date is a field rather than an assumption. A guest who arrived on
+ * Friday is often checked in on Monday, and stamping today would put the
+ * wrong day on the occupancy record and on the property's history — which
+ * is what the reports read.
+ */
+function ArrivalModal({
+  booking, kind, onClose, onDone,
+}: {
+  booking: Booking | null
+  kind: 'in' | 'out'
+  onClose: () => void
+  onDone: () => void
+}) {
+  const { state, dispatch, toast } = useStore()
+  const [on, setOn] = useState(iso(TODAY))
+  const arriving = kind === 'in'
+
+  useEffect(() => { if (booking) setOn(iso(TODAY)) }, [booking])
+
+  const property = state.properties.find((p) => p.id === booking?.propertyId)
+  const client = state.clients.find((c) => c.id === booking?.clientId)
+
+  /* What they still owe on this agreement, which is the question somebody
+     asks at exactly the moment a guest is leaving. */
+  const owed = booking
+    ? state.invoices
+        .filter((i) => i.bookingId === booking.id)
+        .reduce((sum, i) => sum + Math.max(0, i.amount - i.paidAmount), 0)
+    : 0
+
+  const early = !!booking && arriving && on < booking.start
+  const late = !!booking && !arriving && !!booking.end && on > booking.end
+
+  const confirm = () => {
+    if (!booking) return
+    dispatch(arriving
+      ? { type: 'check-in', id: booking.id, on }
+      : { type: 'check-out', id: booking.id, on })
+    toast(arriving
+      ? {
+          title: `${client?.name ?? 'Guest'} checked in`,
+          body: `${property?.name ?? 'The unit'} is now occupied.`,
+          tone: 'success',
+        }
+      : {
+          title: `${client?.name ?? 'Guest'} checked out`,
+          body: owed > 0
+            ? `${property?.name ?? 'The unit'} is available. ${money(owed)} is still outstanding.`
+            : `${property?.name ?? 'The unit'} is available and the account is clear.`,
+          tone: owed > 0 ? 'critical' : 'success',
+        })
+    onDone()
+  }
+
+  return (
+    <Modal
+      open={!!booking}
+      onClose={onClose}
+      title={arriving ? 'Check in' : 'Check out'}
+      subtitle={booking
+        ? `${client?.name ?? 'The client'} · ${property?.name ?? 'the unit'} · ${booking.reference}`
+        : ''}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            icon={arriving ? <LogIn size={14} /> : <LogOut size={14} />}
+            onClick={confirm}
+          >
+            {arriving ? 'Check in' : 'Check out'}
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-4">
+        <Field
+          label={arriving ? 'Date they arrived' : 'Date they left'}
+          id="ar-date"
+          hint={arriving
+            ? 'Today unless they came on a different day.'
+            : 'The unit becomes available from this date, not from today.'}
+        >
+          <Input id="ar-date" type="date" value={on} onChange={(e) => setOn(e.target.value)} />
+        </Field>
+
+        {early && (
+          <p className="rounded-xl border border-line bg-surface-inset/60 px-3.5 py-3 text-[12.5px] leading-relaxed text-ink-secondary">
+            That is before the agreement starts on {mediumDate(booking!.start)}. The dates on the
+            agreement stay as they are; this only records when they actually arrived.
+          </p>
+        )}
+        {late && (
+          <p className="rounded-xl border border-line bg-surface-inset/60 px-3.5 py-3 text-[12.5px] leading-relaxed text-ink-secondary">
+            That is after the agreement ends on {mediumDate(booking!.end!)}. Recorded as written —
+            an overstay is a fact, not an error.
+          </p>
+        )}
+
+        {!arriving && (
+          <div className="rounded-xl border border-line bg-surface-inset/50 px-3.5 py-3">
+            <p className="text-[12.5px] leading-relaxed text-ink-secondary">
+              {owed > 0
+                ? <>There is <span className="font-semibold text-ink">{money(owed)}</span> still
+                    outstanding on this agreement. Checking out does not settle it, and the charges
+                    stay on the ledger.</>
+                : 'Nothing is outstanding on this agreement.'}
+            </p>
+            {(booking?.deposit ?? 0) > 0 && (
+              <p className="mt-2 text-[12px] leading-relaxed text-ink-muted">
+                {money(booking!.deposit)} is held as a deposit. Returning it is a payment you
+                record separately — this does not do it.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </Modal>
   )
 }

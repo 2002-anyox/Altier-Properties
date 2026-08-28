@@ -8,4 +8,5 @@ export const EXPECTED_MIGRATIONS: ReadonlyArray<{ tag: string; hash: string }> =
   { tag: '0003_multitenancy', hash: '087b50bf9df500d0518f6298fc6f8fe7ceadac84f7bc30384fae9cc71112bba1' },
   { tag: '0004_isolation', hash: 'a9e9ddc39af86088acabbed935ec0bd771bffcdb34bb47938ce904d0e81b822e' },
   { tag: '0005_tenant_scope', hash: '8639019e53a5a33518ea4a433eadb4765bf739ca9fa939e0b76c5c621141de53' },
+  { tag: '0006_arrivals', hash: '6926432b1238e320f34332a1419792a18746635a7438a5dfd4fd8974012b7c7b' },
 ]

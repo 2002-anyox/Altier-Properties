@@ -148,6 +148,7 @@ export async function seed(db: Db) {
     rate: b.rate, deposit: b.deposit, advanceMonths: b.advanceMonths,
     paidThrough: b.paidThrough, noticeDays: b.noticeDays, guests: b.guests,
     source: b.source, checkIn: b.checkIn, checkOut: b.checkOut,
+    arrivedOn: b.arrivedOn, departedOn: b.departedOn,
     notes: b.notes, createdAt: b.createdAt,
   })))
 

@@ -400,6 +400,15 @@ export const api = {
     request(`/properties/${property.id}`, { method: 'PUT', body: JSON.stringify(property) }),
   addClient: (client: Client) =>
     request('/clients', { method: 'POST', body: JSON.stringify(client) }),
+  /* Arrival and departure. Check-out answers with what is still owed
+     alongside the portfolio, because that is the question somebody asks
+     at exactly that moment. */
+  checkIn: (id: string, on?: string) =>
+    request(`/bookings/${id}/check-in`, { method: 'POST', body: JSON.stringify({ on }) }),
+  checkOut: (id: string, on?: string) =>
+    send(`/bookings/${id}/check-out`, {
+      method: 'POST', body: JSON.stringify({ on }),
+    }) as Promise<Portfolio & { settled: { outstanding: number; deposit: number } }>,
   addBooking: (booking: Booking, invoices: Invoice[]) =>
     request('/bookings', { method: 'POST', body: JSON.stringify({ booking, invoices }) }),
   updateClient: (client: Client) =>

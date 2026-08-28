@@ -466,8 +466,18 @@ export const bookings = pgTable('bookings', {
   noticeDays: integer('notice_days').notNull().default(0),
   guests: integer('guests').notNull(),
   source: bookingSourceEnum('source').notNull(),
+  /* The times of day arrival and departure are expected, agreed when the
+     agreement is drawn up. Not a record of anything having happened. */
   checkIn: time('check_in').notNull(),
   checkOut: time('check_out').notNull(),
+
+  /* When they actually arrived and actually left. Null until each
+     happens, which is the difference between an expectation and a fact —
+     a guest can arrive a day late or leave a week early, and the ledger
+     should say which. */
+  arrivedOn: date('arrived_on', { mode: 'string' }),
+  departedOn: date('departed_on', { mode: 'string' }),
+
   notes: text('notes').notNull(),
   createdAt: date('created_at', { mode: 'string' }).notNull(),
 }, (t) => [

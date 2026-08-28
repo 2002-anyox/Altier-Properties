@@ -1064,6 +1064,40 @@ CREATE POLICY "member_properties_isolation" ON "member_properties" FOR ALL TO al
     AND EXISTS (SELECT 1 FROM properties q WHERE q.id = member_properties.property_id AND q.organization_id = altier_org())));
 
 -- ---------------------------------------------------------------
+-- migration: 0006_arrivals
+-- ---------------------------------------------------------------
+-- ---------------------------------------------------------------
+-- Arrival and departure
+--
+-- check_in and check_out are times of day — 15:00, 11:00 — agreed when
+-- the agreement is drawn up. They record an expectation, and there was
+-- nothing anywhere recording that it had been met: no way to say a guest
+-- had arrived, and no way to say they had gone.
+--
+-- These two are that record. Null until each happens, and deliberately
+-- separate from starts_on and ends_on, which are what was agreed. A guest
+-- who arrives a day late or leaves a week early does not get the
+-- agreement rewritten around them.
+-- ---------------------------------------------------------------
+ALTER TABLE "bookings" ADD COLUMN IF NOT EXISTS "arrived_on" date;
+ALTER TABLE "bookings" ADD COLUMN IF NOT EXISTS "departed_on" date;
+
+-- A departure cannot precede an arrival, and neither can be recorded
+-- against an agreement that was cancelled.
+ALTER TABLE "bookings" DROP CONSTRAINT IF EXISTS "bookings_departure_after_arrival";
+ALTER TABLE "bookings" ADD CONSTRAINT "bookings_departure_after_arrival"
+  CHECK (departed_on IS NULL OR (arrived_on IS NOT NULL AND departed_on >= arrived_on));
+
+-- Agreements already running were arrived at when they began; ones already
+-- finished were left when they ended. Anything else would show every past
+-- stay as a guest who never turned up.
+UPDATE "bookings" SET arrived_on = starts_on
+  WHERE arrived_on IS NULL AND status IN ('in_progress', 'completed');
+UPDATE "bookings" SET departed_on = coalesce(ends_on, starts_on)
+  WHERE departed_on IS NULL AND status = 'completed'
+    AND coalesce(ends_on, starts_on) >= starts_on;
+
+-- ---------------------------------------------------------------
 -- Record the migrations as applied, so `npm run db:migrate`
 -- against this database does nothing rather than failing.
 -- ---------------------------------------------------------------
@@ -1079,6 +1113,7 @@ INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('7995837
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('087b50bf9df500d0518f6298fc6f8fe7ceadac84f7bc30384fae9cc71112bba1', 1787900000000);
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('a9e9ddc39af86088acabbed935ec0bd771bffcdb34bb47938ce904d0e81b822e', 1787900100000);
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('8639019e53a5a33518ea4a433eadb4765bf739ca9fa939e0b76c5c621141de53', 1787900200000);
+INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('6926432b1238e320f34332a1419792a18746635a7438a5dfd4fd8974012b7c7b', 1787900300000);
 
 -- ---------------------------------------------------------------
 -- Reminder settings. One row, always id 1 — the app reads it on

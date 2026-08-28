@@ -7,7 +7,7 @@ import {
   openingCharges, type BookingDraft,
 } from '../../lib/create.js'
 import { money } from '../../lib/format.js'
-import type { Booking, BookingSource, TenancyMode } from '../../lib/types.js'
+import type { Booking, BookingSource, Property, TenancyMode } from '../../lib/types.js'
 
 const MODES: Array<[TenancyMode, string]> = [
   ['long_term', 'Fixed-term lease'],
@@ -48,20 +48,27 @@ export function BookingFormModal({
     const id = propertyId ?? lettable[0]?.id ?? ''
     const property = state.properties.find((p) => p.id === id)
     const base = emptyBookingDraft(id, state.clients[0]?.id ?? '')
-    setDraft(property
-      ? {
-          ...base,
-          mode: property.mode,
-          rate: property.price,
-          deposit: property.mode === 'short_stay' ? Math.round(property.price * 1.5) : property.price * 2,
-          advanceMonths: advanceFloor(property.mode) || base.advanceMonths,
-        }
-      : base)
+    setDraft(property ? termsFor(property, base) : base)
   }, [open, propertyId, booking, lettable, state.properties, state.clients])
 
   const set = <K extends keyof BookingDraft>(key: K, value: BookingDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }))
 
+  /**
+   * Choosing a different unit re-prices the agreement.
+   *
+   * It used to change only which property the agreement named, so the rent
+   * and deposit stayed at the last unit's figures — a shilling amount from
+   * a different home, on somebody's bill, with nothing on screen to say so.
+   * Anything typed by hand afterwards still stands; this only moves the
+   * numbers when the unit underneath them moves.
+   */
+  const chooseProperty = (id: string) => {
+    const property = state.properties.find((p) => p.id === id)
+    setDraft((d) => (property ? termsFor(property, { ...d, propertyId: id }) : { ...d, propertyId: id }))
+  }
+
+  const chosen = state.properties.find((p) => p.id === draft.propertyId)
   const rental = draft.mode === 'rental'
   const shortStay = draft.mode === 'short_stay'
   const floor = advanceFloor(draft.mode)
@@ -133,7 +140,7 @@ export function BookingFormModal({
         <div className="grid gap-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Property" id="bf-prop">
-              <Select id="bf-prop" value={draft.propertyId} disabled={editing} onChange={(e) => set('propertyId', e.target.value)}>
+              <Select id="bf-prop" value={draft.propertyId} disabled={editing} onChange={(e) => chooseProperty(e.target.value)}>
                 {lettable.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </Select>
             </Field>
@@ -174,7 +181,13 @@ export function BookingFormModal({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label={shortStay ? 'Nightly rate' : 'Monthly rent'} id="bf-rate">
+            <Field
+              label={shortStay ? 'Nightly rate' : 'Monthly rent'}
+              id="bf-rate"
+              hint={chosen && draft.rate !== chosen.price
+                ? `${chosen.name} is listed at ${money(chosen.price)}${shortStay ? ' a night' : ' a month'}.`
+                : 'Taken from the property. Change it here if this agreement differs.'}
+            >
               <Input id="bf-rate" type="number" min={0} step={1000} value={draft.rate} onChange={(e) => set('rate', Number(e.target.value))} />
             </Field>
             <Field label="Deposit" id="bf-deposit" hint="Refundable; never counted as revenue.">
@@ -247,4 +260,25 @@ export function BookingFormModal({
       )}
     </Modal>
   )
+}
+
+/**
+ * The terms a unit implies: its letting mode, its asking price as the
+ * rent, and a deposit proportional to it — one and a half nights for a
+ * short stay, two months for anything longer, which is what the business
+ * actually asks for.
+ *
+ * Applied when the form opens and again whenever the unit changes, so the
+ * figures on the bill always belong to the home they are for.
+ */
+function termsFor(property: Property, base: BookingDraft): BookingDraft {
+  return {
+    ...base,
+    mode: property.mode,
+    rate: property.price,
+    deposit: property.mode === 'short_stay'
+      ? Math.round(property.price * 1.5)
+      : property.price * 2,
+    advanceMonths: advanceFloor(property.mode) || base.advanceMonths,
+  }
 }

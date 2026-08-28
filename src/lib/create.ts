@@ -283,6 +283,10 @@ export function newBooking(draft: BookingDraft, existing: Booking[]): Booking {
     source: draft.source,
     checkIn: draft.mode === 'short_stay' ? '15:00' : '12:00',
     checkOut: draft.mode === 'short_stay' ? '11:00' : '12:00',
+    /* Nobody has arrived yet, whatever the calendar says. Checking in is
+       a thing somebody does, not a date passing. */
+    arrivedOn: null,
+    departedOn: null,
     notes: draft.notes.trim(),
     createdAt: iso(TODAY),
   }

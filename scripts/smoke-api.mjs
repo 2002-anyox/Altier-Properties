@@ -15,6 +15,11 @@ import { setTimeout as sleep } from 'node:timers/promises'
 
 const PORT = process.env.API_PORT ?? '5199'
 const today = new Date().toISOString().slice(0, 10)
+const plusDays = (from, n) => {
+  const d = new Date(`${from}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
+}
 const plusMonths = (from, n) => {
   const d = new Date(`${from}T00:00:00Z`)
   d.setUTCMonth(d.getUTCMonth() + n)
@@ -279,6 +284,39 @@ try {
   const storedBooking = madeBooking.bookings?.find((b) => b.id === booking.id)
   ok(storedBooking?.end === null, `open-ended rental kept its null end (${storedBooking?.end})`)
   ok(!!madeBooking.invoices?.find((i) => i.id === charge.id), 'opening charge raised with the agreement')
+
+  /* An agreement sent with no rate and no charges. It used to be stored
+     exactly as written: a unit let at nothing, with nothing billed for
+     it, and no sign on any screen that anything was wrong. The property
+     is what it costs, so the property is what the bill comes from. */
+  const priced = portfolio.properties.find((p) => p.id !== property.id && p.status === 'available')
+  if (priced) {
+    const nights = 4
+    const from = plusDays(today, 30)
+    const to = plusDays(from, nights)
+    const free = {
+      id: `b-free-${stamp}`, reference: `FREE-${stamp}`, propertyId: priced.id,
+      clientId: client.id, mode: priced.mode === 'rental' ? 'long_term' : priced.mode,
+      status: 'upcoming', start: from, end: to,
+      rate: 0, deposit: 0, advanceMonths: 0, paidThrough: null, noticeDays: 0,
+      guests: 2, source: 'direct', checkIn: '15:00', checkOut: '11:00',
+      notes: '', createdAt: today,
+    }
+    const billed = await get('/bookings', json({ booking: free, invoices: [] })).then((r) => r.json())
+    const stored = billed.bookings?.find((b) => b.id === free.id)
+    ok(stored?.rate === priced.price,
+       `an agreement with no rate takes the property's (${stored?.rate} vs ${priced.price})`)
+    ok((stored?.deposit ?? 0) > 0, `and a deposit proportional to it (${stored?.deposit})`)
+
+    const raised = (billed.invoices ?? []).filter((i) => i.bookingId === free.id)
+    ok(raised.length >= 2, `charges are raised rather than none at all (${raised.length})`)
+    const rent = raised.find((i) => i.type !== 'deposit')
+    const expected = free.mode === 'short_stay' ? priced.price * nights : priced.price
+    ok(rent?.amount === expected,
+       `and the amount is the property's price (${rent?.amount} vs ${expected})`)
+
+    await get(`/bookings/${free.id}`, { method: 'DELETE' })
+  }
   ok(madeBooking.properties?.find((p) => p.id === property.id)?.status === 'occupied',
      'the agreement flipped the property to occupied')
 
@@ -303,6 +341,44 @@ try {
 
   const malformed = await get('/properties', json({ id: 'x', name: '' }))
   ok(malformed.status === 400, `a property with no name answers 400 (got ${malformed.status})`)
+
+  /* ------------------------- arriving and leaving -------------------- *
+   * The two moments the business turns on, and until now there was no
+   * way to record either — an agreement went from upcoming to running by
+   * the calendar alone, and ending one was the only way to close it.
+   * ------------------------------------------------------------------- */
+  const arrivedOn = plusDays(today, -1)
+  const notYet = await get(`/bookings/${booking.id}/check-out`, json({ on: today }))
+  ok(notYet.status === 409, `you cannot check out somebody who never arrived (got ${notYet.status})`)
+
+  const arrived = await get(`/bookings/${booking.id}/check-in`, json({ on: arrivedOn }))
+  ok(arrived.status === 200, `checking in is accepted (got ${arrived.status})`)
+  const afterArrival = await arrived.json()
+  const running = afterArrival.bookings.find((b) => b.id === booking.id)
+  ok(running?.arrivedOn === arrivedOn,
+     `and the day they actually came is what is stored (${running?.arrivedOn})`)
+  ok(running?.status === 'in_progress', `the agreement is running (${running?.status})`)
+  ok(afterArrival.properties.find((p) => p.id === property.id)?.status === 'occupied',
+     'and the unit is held')
+
+  const alreadyIn = await get(`/bookings/${booking.id}/check-in`, json({ on: today }))
+  ok(alreadyIn.status === 409, `checking in twice is refused (got ${alreadyIn.status})`)
+
+  const backwards = await get(`/bookings/${booking.id}/check-out`, json({ on: plusDays(arrivedOn, -3) }))
+  ok(backwards.status === 409, `leaving before arriving is refused (got ${backwards.status})`)
+
+  const leftOn = today
+  const left = await get(`/bookings/${booking.id}/check-out`, json({ on: leftOn }))
+  ok(left.status === 200, `checking out is accepted (got ${left.status})`)
+  const afterDeparture = await left.json()
+  const departed = afterDeparture.bookings.find((b) => b.id === booking.id)
+  ok(departed?.departedOn === leftOn, `the departure date is stored (${departed?.departedOn})`)
+  ok(departed?.status === 'completed', `the agreement is closed (${departed?.status})`)
+  const freed = afterDeparture.properties.find((p) => p.id === property.id)
+  ok(freed?.status === 'available' && freed?.availableFrom === leftOn,
+     `and the unit is free from the day they went (${freed?.status}, ${freed?.availableFrom})`)
+  ok(typeof afterDeparture.settled?.outstanding === 'number',
+     `check-out says what is still owed (${afterDeparture.settled?.outstanding})`)
 
   /* ------------------------ editing and removal ---------------------- */
   const put = (body) => ({

@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto'
 import { and, eq, ne, sql } from 'drizzle-orm'
 import type { Db } from './db/client.js'
 import * as t from './db/schema.js'
+import { openingCharges } from '../src/lib/create.js'
 import { assertSeatAvailable } from './workspace.js'
 import type {
   Booking, Client, Invoice, MaintenancePriority, MaintenanceStatus, Property,
@@ -291,8 +292,8 @@ export async function addClient(db: Db, w: Workspace, client: Client) {
  * leave a property marked occupied against a tenancy that does not exist.
  */
 export async function addBooking(db: Db, w: Workspace, booking: Booking, invoices: Invoice[]) {
-  await requireOne(
-    await db.select({ id: t.properties.id }).from(t.properties).where(and(
+  const property = await requireOne(
+    await db.select().from(t.properties).where(and(
       eq(t.properties.id, booking.propertyId),
       eq(t.properties.organizationId, w.organizationId),
     )),
@@ -306,6 +307,17 @@ export async function addBooking(db: Db, w: Workspace, booking: Booking, invoice
     `client ${booking.clientId}`,
   )
 
+  /* What the unit is let at, unless this agreement says otherwise.
+     A rate of zero used to be stored as written and raise no charge at
+     all, so a tenancy could be opened against a property priced at two
+     million shillings and appear on the client's account owing nothing.
+     The property is the authority on what it costs; the agreement only
+     overrides it deliberately. */
+  const rate = booking.rate > 0 ? booking.rate : property.price
+  const deposit = booking.deposit > 0
+    ? booking.deposit
+    : (booking.mode === 'short_stay' ? Math.round(property.price * 1.5) : property.price * 2)
+
   /* No transaction opened here: the request already runs inside one, so
      these writes either all land or all roll back with the rest of it. A
      second BEGIN would only be a savepoint, which reads like a transaction
@@ -314,13 +326,22 @@ export async function addBooking(db: Db, w: Workspace, booking: Booking, invoice
     id: booking.id, organizationId: w.organizationId,
     reference: booking.reference, propertyId: booking.propertyId,
     clientId: booking.clientId, mode: booking.mode, status: booking.status,
-    startsOn: booking.start, endsOn: booking.end, rate: booking.rate,
-    deposit: booking.deposit, advanceMonths: booking.advanceMonths,
+    startsOn: booking.start, endsOn: booking.end, rate,
+    deposit, advanceMonths: booking.advanceMonths,
     paidThrough: booking.paidThrough, noticeDays: booking.noticeDays,
     guests: booking.guests, source: booking.source,
     checkIn: booking.checkIn, checkOut: booking.checkOut,
     notes: booking.notes, createdAt: booking.createdAt,
   })
+
+  /* An agreement that arrives with no charges on it raises its own, from
+     the terms above. Otherwise a unit could be let and nothing ever
+     billed for it — which is not a quieter kind of success. */
+  if (!invoices.length) {
+    const existing = await db.select({ number: t.invoices.number }).from(t.invoices)
+      .where(eq(t.invoices.organizationId, w.organizationId))
+    invoices = openingCharges({ ...booking, rate, deposit }, existing as Invoice[])
+  }
 
   if (invoices.length) {
     await db.insert(t.invoices).values(invoices.map((i) => ({
@@ -405,6 +426,144 @@ export async function updateBooking(db: Db, w: Workspace, id: string, booking: B
       ? { status: 'available', availableFrom: booking.end }
       : { status: booking.status === 'upcoming' ? 'reserved' : 'occupied', availableFrom: null })
     .where(eq(t.properties.id, booking.propertyId))
+}
+
+/* --------------------- arriving and leaving ------------------------ *
+ * The two moments a letting business actually turns on, and until now
+ * there was no way to record either. An agreement moved from "upcoming"
+ * to "in progress" by the calendar alone, and the only way to end one was
+ * to end it — which is not the same as somebody having left.
+ * ------------------------------------------------------------------- */
+
+/**
+ * They arrived.
+ *
+ * Stamps the day, starts the agreement running and holds the unit. The
+ * date is taken rather than assumed, because a guest who turns up two
+ * days late did not arrive on the day the agreement says.
+ */
+export async function checkIn(db: Db, w: Workspace, id: string, on?: string) {
+  const booking = await requireOne(
+    await db.select().from(t.bookings)
+      .where(and(eq(t.bookings.id, id), eq(t.bookings.organizationId, w.organizationId))),
+    `agreement ${id}`,
+  )
+  if (booking.status === 'cancelled') {
+    throw new Conflict('That agreement was cancelled, so nobody is arriving on it.')
+  }
+  if (booking.arrivedOn) {
+    throw new Conflict(`They were already checked in on ${booking.arrivedOn}.`)
+  }
+  const arrivedOn = on ?? today()
+  if (booking.endsOn && arrivedOn > booking.endsOn) {
+    throw new Conflict('That agreement had already ended by then.')
+  }
+
+  await db.update(t.bookings)
+    .set({ arrivedOn, status: 'in_progress' })
+    .where(eq(t.bookings.id, id))
+
+  await db.update(t.properties)
+    .set({ status: 'occupied', availableFrom: null })
+    .where(eq(t.properties.id, booking.propertyId))
+
+  await db.update(t.clients).set({ status: 'active' }).where(eq(t.clients.id, booking.clientId))
+
+  await db.insert(t.communications).values({
+    id: `${booking.clientId}-cm-${Date.now()}`,
+    organizationId: w.organizationId,
+    clientId: booking.clientId,
+    channel: 'note',
+    direction: 'outbound',
+    subject: `Checked in · ${booking.reference}`,
+    preview: `Arrived ${arrivedOn}.`,
+    at: today(),
+    author: w.name,
+  })
+}
+
+/**
+ * They left.
+ *
+ * Ends the agreement, frees the unit from that date, and says plainly
+ * what is still owed rather than quietly closing over it — a departure is
+ * exactly when somebody wants to know whether the account is clear and
+ * whether the deposit comes back.
+ */
+export async function checkOut(db: Db, w: Workspace, id: string, on?: string) {
+  const booking = await requireOne(
+    await db.select().from(t.bookings)
+      .where(and(eq(t.bookings.id, id), eq(t.bookings.organizationId, w.organizationId))),
+    `agreement ${id}`,
+  )
+  if (!booking.arrivedOn) {
+    throw new Conflict('Nobody has checked in on that agreement yet.')
+  }
+  if (booking.departedOn) {
+    throw new Conflict(`They already checked out on ${booking.departedOn}.`)
+  }
+  const departedOn = on ?? today()
+  if (departedOn < booking.arrivedOn) {
+    throw new Conflict('They cannot have left before they arrived.')
+  }
+
+  /* endsOn is left exactly as it was, including null on an open-ended
+     rental. It is the term that was agreed; departedOn is what happened.
+     Writing the departure into it would rewrite the agreement around the
+     guest — and on a tenancy that ended the day it began, would write an
+     end date the schema rightly refuses. */
+  await db.update(t.bookings)
+    .set({ departedOn, status: 'completed' })
+    .where(eq(t.bookings.id, id))
+
+  /* Free from the day they went, not from today — a departure recorded
+     late should not make the unit look occupied in the meantime. */
+  await db.update(t.properties)
+    .set({ status: 'available', availableFrom: departedOn })
+    .where(eq(t.properties.id, booking.propertyId))
+
+  /* Their stay becomes part of the property's occupancy history, which is
+     what the property record shows and what the reports read. */
+  const [{ paid }] = await db.select({
+    paid: sql<number>`coalesce(sum(${t.invoices.paidAmount}), 0)::int`,
+  }).from(t.invoices).where(eq(t.invoices.bookingId, id))
+
+  const [client] = await db.select({ name: t.clients.name }).from(t.clients)
+    .where(eq(t.clients.id, booking.clientId))
+
+  await db.insert(t.occupancySpells).values({
+    id: `${booking.id}-spell`,
+    organizationId: w.organizationId,
+    propertyId: booking.propertyId,
+    clientName: client?.name ?? 'Former tenant',
+    startsOn: booking.arrivedOn,
+    endsOn: departedOn,
+    mode: booking.mode,
+    revenue: Number(paid) || 0,
+  }).onConflictDoNothing()
+
+  const [{ owed }] = await db.select({
+    owed: sql<number>`coalesce(sum(${t.invoices.amount} - ${t.invoices.paidAmount}), 0)::int`,
+  }).from(t.invoices).where(and(
+    eq(t.invoices.bookingId, id),
+    sql`${t.invoices.amount} > ${t.invoices.paidAmount}`,
+  ))
+
+  await db.insert(t.communications).values({
+    id: `${booking.clientId}-cm-${Date.now()}`,
+    organizationId: w.organizationId,
+    clientId: booking.clientId,
+    channel: 'note',
+    direction: 'outbound',
+    subject: `Checked out · ${booking.reference}`,
+    preview: Number(owed) > 0
+      ? `Left ${departedOn}. ${Number(owed).toLocaleString('en-UG')} still outstanding on this agreement.`
+      : `Left ${departedOn}. Nothing outstanding on this agreement.`,
+    at: today(),
+    author: w.name,
+  })
+
+  return { outstanding: Number(owed) || 0, deposit: booking.deposit }
 }
 
 /** Removing a property takes its agreements, charges and jobs with it. */

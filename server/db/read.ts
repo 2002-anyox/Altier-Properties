@@ -149,6 +149,7 @@ export async function readPortfolio(db: Db, organizationId: string): Promise<Por
     rate: b.rate, deposit: b.deposit, advanceMonths: b.advanceMonths,
     paidThrough: b.paidThrough, noticeDays: b.noticeDays, guests: b.guests,
     source: b.source, checkIn: hhmm(b.checkIn), checkOut: hhmm(b.checkOut),
+    arrivedOn: b.arrivedOn, departedOn: b.departedOn,
     notes: b.notes, createdAt: b.createdAt,
   }))
 

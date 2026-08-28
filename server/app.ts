@@ -23,7 +23,7 @@ import { missingMigrations } from './db/applied.js'
 import { classify, explain, rootCause } from './db/fault.js'
 import {
   Conflict, NotFound, addBooking, addClient, addMaintenance, addMember, addNote,
-  addProperty, deleteBooking, deleteClient, deleteMember, deleteProperty,
+  addProperty, checkIn, checkOut, deleteBooking, deleteClient, deleteMember, deleteProperty,
   grantPortalAccess, recordPayment, revokePortalAccess, sendReminder,
   setMaintenanceStatus, setPropertyStatus, updateBooking, updateClient, updateMember,
   updateProperty, updateReminders, type Workspace,
@@ -740,6 +740,28 @@ export function createApp(db: Db, driver: string) {
       requireShape(body, ['name', 'kind', 'status'], 'client')
       await updateClient(tx, w, param(req, 'id'), body)
       return withPortfolio(tx, w, res, req)
+    }))
+
+  /* Arriving and leaving. Separate from editing the agreement, because
+     they are things that happen rather than terms that change — and the
+     date is accepted rather than assumed, so a departure noticed on
+     Monday can still be recorded as the Friday it actually was. */
+  app.post('/api/bookings/:id/check-in', requirePermission('edit:bookings'),
+    inWorkspace(async (tx, w, req, res) => {
+      const on = String(req.body?.on ?? '').trim() || undefined
+      if (on && !/^\d{4}-\d{2}-\d{2}$/.test(on)) throw new BadRequest('That is not a date.')
+      await checkIn(tx, w, param(req, 'id'), on)
+      return withPortfolio(tx, w, res, req)
+    }))
+
+  app.post('/api/bookings/:id/check-out', requirePermission('edit:bookings'),
+    inWorkspace(async (tx, w, req, res) => {
+      const on = String(req.body?.on ?? '').trim() || undefined
+      if (on && !/^\d{4}-\d{2}-\d{2}$/.test(on)) throw new BadRequest('That is not a date.')
+      const settled = await checkOut(tx, w, param(req, 'id'), on)
+      const portfolio = await readPortfolio(tx, w.organizationId)
+      res.json({ ...visibleTo(portfolio, req), settled })
+      return undefined
     }))
 
   app.put('/api/bookings/:id', requirePermission('edit:bookings'),
