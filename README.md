@@ -271,6 +271,26 @@ A 500 naming `DATABASE_URL` means step 3 has not. And if Settings → Profile
 still says **Sample data**, the app never reached the API at all — the browser's
 network tab on `/api/portfolio` will say why.
 
+### Pasting the connection string
+
+Hosting dashboards take the *value* of an environment variable. The
+documentation everyone copies from shows a shell line:
+
+```
+DATABASE_URL="postgresql://…@…pooler.supabase.com:6543/postgres"
+```
+
+Paste that whole thing and the quotes become part of the value, so the
+database name is `postgres"` and Postgres answers *"database does not
+exist"* — which reads as a missing database rather than a stray
+character. `tidyUrl` in `server/db/client.ts` strips a matched pair of
+surrounding quotes, a `DATABASE_URL=` prefix and stray whitespace,
+because none of them can appear in a real URL. A quote inside the
+password is left alone.
+
+Use the **pooled** string (port 6543 on Supabase). The direct endpoint is
+IPv6-only and unreachable from most hosts.
+
 ### Reading `/api/health`
 
 It answers even when the database does not, and it names the fault rather
