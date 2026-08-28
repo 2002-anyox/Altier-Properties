@@ -18,6 +18,9 @@ import Maintenance from './pages/Maintenance.js'
 import Notifications from './pages/Notifications.js'
 import Reports from './pages/Reports.js'
 import Settings from './pages/Settings.js'
+import Team from './pages/Team.js'
+import Tenants from './pages/Tenants.js'
+import Admin from './pages/Admin.js'
 
 function Guard({ permission, children }: { permission: Permission; children: React.ReactNode }) {
   const { state } = useStore()
@@ -28,7 +31,7 @@ function Guard({ permission, children }: { permission: Permission; children: Rea
       <EmptyState
         icon={<ShieldAlert size={22} />}
         title="Not available for this role"
-        body={`This section is outside the ${roleLabel(state.role)} permission set. Switch role from the avatar menu to see how access changes across the platform.`}
+        body={`This section is outside what a ${roleLabel(state.role).toLowerCase()} can reach. The server refuses it too, so this is the same answer either way.`}
         action={<Button variant="secondary" onClick={() => navigate(-1)}>Go back</Button>}
       />
     </div>
@@ -59,6 +62,9 @@ export default function App() {
                 <Route path="maintenance" element={<Guard permission="view:maintenance"><Maintenance /></Guard>} />
                 <Route path="notifications" element={<Notifications />} />
                 <Route path="reports" element={<Guard permission="view:reports"><Reports /></Guard>} />
+                <Route path="team" element={<Guard permission="manage:team"><Team /></Guard>} />
+                <Route path="tenants" element={<Guard permission="view:clients"><Tenants /></Guard>} />
+                <Route path="admin" element={<Admin />} />
                 <Route path="settings" element={<Settings />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>

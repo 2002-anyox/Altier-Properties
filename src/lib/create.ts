@@ -455,6 +455,8 @@ export interface MemberDraft {
   title: string
   email: string
   phone: string
+  /** Only read for a manager or staff member; the other roles see all. */
+  propertyIds: string[]
 }
 
 export const emptyMemberDraft = (): MemberDraft => ({
@@ -463,6 +465,7 @@ export const emptyMemberDraft = (): MemberDraft => ({
   title: '',
   email: '',
   phone: '',
+  propertyIds: [],
 })
 
 export const memberDraftFrom = (m: TeamMember): MemberDraft => ({
@@ -471,6 +474,7 @@ export const memberDraftFrom = (m: TeamMember): MemberDraft => ({
   title: m.title,
   email: m.email,
   phone: m.phone,
+  propertyIds: [...(m.propertyIds ?? [])],
 })
 
 export function newMember(draft: MemberDraft): TeamMember {
@@ -482,6 +486,7 @@ export function newMember(draft: MemberDraft): TeamMember {
     email: draft.email.trim(),
     phone: draft.phone.trim(),
     since: iso(TODAY),
+    propertyIds: assignable(draft),
   }
 }
 
@@ -493,8 +498,15 @@ export function editMember(existing: TeamMember, draft: MemberDraft): TeamMember
     title: draft.title.trim() || roleTitle(draft.role),
     email: draft.email.trim(),
     phone: draft.phone.trim(),
+    propertyIds: assignable(draft),
   }
 }
+
+/* An owner and an accountant reach the whole workspace, so a list for
+   them would be a second thing to keep in step with the first. Empty is
+   how "no restriction" is written. */
+const assignable = (draft: MemberDraft) =>
+  (draft.role === 'manager' || draft.role === 'staff') ? draft.propertyIds : []
 
 /** A sensible job title when someone does not supply one. */
 const roleTitle = (role: Role): string => ({

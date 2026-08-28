@@ -6,7 +6,7 @@ import { api } from '../../lib/api.js'
 import {
   editMember, emptyMemberDraft, memberDraftFrom, newMember, type MemberDraft,
 } from '../../lib/create.js'
-import { ROLES, roleLabel } from '../../lib/rbac.js'
+import { STAFF_ROLE_OPTIONS, roleLabel } from '../../lib/rbac.js'
 import type { Role, TeamMember } from '../../lib/types.js'
 
 export function MemberFormModal({
@@ -90,9 +90,9 @@ export function MemberFormModal({
           />
         </Field>
 
-        <Field label="Role" id="mf-role" hint={ROLES.find((r) => r.id === draft.role)?.blurb}>
+        <Field label="Role" id="mf-role" hint={STAFF_ROLE_OPTIONS.find((r) => r.id === draft.role)?.blurb}>
           <Select id="mf-role" value={draft.role} onChange={(e) => set('role', e.target.value as Role)}>
-            {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+            {STAFF_ROLE_OPTIONS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
           </Select>
         </Field>
 
@@ -108,6 +108,12 @@ export function MemberFormModal({
             <Input id="mf-phone" value={draft.phone} onChange={(e) => set('phone', e.target.value)} placeholder="+256 7…" />
           </Field>
         </div>
+
+        <PropertyAssignment
+          role={draft.role}
+          chosen={draft.propertyIds}
+          onChange={(ids) => set('propertyIds', ids)}
+        />
 
         {live && (
           <fieldset className="rounded-2xl border border-line p-4">
@@ -139,5 +145,59 @@ export function MemberFormModal({
         </p>
       </div>
     </Modal>
+  )
+}
+
+/**
+ * Which properties a manager or staff member may reach.
+ *
+ * Not a preference: the database reads these assignments to decide what
+ * their queries return, so an empty list for one of those two roles is a
+ * person who can sign in and see nothing. Said plainly here, because it
+ * is the mistake this form makes easiest.
+ */
+function PropertyAssignment({
+  role, chosen, onChange,
+}: { role: Role; chosen: string[]; onChange: (ids: string[]) => void }) {
+  const { state } = useStore()
+  if (role !== 'manager' && role !== 'staff') {
+    return (
+      <p className="rounded-xl border border-line bg-surface-inset/50 p-3 text-[12px] leading-relaxed text-ink-muted">
+        {roleLabel(role)}s reach the whole portfolio, so there is nothing to assign.
+      </p>
+    )
+  }
+
+  const toggle = (id: string) =>
+    onChange(chosen.includes(id) ? chosen.filter((p) => p !== id) : [...chosen, id])
+
+  return (
+    <fieldset className="rounded-2xl border border-line p-4">
+      <legend className="px-1.5 text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
+        Properties they work on
+      </legend>
+      <p className="mb-3 text-[12px] leading-relaxed text-ink-muted">
+        {chosen.length === 0
+          ? 'Nothing assigned yet, which means an empty portfolio when they sign in.'
+          : `${chosen.length} of ${state.properties.length}. They see these and the agreements, charges and jobs attached to them.`}
+      </p>
+      <div className="scroll-y max-h-52 space-y-1 pr-1">
+        {state.properties.map((p) => (
+          <label
+            key={p.id}
+            className="flex cursor-pointer items-center gap-2.5 rounded-xl px-2 py-1.5 text-[13px] transition-colors hover:bg-surface-inset/60"
+          >
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-[rgb(var(--c-gold))]"
+              checked={chosen.includes(p.id)}
+              onChange={() => toggle(p.id)}
+            />
+            <span className="text-ink">{p.name}</span>
+            <span className="ml-auto text-[11.5px] text-ink-muted">{p.code}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
   )
 }

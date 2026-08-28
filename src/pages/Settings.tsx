@@ -1,26 +1,24 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  Check, Coins, Globe2, KeyRound, Link2, Moon, Palette, Pencil, RotateCcw, ShieldCheck, Sun,
-  Trash2, Unlink, UserPlus, Users2,
+  Check, Coins, Globe2, KeyRound, Link2, Moon, Palette, RotateCcw, ShieldCheck, Sun,
+  Unlink, Users2,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader.js'
 import {
   Avatar, Button, Card, CardHeader, Chip, Field, Input, Select, Tabs, Toggle, cx,
 } from '../components/ui'
 import { ReminderModal } from './Notifications.js'
-import { MemberFormModal } from '../components/forms/MemberFormModal.js'
 import { SsoButtons, useSsoProviders } from '../components/auth/SsoButtons.js'
-import { ConfirmDelete } from '../components/forms/ConfirmDelete.js'
 import { currentMember, useStore } from '../lib/store.js'
 import { auth } from '../lib/api.js'
 import { ROLES, can, roleLabel, type Permission } from '../lib/rbac.js'
 import { mediumDate, money, num } from '../lib/format.js'
 import { BASE_CURRENCY, CURRENCIES, REGIONS, currencyDef, regionDef } from '../lib/money.js'
 import { LANGUAGES, type Language } from '../lib/strings.js'
-import type { Role, TeamMember } from '../lib/types.js'
+import type { Role } from '../lib/types.js'
 
-type Tab = 'profile' | 'localisation' | 'team' | 'roles' | 'reminders' | 'appearance'
+type Tab = 'profile' | 'localisation' | 'roles' | 'reminders' | 'appearance'
 
 const PERMISSION_ROWS: Array<{ label: string; permission: Permission }> = [
   { label: 'View dashboard', permission: 'view:dashboard' },
@@ -47,29 +45,16 @@ export default function Settings() {
   const [tuning, setTuning] = useState(false)
   const me = currentMember(state)
   const live = state.source === 'database'
-  const [memberOpen, setMemberOpen] = useState(false)
-  const [member, setMember] = useState<TeamMember | undefined>()
-  const [removing, setRemoving] = useState<TeamMember | null>(null)
   const [pw, setPw] = useState({ current: '', next: '' })
   const [pwError, setPwError] = useState<string | null>(null)
   const [pwBusy, setPwBusy] = useState(false)
-
-  /* Naming what stands in the way beats a refusal after the fact. */
-  const blockers = removing
-    ? [
-        state.properties.filter((p) => p.managerId === removing.id).length
-          && `${state.properties.filter((p) => p.managerId === removing.id).length} properties to reassign`,
-        state.maintenance.filter((m) => m.assigneeId === removing.id).length
-          && `${state.maintenance.filter((m) => m.assigneeId === removing.id).length} maintenance jobs to reassign`,
-      ].filter(Boolean) as string[]
-    : []
 
   return (
     <>
       <PageHeader
         eyebrow="Insight"
         title="Settings"
-        description="Your profile, the team, what each role can reach, how reminders are timed, and how Altier looks."
+        description="Your profile, what each role can reach, how reminders are timed, and how Altier looks. The team itself lives under Team & access."
       />
 
       <Tabs<Tab>
@@ -79,7 +64,6 @@ export default function Settings() {
         tabs={[
           { value: 'profile', label: 'Profile' },
           { value: 'localisation', label: 'Region & currency' },
-          { value: 'team', label: 'Team', count: state.team.length },
           { value: 'roles', label: 'Roles & access' },
           { value: 'reminders', label: 'Reminders' },
           { value: 'appearance', label: 'Appearance' },
@@ -391,67 +375,6 @@ export default function Settings() {
           </div>
         )}
 
-        {tab === 'team' && (
-          <Card className="overflow-hidden">
-            <CardHeader
-              title="Team"
-              subtitle={`${state.team.length} people with access to this portfolio`}
-              action={can(state.role, 'manage:team') && (
-                <Button variant="primary" size="sm" icon={<UserPlus size={14} />} onClick={() => { setMember(undefined); setMemberOpen(true) }}>
-                  Add member
-                </Button>
-              )}
-            />
-            <div className="scroll-x mt-3">
-              <table className="w-full min-w-[720px] text-left text-[13px]">
-                <thead className="text-ink-muted">
-                  <tr className="border-y border-line bg-surface-inset/50">
-                    <th scope="col" className="px-5 py-2.5 font-medium sm:px-6">Name</th>
-                    <th scope="col" className="px-4 py-2.5 font-medium">Title</th>
-                    <th scope="col" className="px-4 py-2.5 font-medium">Role</th>
-                    <th scope="col" className="px-4 py-2.5 font-medium">Contact</th>
-                    <th scope="col" className="px-4 py-2.5 text-right font-medium">Properties</th>
-                    {can(state.role, 'manage:team') && <th scope="col" className="px-5 py-2.5 text-right font-medium sm:px-6"><span className="sr-only">Actions</span></th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[rgb(var(--c-border))]">
-                  {state.team.map((t) => (
-                    <tr key={t.id} className="transition-colors hover:bg-surface-inset/60">
-                      <td className="px-5 py-3 sm:px-6">
-                        <span className="flex items-center gap-2.5">
-                          <Avatar name={t.name} size={30} tone="soft" />
-                          <span className="font-medium text-ink">{t.name}</span>
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-ink-secondary">{t.title}</td>
-                      <td className="px-4 py-3"><Chip className="bg-gold-soft text-gold-ink">{roleLabel(t.role)}</Chip></td>
-                      <td className="px-4 py-3">
-                        <span className="block text-ink-secondary">{t.email}</span>
-                        <span className="block text-[11.5px] text-ink-muted">{t.phone}</span>
-                      </td>
-                      <td className="tnum px-4 py-3 text-right text-ink-secondary">
-                        {state.properties.filter((p) => p.managerId === t.id).length}
-                      </td>
-                      {can(state.role, 'manage:team') && (
-                        <td className="px-5 py-3 text-right sm:px-6">
-                          <span className="inline-flex gap-1">
-                            <Button size="sm" variant="ghost" onClick={() => { setMember(t); setMemberOpen(true) }}>
-                              <Pencil size={14} /><span className="sr-only">Edit {t.name}</span>
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => setRemoving(t)}>
-                              <Trash2 size={14} /><span className="sr-only">Remove {t.name}</span>
-                            </Button>
-                          </span>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        )}
-
         {tab === 'roles' && (
           <div className="grid gap-4">
             <Card className="card-pad">
@@ -638,20 +561,6 @@ export default function Settings() {
           </div>
         )}
       </motion.div>
-
-      <MemberFormModal open={memberOpen} onClose={() => setMemberOpen(false)} member={member} />
-
-      <ConfirmDelete
-        open={!!removing}
-        onClose={() => setRemoving(null)}
-        title="Remove from the team"
-        subject={blockers.length
-          ? `${removing?.name} still has work assigned to them, so they cannot be removed yet.`
-          : `${removing?.name} will lose access to this portfolio.`}
-        consequences={blockers}
-        confirmLabel={blockers.length ? 'Try anyway' : 'Remove'}
-        onConfirm={() => removing && dispatch({ type: 'delete-member', id: removing.id })}
-      />
 
       <ReminderModal open={tuning} onClose={() => setTuning(false)} />
     </>

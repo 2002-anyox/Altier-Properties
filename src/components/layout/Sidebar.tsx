@@ -29,7 +29,8 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
       <nav className="flex-1 overflow-y-auto px-3 pb-4" aria-label="Main">
         {NAV.map((group) => {
-          const items = group.items.filter((i) => can(state.role, i.permission))
+          const items = group.items.filter((i) =>
+            can(state.role, i.permission) && (!i.superAdmin || state.member?.isSuperAdmin))
           if (!items.length) return null
           return (
             <div key={group.sectionKey} className="mb-5">

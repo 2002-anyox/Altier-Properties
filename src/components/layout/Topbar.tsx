@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  Bell, Check, ChevronDown, KeyRound, LogOut, Menu, Moon, Search, Sun, UserCog,
+  Bell, Building2, Check, ChevronDown, KeyRound, LogOut, Menu, Moon, Search, Sun, UserCog,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { currentMember, useStore } from '../../lib/store.js'
@@ -21,7 +21,7 @@ const PRIORITY_DOT: Record<NotificationPriority, string> = {
 }
 
 export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
-  const { state, dispatch, theme, toggleTheme, setPaletteOpen, toast, signOut } = useStore()
+  const { state, dispatch, theme, toggleTheme, setPaletteOpen, toast, signOut, switchWorkspace } = useStore()
   const [bellOpen, setBellOpen] = useState(false)
   const [roleOpen, setRoleOpen] = useState(false)
   const navigate = useNavigate()
@@ -169,6 +169,7 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
                           <p className="truncate text-[11.5px] text-ink-muted">{state.member.email}</p>
                           <p className="mt-1.5 text-[11px] uppercase tracking-[0.12em] text-ink-muted">
                             {roleLabel(state.role)}
+                            {state.workspace ? ` · ${state.workspace.organizationName}` : ''}
                           </p>
                         </>
                       ) : (
@@ -180,6 +181,39 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
 
                     {state.member ? (
                       <div className="p-1.5">
+                        {/* Only when there is somewhere to switch to. One
+                            workspace is the ordinary case, and a menu
+                            offering a choice of one is noise. */}
+                        {state.workspaces.length > 1 && (
+                          <>
+                            <p className="px-3 pb-1 pt-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
+                              Workspaces
+                            </p>
+                            {state.workspaces.map((w) => (
+                              <button
+                                key={w.organizationId}
+                                role="menuitem"
+                                onClick={() => {
+                                  setRoleOpen(false)
+                                  if (w.organizationId === state.workspace?.organizationId) return
+                                  void switchWorkspace(w.organizationId)
+                                }}
+                                className={cx(
+                                  'flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] transition-colors hover:bg-surface-inset',
+                                  w.organizationId === state.workspace?.organizationId
+                                    ? 'bg-gold-soft/40 text-ink'
+                                    : 'text-ink-secondary hover:text-ink',
+                                )}
+                              >
+                                <Building2 size={15} />
+                                <span className="min-w-0 flex-1 truncate">{w.organizationName}</span>
+                                {w.organizationId === state.workspace?.organizationId
+                                  && <Check size={15} className="shrink-0 text-gold" />}
+                              </button>
+                            ))}
+                            <span className="my-1.5 block h-px bg-line" aria-hidden />
+                          </>
+                        )}
                         <Link
                           to="/settings"
                           role="menuitem"

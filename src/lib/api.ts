@@ -370,6 +370,24 @@ export const portal = {
     send(`/clients/${clientId}/portal`, { method: 'DELETE' }) as Promise<{ portal: PortalLogin[] }>,
 }
 
+/** One workspace as Altier's own support desk sees it: counts, not records. */
+export interface AdminOrganization {
+  id: string
+  name: string
+  slug: string
+  createdAt: string
+  plan: string | null
+  status: string | null
+  seatLimit: number | null
+  members: number
+  tenants: number
+  properties: number
+}
+
+export const admin = {
+  organizations: () => send('/admin/organizations') as Promise<{ organizations: AdminOrganization[] }>,
+}
+
 export const auth = {
   me: () => send('/auth/me') as Promise<Session>,
   providers: () => send('/auth/providers') as Promise<{ providers: SsoProvider[] }>,
