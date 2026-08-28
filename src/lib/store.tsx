@@ -67,7 +67,13 @@ type Action =
   | { type: 'record-payment'; invoiceId: string }
   | { type: 'send-reminder'; invoiceId: string }
   | { type: 'set-property-status'; id: string; status: PropertyStatus }
-  | { type: 'set-maintenance-status'; id: string; status: MaintenanceStatus }
+  | {
+      type: 'set-maintenance-status'
+      id: string
+      status: MaintenanceStatus
+      /** Undefined leaves it, null clears it, a number records it. */
+      actualCost?: number | null
+    }
   | { type: 'add-maintenance'; request: MaintenanceRequest }
   | { type: 'add-property'; property: Property }
   | { type: 'update-property'; property: Property }
@@ -241,7 +247,9 @@ function reducer(state: State, action: Action): State {
                 ...m,
                 status: action.status,
                 completedOn: action.status === 'completed' ? iso(TODAY) : null,
-                actualCost: action.status === 'completed' ? (m.actualCost ?? m.estimatedCost) : m.actualCost,
+                /* Not the estimate. A guess in the column the spend
+                   figure sums is worse than an honest blank. */
+                actualCost: action.actualCost === undefined ? m.actualCost : action.actualCost,
                 timeline: [...m.timeline, { at: iso(TODAY), label: `Status changed to ${action.status.replace(/_/g, ' ')}`, by: 'You' }],
               }
             : m,
@@ -730,7 +738,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       case 'record-payment': return () => api.recordPayment(action.invoiceId)
       case 'send-reminder': return () => api.sendReminder(action.invoiceId)
       case 'set-property-status': return () => api.setPropertyStatus(action.id, action.status)
-      case 'set-maintenance-status': return () => api.setMaintenanceStatus(action.id, action.status)
+      case 'set-maintenance-status':
+        return () => api.setMaintenanceStatus(action.id, action.status, action.actualCost)
       case 'add-note': return () => api.addNote(action.clientId, action.text)
       case 'update-reminders': return () => api.updateReminders(action.reminders as Record<string, unknown>)
       case 'add-maintenance': {

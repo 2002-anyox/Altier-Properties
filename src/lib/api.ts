@@ -438,8 +438,11 @@ export const api = {
   sendReminder: (invoiceId: string) => request(`/invoices/${invoiceId}/reminder`, { method: 'POST' }),
   setPropertyStatus: (id: string, status: string) =>
     request(`/properties/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
-  setMaintenanceStatus: (id: string, status: string) =>
-    request(`/maintenance/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  setMaintenanceStatus: (id: string, status: string, actualCost?: number | null) =>
+    request(`/maintenance/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify(actualCost === undefined ? { status } : { status, actualCost }),
+    }),
   reassignMaintenance: (id: string, assigneeId: string) =>
     request(`/maintenance/${id}/assignee`, {
       method: 'PATCH', body: JSON.stringify({ assigneeId }),

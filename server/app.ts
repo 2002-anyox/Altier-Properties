@@ -675,7 +675,17 @@ export function createApp(db: Db, driver: string) {
 
   app.patch('/api/maintenance/:id/status', requirePermission('edit:maintenance'),
     inWorkspace(async (tx, w, req, res) => {
-      await setMaintenanceStatus(tx, w, param(req, 'id'), req.body?.status)
+      /* undefined leaves the cost as it was; null clears it; a number
+         records it. The three are different answers and the route keeps
+         them apart rather than collapsing them into a falsy check. */
+      const raw = req.body?.actualCost
+      const actualCost = raw === undefined ? undefined
+        : raw === null || raw === '' ? null
+        : Number(raw)
+      if (typeof actualCost === 'number' && !Number.isFinite(actualCost)) {
+        throw new BadRequest('That is not an amount.')
+      }
+      await setMaintenanceStatus(tx, w, param(req, 'id'), req.body?.status, actualCost)
       return withPortfolio(tx, w, res, req)
     }))
 

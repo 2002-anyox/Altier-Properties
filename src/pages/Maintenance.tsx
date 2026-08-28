@@ -26,6 +26,9 @@ export default function Maintenance() {
   const [propertyId, setPropertyId] = useState('all')
   const [open, setOpen] = useState<MaintenanceRequest | null>(null)
   const [creating, setCreating] = useState(false)
+  /* The job being closed, while it is being asked what it cost. */
+  const [closing, setClosing] = useState<MaintenanceRequest | null>(null)
+  const [finalCost, setFinalCost] = useState('')
   /* Staff, not tenants — a portal login is not somebody to hand a job to. */
   const assignable = state.team.filter((t) => t.role !== 'tenant')
   const [draft, setDraft] = useState({
@@ -35,6 +38,7 @@ export default function Maintenance() {
     description: '',
     vendor: '',
     dueOn: dayOffset(7),
+    estimatedCost: 0,
     /* Whoever is logging it, until they say otherwise. Somebody has to
        own a job from the moment it exists, and it is fairer that it is
        the person raising it than a name picked by the code. */
@@ -76,7 +80,7 @@ export default function Maintenance() {
       reportedOn: iso(TODAY),
       dueOn: draft.dueOn,
       completedOn: null,
-      estimatedCost: 0,
+      estimatedCost: Math.max(0, Math.round(draft.estimatedCost)),
       actualCost: null,
       timeline: [{ at: iso(TODAY), label: 'Request logged', by: currentMember(state).name }],
     }
@@ -87,6 +91,12 @@ export default function Maintenance() {
   }
 
   const setStatus = (m: MaintenanceRequest, status: MaintenanceStatus) => {
+    /* Closing a job is when somebody knows what it cost, so that is when
+       to ask. Everything else moves straight away. */
+    if (status === 'completed' && m.actualCost === null) {
+      setClosing(m)
+      return
+    }
     dispatch({ type: 'set-maintenance-status', id: m.id, status })
     toast({ title: `${m.reference} moved to ${MAINTENANCE_STATUS_META[status].label.toLowerCase()}`, tone: 'success' })
     setOpen(null)
@@ -362,6 +372,74 @@ export default function Maintenance() {
       </Drawer>
 
       {/* ------------------------------ New job modal --------------------------- */}
+      {/* What it actually cost. Pre-filled with the estimate as a starting
+          point, never as an answer: the estimate used to be copied into
+          this column on completion, which made the spend figure a sum of
+          guesses. Cleared, the job closes with "not yet invoiced", which
+          is at least true. */}
+      <Modal
+        open={!!closing}
+        onClose={() => setClosing(null)}
+        title="Close this job"
+        subtitle={closing ? `${closing.reference} · ${closing.title}` : ''}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setClosing(null)}>Cancel</Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                if (!closing) return
+                const trimmed = finalCost.trim()
+                const cost = trimmed === '' ? null : Math.max(0, Math.round(Number(trimmed)))
+                dispatch({
+                  type: 'set-maintenance-status',
+                  id: closing.id,
+                  status: 'completed',
+                  actualCost: Number.isFinite(cost as number) ? cost : null,
+                })
+                toast({
+                  title: `${closing.reference} completed`,
+                  body: cost === null
+                    ? 'Left as not yet invoiced — add the cost when it comes in.'
+                    : `${money(cost)} recorded against it.`,
+                  tone: 'success',
+                })
+                setClosing(null)
+                setFinalCost('')
+                setOpen(null)
+              }}
+            >
+              Close job
+            </Button>
+          </>
+        }
+      >
+        <div className="grid gap-4">
+          <Field
+            label="What it came to"
+            id="job-final"
+            hint="Leave it blank if the invoice has not arrived yet."
+          >
+            <Input
+              id="job-final" type="number" min={0} step={1000} autoFocus
+              value={finalCost}
+              onChange={(e) => setFinalCost(e.target.value)}
+              placeholder={closing ? String(closing.estimatedCost || '') : ''}
+            />
+          </Field>
+          {closing && closing.estimatedCost > 0 && (
+            <p className="rounded-xl border border-line bg-surface-inset/50 px-3.5 py-3 text-[12.5px] leading-relaxed text-ink-secondary">
+              Estimated at {money(closing.estimatedCost)}.
+              {finalCost.trim() !== '' && Number(finalCost) > closing.estimatedCost
+                ? ` That is ${money(Number(finalCost) - closing.estimatedCost)} over.`
+                : finalCost.trim() !== '' && Number(finalCost) < closing.estimatedCost
+                  ? ` That is ${money(closing.estimatedCost - Number(finalCost))} under.`
+                  : ''}
+            </p>
+          )}
+        </div>
+      </Modal>
+
       <Modal
         open={creating}
         onClose={() => setCreating(false)}
@@ -394,6 +472,17 @@ export default function Maintenance() {
             </Field>
             <Field label="Target date" id="job-due">
               <Input id="job-due" type="date" value={draft.dueOn} onChange={(e) => setDraft({ ...draft, dueOn: e.target.value })} />
+            </Field>
+            <Field
+              label="Estimated cost"
+              id="job-estimate"
+              hint="What you expect it to come to. It is what the board commits."
+            >
+              <Input
+                id="job-estimate" type="number" min={0} step={1000}
+                value={draft.estimatedCost}
+                onChange={(e) => setDraft({ ...draft, estimatedCost: Number(e.target.value) })}
+              />
             </Field>
             <Field
               label="Assigned to"

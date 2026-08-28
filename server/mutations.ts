@@ -108,7 +108,9 @@ export async function setPropertyStatus(db: Db, w: Workspace, id: string, status
   }).where(eq(t.properties.id, id))
 }
 
-export async function setMaintenanceStatus(db: Db, w: Workspace, id: string, status: MaintenanceStatus) {
+export async function setMaintenanceStatus(
+  db: Db, w: Workspace, id: string, status: MaintenanceStatus, actualCost?: number | null,
+) {
   const request = await requireOne(
     await db.select().from(t.maintenanceRequests).where(and(
       eq(t.maintenanceRequests.id, id),
@@ -117,10 +119,19 @@ export async function setMaintenanceStatus(db: Db, w: Workspace, id: string, sta
     `maintenance request ${id}`,
   )
   const completing = status === 'completed'
+  /* What it cost is what somebody says it cost. The old code copied the
+     estimate across on completion, which put a guess in the column the
+     spend figure sums and left no way to tell the two apart. Absent, it
+     stays absent — "not yet invoiced" is true, and a number nobody
+     checked is not. */
+  const settled = actualCost === undefined
+    ? request.actualCost
+    : (actualCost === null ? null : Math.max(0, Math.round(actualCost)))
+
   await db.update(t.maintenanceRequests).set({
     status,
     completedOn: completing ? today(w) : null,
-    actualCost: completing ? (request.actualCost ?? request.estimatedCost) : request.actualCost,
+    actualCost: settled,
   }).where(eq(t.maintenanceRequests.id, id))
 
   const [{ next }] = await db
@@ -134,7 +145,9 @@ export async function setMaintenanceStatus(db: Db, w: Workspace, id: string, sta
     requestId: id,
     position: Number(next),
     at: today(w),
-    label: `Status changed to ${status.replace(/_/g, ' ')}`,
+    label: completing && settled !== null
+      ? `Completed · ${settled.toLocaleString('en-UG')} invoiced`
+      : `Status changed to ${status.replace(/_/g, ' ')}`,
     by: w.name,
   })
 }
@@ -148,6 +161,8 @@ export interface NewMaintenance {
   dueOn: string
   /** Who is doing it. Left out, it sits with whoever logged it. */
   assigneeId?: string
+  /** What it is expected to cost. This is what the board commits. */
+  estimatedCost?: number
 }
 
 export async function addMaintenance(db: Db, w: Workspace, input: NewMaintenance) {
@@ -172,7 +187,7 @@ export async function addMaintenance(db: Db, w: Workspace, input: NewMaintenance
     reportedOn: today(w),
     dueOn: input.dueOn,
     completedOn: null,
-    estimatedCost: 0,
+    estimatedCost: Math.max(0, Math.round(input.estimatedCost ?? 0)),
     actualCost: null,
   })
   await db.insert(t.maintenanceEvents).values({

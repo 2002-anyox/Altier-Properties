@@ -456,11 +456,40 @@ try {
     priority: 'medium',
     vendor: 'Test Vendor',
     dueOn: plusDays(today, 7),
+    estimatedCost: 450_000,
   })).then((r) => r.json())
   const job = logged.maintenance.find((m) => m.title === `Smoke job ${stamp}`)
   ok(!!job, 'a maintenance job can be raised')
   ok(logged.team.some((t) => t.id === job?.assigneeId),
      `and lands with somebody who exists (${job?.assigneeId})`)
+
+  ok(job?.estimatedCost === 450_000,
+     `carrying the estimate it was given (${job?.estimatedCost})`)
+
+  /* Completing used to copy the estimate into the actual cost, so the
+     spend figure was a sum of guesses. It is asked for now, and absent
+     means absent. */
+  const closedBlind = await get(`/maintenance/${job.id}/status`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ status: 'completed' }),
+  }).then((r) => r.json())
+  const blind = closedBlind.maintenance.find((m) => m.id === job.id)
+  ok(blind?.actualCost === null,
+     `closing without a figure leaves it uninvoiced rather than guessing (${blind?.actualCost})`)
+
+  const closedWithCost = await get(`/maintenance/${job.id}/status`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ status: 'completed', actualCost: 512_000 }),
+  }).then((r) => r.json())
+  const invoiced = closedWithCost.maintenance.find((m) => m.id === job.id)
+  ok(invoiced?.actualCost === 512_000, `and the figure given is what is stored (${invoiced?.actualCost})`)
+  ok(invoiced?.timeline?.some((e) => e.label.includes('512,000')),
+     'with the amount on its timeline')
+
+  await get(`/maintenance/${job.id}/status`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ status: 'in_progress' }),
+  })
 
   const other = logged.team.find((t) => t.id !== job?.assigneeId && t.role !== 'tenant')
   if (job && other) {
