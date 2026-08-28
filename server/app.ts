@@ -31,13 +31,15 @@ import {
 import type { Booking, Client, Invoice, Property, TeamMember } from '../src/lib/types.js'
 import { ALL_PERMISSIONS, type Permission } from '../src/lib/rbac.js'
 import {
-  Forbidden, LastWayIn, NotLinked, OAUTH_COOKIE, MIN_PASSWORD, SESSION_COOKIE, Unauthorized,
+  Forbidden, LastWayIn, NotLinked, OAUTH_COOKIE, MIN_PASSWORD,
+  SESSION_COOKIE, Unauthorized,
   attachViewer, beginOauth, clearFailures, clearOauthCookie, clearSessionCookie,
   completeOauth, createSession, destroyAllSessions, destroySession, equaliseTiming, findByEmail,
   hashPassword, identitiesFor, lockedFor, noAccountsYet, profileForIdentity, recordFailure,
   rejectPassword, requireMembership, requirePermission, requireViewer, setOauthCookie,
   setPassword, setSessionCookie, unlinkIdentity, verifyPassword, type Authed, type Viewer,
 } from './auth.js'
+import { DEFAULT_TIMEZONE } from '../src/lib/defaults.js'
 import { scoped } from './scope.js'
 import {
   BadInvitation, NoSubscription, SeatLimit, createWorkspace, defaultOrganization,
@@ -118,6 +120,7 @@ export function createApp(db: Db, driver: string) {
       organizationId: membership.organizationId,
       memberId: membership.id,
       name: viewer.profile.name,
+      timezone: viewer.timezone,
     }
     return scoped(
       db,
@@ -310,7 +313,11 @@ export function createApp(db: Db, driver: string) {
     const permissions = membership
       ? new Set((await permissionMatrix(db, membership.organizationId))[membership.role] ?? [])
       : new Set<Permission>()
-    return { profile, membership, permissions }
+    const timezone = membership
+      ? (await db.select({ zone: organizations.timezone }).from(organizations)
+          .where(eq(organizations.id, membership.organizationId)))[0]?.zone ?? DEFAULT_TIMEZONE
+      : DEFAULT_TIMEZONE
+    return { profile, membership, permissions, timezone }
   }
 
   app.post('/api/auth/login', route(async (req, res) => {

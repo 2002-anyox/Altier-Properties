@@ -947,4 +947,35 @@ CREATE POLICY "role_permissions_isolation" ON "role_permissions" FOR ALL TO alti
   END IF;
 END $mig_7$;
 
+-- ---------------------------------------------------------------
+-- migration: 0008_timezone
+-- ---------------------------------------------------------------
+DO $mig_8$
+BEGIN
+  IF EXISTS (SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE hash = '4a7543b3291ee3bfa7775877272555881020cf26d0b9d432aa32c2e15aa3df99') THEN
+    RAISE NOTICE 'already applied: 0008_timezone';
+  ELSE
+    EXECUTE $mig_8_sql$
+-- ---------------------------------------------------------------
+-- Where the workspace is
+--
+-- Dates stamped by the server were UTC. A payment recorded at one in the
+-- morning in Kampala was stored as the previous day, because UTC had not
+-- reached midnight yet — and the screen, which reads the browser's own
+-- calendar, said otherwise. Both were confident and they disagreed.
+--
+-- A calendar day is a fact about a place. This records which place, so
+-- "today" means the same thing on the screen and in the ledger. Uganda is
+-- the default because that is who this is built for; a workspace
+-- elsewhere sets its own.
+-- ---------------------------------------------------------------
+ALTER TABLE "organizations"
+  ADD COLUMN IF NOT EXISTS "timezone" text DEFAULT 'Africa/Kampala' NOT NULL;
+    $mig_8_sql$;
+    INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at)
+    VALUES ('4a7543b3291ee3bfa7775877272555881020cf26d0b9d432aa32c2e15aa3df99', 1787900500000);
+    RAISE NOTICE 'applied: 0008_timezone';
+  END IF;
+END $mig_8$;
+
 -- Done. Redeploy so the app picks up the code that uses this schema.

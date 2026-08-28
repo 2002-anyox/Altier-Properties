@@ -8,6 +8,15 @@
 
 import type { ReminderSettings } from './types.js'
 
+/**
+ * Where a workspace is assumed to be until it says otherwise.
+ *
+ * A calendar day is a fact about a place, and the server runs wherever
+ * the host puts it — so it stamps dates against this rather than against
+ * its own clock. Uganda, because that is who this is built for.
+ */
+export const DEFAULT_TIMEZONE = 'Africa/Kampala'
+
 /** Offered when adding a home. Free text is allowed alongside these. */
 export const AMENITY_POOL = [
   'Standby generator', 'Borehole water', 'Water storage tank', 'Solar backup',

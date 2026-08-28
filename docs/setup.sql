@@ -1139,6 +1139,25 @@ CREATE POLICY "role_permissions_isolation" ON "role_permissions" FOR ALL TO alti
   WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND altier_role() = 'owner'));
 
 -- ---------------------------------------------------------------
+-- migration: 0008_timezone
+-- ---------------------------------------------------------------
+-- ---------------------------------------------------------------
+-- Where the workspace is
+--
+-- Dates stamped by the server were UTC. A payment recorded at one in the
+-- morning in Kampala was stored as the previous day, because UTC had not
+-- reached midnight yet — and the screen, which reads the browser's own
+-- calendar, said otherwise. Both were confident and they disagreed.
+--
+-- A calendar day is a fact about a place. This records which place, so
+-- "today" means the same thing on the screen and in the ledger. Uganda is
+-- the default because that is who this is built for; a workspace
+-- elsewhere sets its own.
+-- ---------------------------------------------------------------
+ALTER TABLE "organizations"
+  ADD COLUMN IF NOT EXISTS "timezone" text DEFAULT 'Africa/Kampala' NOT NULL;
+
+-- ---------------------------------------------------------------
 -- Record the migrations as applied, so `npm run db:migrate`
 -- against this database does nothing rather than failing.
 -- ---------------------------------------------------------------
@@ -1156,6 +1175,7 @@ INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('a9e9ddc
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('8639019e53a5a33518ea4a433eadb4765bf739ca9fa939e0b76c5c621141de53', 1787900200000);
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('6926432b1238e320f34332a1419792a18746635a7438a5dfd4fd8974012b7c7b', 1787900300000);
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('b422ae1153da2056f9ab7b1a8fb3f4afef1720a14872230389a999cb7a7d9f1f', 1787900400000);
+INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('4a7543b3291ee3bfa7775877272555881020cf26d0b9d432aa32c2e15aa3df99', 1787900500000);
 
 -- ---------------------------------------------------------------
 -- Reminder settings. One row, always id 1 — the app reads it on

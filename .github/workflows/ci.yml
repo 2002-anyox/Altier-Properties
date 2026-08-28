@@ -52,6 +52,15 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # A day is a fact about a place, and every machine that runs these
+      # checks is on UTC — where the bug this catches is invisible. iso()
+      # ran dates through toISOString(), so for every user east of
+      # Greenwich the app was a day behind: the 28th read as "tomorrow"
+      # all through the 28th. This runs the date helpers under six real
+      # timezones and insists each agrees with the calendar there.
+      - name: A day is a day, wherever you are
+        run: npm run check:dates
+
       # Revenue-recognition rules fail silently: a charge recognised twice, or
       # a deposit leaking into revenue, looks like ordinary growth on a chart.
       # This asserts the invariants that no reviewer would catch by eye.
@@ -77,6 +86,15 @@ jobs:
       # no-server path cannot rot unnoticed.
       - name: Database round trip (PGlite)
         run: npm run db:check
+
+      # And again from the timezone the customers are actually in. The
+      # figures are anchored to today, so a date helper that is a day out
+      # moves every one of them.
+      - name: Database round trip (Kampala)
+        run: npm run db:check
+        env:
+          TZ: Africa/Kampala
+          DATABASE_URL: postgres://altier:altier@localhost:5432/altier
 
       # docs/setup.sql is generated from the migrations and pasted into a
       # hosted database's SQL editor. If it drifts from the schema it stops

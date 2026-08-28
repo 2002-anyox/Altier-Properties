@@ -6,7 +6,7 @@
   "engines": {
     "node": ">=20"
   },
-  "description": "Altier Properties — premium property management platform",
+  "description": "Altier Properties \u2014 premium property management platform",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b --noCheck && vite build",
@@ -27,7 +27,8 @@
     "api:build": "esbuild server/serve.ts --bundle --platform=node --format=esm --packages=external --outfile=node_modules/.cache/db/api.mjs --log-level=warning",
     "api": "npm run --silent api:build && node node_modules/.cache/db/api.mjs",
     "smoke:api": "npm run --silent db:seed && npm run --silent api:build && node scripts/smoke-api.mjs",
-    "check:nodata": "node scripts/check-no-sample-data.mjs"
+    "check:nodata": "node scripts/check-no-sample-data.mjs",
+    "check:dates": "node scripts/check-dates.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

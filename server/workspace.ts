@@ -15,12 +15,13 @@
 
 import { randomBytes, createHash, randomUUID } from 'node:crypto'
 import { and, eq, inArray, sql } from 'drizzle-orm'
-import { DEFAULT_REMINDERS } from '../src/lib/defaults.js'
 import type { Db } from './db/client.js'
 import * as t from './db/schema.js'
 import {
   ALL_PERMISSIONS, DEFAULT_PERMISSIONS, isLocked, type Permission,
 } from '../src/lib/rbac.js'
+import { DEFAULT_REMINDERS, DEFAULT_TIMEZONE } from '../src/lib/defaults.js'
+import { dayIn } from '../src/lib/dates.js'
 import type { Role } from '../src/lib/types.js'
 
 /** What each plan comes with. Null seats means unlimited, not a big number. */
@@ -485,7 +486,7 @@ export async function acceptInvitation(db: Db, token: string, input: {
     role: invitation.role,
     title: invitation.title,
     status: 'active',
-    since: new Date().toISOString().slice(0, 10),
+    since: dayIn(DEFAULT_TIMEZONE),
   })
 
   /* The properties the inviter picked become the assignments that decide
@@ -508,6 +509,8 @@ export async function acceptInvitation(db: Db, token: string, input: {
 }
 
 /* --------------------------- first run ----------------------------- */
+
+
 
 /** A slug that is readable, unique, and never empty. */
 function slugify(name: string) {
@@ -535,7 +538,7 @@ export async function createWorkspace(db: Db, input: {
 }) {
   const organizationId = `org-${randomUUID().slice(0, 12)}`
   const memberId = `om-${randomUUID().slice(0, 12)}`
-  const today = new Date().toISOString().slice(0, 10)
+  const today = dayIn(DEFAULT_TIMEZONE)
 
   /* Slugs are unique, and two people can both call their workspace
      "Properties". The suffix is only reached when they do. */
@@ -550,7 +553,7 @@ export async function createWorkspace(db: Db, input: {
     slug,
   })
 
-  const trialEnds = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10)
+  const trialEnds = dayIn(DEFAULT_TIMEZONE, new Date(Date.now() + 30 * 86_400_000))
   await db.insert(t.subscriptions).values({
     organizationId,
     plan: 'starter',

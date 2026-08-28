@@ -12,13 +12,23 @@ import { and, eq, ne, sql } from 'drizzle-orm'
 import type { Db } from './db/client.js'
 import * as t from './db/schema.js'
 import { openingCharges } from '../src/lib/create.js'
+import { dayIn } from '../src/lib/dates.js'
 import { assertSeatAvailable } from './workspace.js'
 import type {
   Booking, Client, Invoice, MaintenancePriority, MaintenanceStatus, Property,
   PropertyStatus, ReminderSettings, Role, TeamMember,
 } from '../src/lib/types.js'
 
-const today = () => new Date().toISOString().slice(0, 10)
+/**
+ * The calendar day where the workspace is.
+ *
+ * Not UTC. A payment taken at one in the morning in Kampala is a payment
+ * taken that day, and storing it as the previous one — because UTC had
+ * not reached midnight yet — put the ledger a day behind the screen,
+ * which reads the browser's own calendar. en-CA is the shortest way to
+ * ask Intl for a 'YYYY-MM-DD'.
+ */
+const today = (w: Workspace) => dayIn(w.timezone)
 
 /**
  * Which workspace a mutation is writing into, and on whose behalf.
@@ -35,6 +45,8 @@ export interface Workspace {
   organizationId: string
   memberId: string
   name: string
+  /** Which calendar "today" means here — see today(w) below. */
+  timezone: string
 }
 
 export class NotFound extends Error {}
@@ -55,7 +67,7 @@ export async function recordPayment(db: Db, w: Workspace, invoiceId: string) {
   await db.update(t.invoices).set({
     status: 'paid',
     paidAmount: invoice.amount,
-    paidOn: today(),
+    paidOn: today(w),
     method: invoice.method ?? 'bank_transfer',
   }).where(eq(t.invoices.id, invoiceId))
 }
@@ -78,7 +90,7 @@ export async function sendReminder(db: Db, w: Workspace, invoiceId: string) {
     direction: 'outbound',
     subject: `Payment reminder due · ${invoice.number}`,
     preview: `Flagged for follow-up: ${invoice.memo} is due on ${invoice.dueOn}.`,
-    at: today(),
+    at: today(w),
     author: w.name,
   })
 }
@@ -92,7 +104,7 @@ export async function setPropertyStatus(db: Db, w: Workspace, id: string, status
   await db.update(t.properties).set({
     status,
     // Going vacant starts the clock the vacancy alerts read from.
-    availableFrom: status === 'available' ? today() : property.availableFrom,
+    availableFrom: status === 'available' ? today(w) : property.availableFrom,
   }).where(eq(t.properties.id, id))
 }
 
@@ -107,7 +119,7 @@ export async function setMaintenanceStatus(db: Db, w: Workspace, id: string, sta
   const completing = status === 'completed'
   await db.update(t.maintenanceRequests).set({
     status,
-    completedOn: completing ? today() : null,
+    completedOn: completing ? today(w) : null,
     actualCost: completing ? (request.actualCost ?? request.estimatedCost) : request.actualCost,
   }).where(eq(t.maintenanceRequests.id, id))
 
@@ -121,7 +133,7 @@ export async function setMaintenanceStatus(db: Db, w: Workspace, id: string, sta
     organizationId: w.organizationId,
     requestId: id,
     position: Number(next),
-    at: today(),
+    at: today(w),
     label: `Status changed to ${status.replace(/_/g, ' ')}`,
     by: w.name,
   })
@@ -158,7 +170,7 @@ export async function addMaintenance(db: Db, w: Workspace, input: NewMaintenance
        who does not exist. */
     assigneeId: w.memberId,
     reportedBy: w.name,
-    reportedOn: today(),
+    reportedOn: today(w),
     dueOn: input.dueOn,
     completedOn: null,
     estimatedCost: 0,
@@ -166,7 +178,7 @@ export async function addMaintenance(db: Db, w: Workspace, input: NewMaintenance
   })
   await db.insert(t.maintenanceEvents).values({
     id: `${id}-event-0`, organizationId: w.organizationId, requestId: id, position: 0,
-    at: today(), label: 'Request logged', by: w.name,
+    at: today(w), label: 'Request logged', by: w.name,
   })
   return id
 }
@@ -185,7 +197,7 @@ export async function addNote(db: Db, w: Workspace, clientId: string, text: stri
     direction: 'outbound',
     subject: 'Internal note',
     preview: text,
-    at: today(),
+    at: today(w),
     author: w.name,
   })
 }
@@ -454,7 +466,7 @@ export async function checkIn(db: Db, w: Workspace, id: string, on?: string) {
   if (booking.arrivedOn) {
     throw new Conflict(`They were already checked in on ${booking.arrivedOn}.`)
   }
-  const arrivedOn = on ?? today()
+  const arrivedOn = on ?? today(w)
   if (booking.endsOn && arrivedOn > booking.endsOn) {
     throw new Conflict('That agreement had already ended by then.')
   }
@@ -477,7 +489,7 @@ export async function checkIn(db: Db, w: Workspace, id: string, on?: string) {
     direction: 'outbound',
     subject: `Checked in · ${booking.reference}`,
     preview: `Arrived ${arrivedOn}.`,
-    at: today(),
+    at: today(w),
     author: w.name,
   })
 }
@@ -502,7 +514,7 @@ export async function checkOut(db: Db, w: Workspace, id: string, on?: string) {
   if (booking.departedOn) {
     throw new Conflict(`They already checked out on ${booking.departedOn}.`)
   }
-  const departedOn = on ?? today()
+  const departedOn = on ?? today(w)
   if (departedOn < booking.arrivedOn) {
     throw new Conflict('They cannot have left before they arrived.')
   }
@@ -559,7 +571,7 @@ export async function checkOut(db: Db, w: Workspace, id: string, on?: string) {
     preview: Number(owed) > 0
       ? `Left ${departedOn}. ${Number(owed).toLocaleString('en-UG')} still outstanding on this agreement.`
       : `Left ${departedOn}. Nothing outstanding on this agreement.`,
-    at: today(),
+    at: today(w),
     author: w.name,
   })
 
@@ -872,7 +884,7 @@ export async function grantPortalAccess(
     role: 'tenant' as Role,
     title: 'Tenant portal',
     status: 'active',
-    since: today(),
+    since: today(w),
     clientId,
   })
   return { id, profileId }

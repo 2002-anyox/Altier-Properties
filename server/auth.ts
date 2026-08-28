@@ -17,6 +17,7 @@ import {
 import { promisify } from 'node:util'
 import { and, eq, lt, sql } from 'drizzle-orm'
 import type { NextFunction, Request, Response } from 'express'
+import { DEFAULT_TIMEZONE } from '../src/lib/defaults.js'
 import type { Permission } from '../src/lib/rbac.js'
 import type { Role } from '../src/lib/types.js'
 import type { Db } from './db/client.js'
@@ -162,7 +163,12 @@ export async function readSession(db: Db, token: string | undefined) {
     ? new Set((await permissionMatrix(db, membership.organizationId))[membership.role as Role] ?? [])
     : new Set<Permission>()
 
-  return { profile: row.profile, membership, permissions }
+  const timezone = membership
+    ? (await db.select({ zone: t.organizations.timezone }).from(t.organizations)
+        .where(eq(t.organizations.id, membership.organizationId)))[0]?.zone ?? DEFAULT_TIMEZONE
+    : DEFAULT_TIMEZONE
+
+  return { profile: row.profile, membership, permissions, timezone }
 }
 
 export const destroySession = (db: Db, token: string | undefined) =>
@@ -260,6 +266,8 @@ export class Forbidden extends Error {}
 export interface Viewer {
   profile: typeof t.profiles.$inferSelect
   membership: typeof t.organizationMembers.$inferSelect | null
+  /** The workspace's calendar, so a stamped date matches its screen. */
+  timezone: string
   /**
    * What this membership's role reaches in this workspace — the product's
    * defaults with whatever the workspace has changed laid over them.

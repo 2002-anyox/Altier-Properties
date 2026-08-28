@@ -93,6 +93,11 @@ export const organizations = pgTable('organizations', {
   country: text('country').notNull().default('Uganda'),
   currency: text('currency').notNull().default('UGX'),
   locale: text('locale').notNull().default('en-UG'),
+  /* Which calendar the server stamps dates against. A day is a fact about
+     a place: without this, a payment taken at one in the morning in
+     Kampala was stored as the day before, because UTC had not got there
+     yet. */
+  timezone: text('timezone').notNull().default('Africa/Kampala'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
