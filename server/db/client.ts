@@ -38,7 +38,10 @@ export async function connect(url = process.env.DATABASE_URL) {
       connectionString: url,
       max: serverless ? 1 : 10,
       idleTimeoutMillis: serverless ? 10_000 : 30_000,
-      connectionTimeoutMillis: 10_000,
+      /* Comfortably inside a serverless function's own limit, so a database
+         that will not answer produces a diagnosis rather than the platform
+         killing the invocation and answering with its own error page. */
+      connectionTimeoutMillis: serverless ? 6_000 : 10_000,
     })
     const db = drizzlePg(pool, { schema })
     return {
