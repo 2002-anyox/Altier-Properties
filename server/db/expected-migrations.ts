@@ -5,4 +5,7 @@ export const EXPECTED_MIGRATIONS: ReadonlyArray<{ tag: string; hash: string }> =
   { tag: '0000_init', hash: '0d6cd2f3cc444ee70ee412a9698e0300b24221be711b35db0195d24bc3dda3ee' },
   { tag: '0001_auth', hash: 'fd0a043c8b2d7cb874e435d8b42745232e9a3c7ccc7cdbaa38503b2dfb5fb38f' },
   { tag: '0002_oauth', hash: '7995837e230ff8c1a909c8683ab738da26d778c999fedfc08aed767d9f15f827' },
+  { tag: '0003_multitenancy', hash: '087b50bf9df500d0518f6298fc6f8fe7ceadac84f7bc30384fae9cc71112bba1' },
+  { tag: '0004_isolation', hash: 'a9e9ddc39af86088acabbed935ec0bd771bffcdb34bb47938ce904d0e81b822e' },
+  { tag: '0005_tenant_scope', hash: '8639019e53a5a33518ea4a433eadb4765bf739ca9fa939e0b76c5c621141de53' },
 ]

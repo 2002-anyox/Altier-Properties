@@ -20,12 +20,12 @@ import {
   SsoError, configuredProviders, exchangeCode, providerFor, verifyIdToken,
 } from '../server/oidc.js'
 import {
-  LastWayIn, NotLinked, beginOauth, completeOauth, identitiesFor, memberForIdentity,
+  LastWayIn, NotLinked, beginOauth, completeOauth, identitiesFor, profileForIdentity,
   setPassword, unlinkIdentity,
 } from '../server/auth.js'
 import { MEMORY, connect } from '../server/db/client.js'
-import { init } from '../server/db/init.js'
-import { addMember } from '../server/mutations.js'
+import { createWorkspace } from '../server/workspace.js'
+import { addMember, type Workspace } from '../server/mutations.js'
 import * as t from '../server/db/schema.js'
 
 /* Hermetic: this owns its database for the length of the run, and never
@@ -299,7 +299,6 @@ async function main() {
   process.env.GOOGLE_CLIENT_SECRET = 'test-secret'
   const { db, migrate, close } = await connect()
   await migrate()
-  await init(db)
 
   const REDIRECT = 'https://altier.example/api/auth/oauth/google/callback'
 
@@ -307,15 +306,27 @@ async function main() {
      so the people this section needs are created here rather than
      borrowed from sample data that production never has. */
   const owner = {
-    id: 'tm-sso-owner', name: 'Nakato Owner', role: 'owner' as const, title: 'Owner',
+    id: 'om-sso-owner', name: 'Nakato Owner', role: 'owner' as const, title: 'Owner',
     email: 'nakato@altier.co.ug', phone: '', since: '2026-01-01',
   }
   const colleague = {
-    id: 'tm-sso-staff', name: 'Brian Kizito', role: 'staff' as const, title: 'Caretaker',
+    id: 'om-sso-staff', name: 'Brian Kizito', role: 'staff' as const, title: 'Caretaker',
     email: 'brian.kizito@altier.co.ug', phone: '', since: '2026-01-01',
   }
-  await addMember(db, owner)
-  await addMember(db, colleague)
+  /* A workspace with one owner in it, exactly as first run produces, and
+     then a colleague added into it the way an owner would. */
+  await db.insert(t.profiles).values({
+    id: 'pr-sso-owner', name: owner.name, email: owner.email,
+  })
+  const { organizationId, memberId } = await createWorkspace(db, {
+    organizationName: 'SSO check',
+    profileId: 'pr-sso-owner',
+    name: owner.name,
+  })
+  owner.id = memberId
+  const ownerProfile = 'pr-sso-owner'
+  const w: Workspace = { organizationId, memberId, name: owner.name }
+  await addMember(db, w, colleague)
 
   /** Walks the flow to the point where the provider would answer. */
   const signIn = async (over: Overrides['claims'] = {}) => {
@@ -328,8 +339,8 @@ async function main() {
 
   const first = await signIn({ email: owner.email })
   const resolved = await completeOauth(db, 'google', first.state, 'the-code', first.browserSecret)
-  const linked = await memberForIdentity(db, 'google', resolved)
-  check('a verified address finds its team member', linked.id === owner.id, linked.id)
+  const linked = await profileForIdentity(db, 'google', resolved)
+  check('a verified address finds the account it belongs to', linked.id === ownerProfile, linked.id)
   check(
     'the exchange carried the PKCE verifier',
     (lastExchange?.get('code_verifier') ?? '').length > 20,
@@ -340,20 +351,20 @@ async function main() {
     (await db.select().from(t.oauthStates)).length === 0,
   )
 
-  const links = await identitiesFor(db, owner.id)
+  const links = await identitiesFor(db, ownerProfile)
   check('the link is recorded', links.length === 1 && links[0].provider === 'google', JSON.stringify(links))
 
   /* The subject is what the link is keyed on, so a person who later
      changes the address on their Google account keeps their access. */
   const moved = await signIn({ email: 'nakato.personal@gmail.com' })
-  const again = await memberForIdentity(
+  const again = await profileForIdentity(
     db, 'google',
     await completeOauth(db, 'google', moved.state, 'c', moved.browserSecret),
   )
-  check('a changed provider address still signs the same person in', again.id === owner.id, again.id)
+  check('a changed provider address still signs the same person in', again.id === ownerProfile, again.id)
   check(
     'and does not create a second link',
-    (await identitiesFor(db, owner.id)).length === 1,
+    (await identitiesFor(db, ownerProfile)).length === 1,
   )
 
   console.log('\nWho is refused')
@@ -361,19 +372,19 @@ async function main() {
   await refuses(
     'a verified account matching nobody cannot sign in',
     completeOauth(db, 'google', stranger.state, 'c', stranger.browserSecret)
-      .then((c) => memberForIdentity(db, 'google', c)),
-    /No Altier team member uses mallory@example\.com/,
+      .then((c) => profileForIdentity(db, 'google', c)),
+    /No Altier account uses mallory@example\.com/,
   )
   check(
-    'and no team member was created for them',
-    (await db.select().from(t.teamMembers)).length === 2,
+    'and no account was created for them',
+    (await db.select().from(t.profiles)).length === 2,
   )
 
   const unconfirmed = await signIn({ sub: 'yet-another', email: colleague.email, email_verified: false })
   await refuses(
     'an unverified address is refused even when it matches',
     completeOauth(db, 'google', unconfirmed.state, 'c', unconfirmed.browserSecret)
-      .then((c) => memberForIdentity(db, 'google', c)),
+      .then((c) => profileForIdentity(db, 'google', c)),
     /did not confirm an email address/,
   )
 
@@ -381,7 +392,7 @@ async function main() {
   await refuses(
     'Apple\'s Hide My Email is refused with an explanation',
     completeOauth(db, 'google', hidden.state, 'c', hidden.browserSecret)
-      .then((c) => memberForIdentity(db, 'google', c)),
+      .then((c) => profileForIdentity(db, 'google', c)),
     /Hide My Email/,
   )
 
@@ -390,7 +401,7 @@ async function main() {
   await refuses(
     'an address outside the allowlist is refused',
     completeOauth(db, 'google', outside.state, 'c', outside.browserSecret)
-      .then((c) => memberForIdentity(db, 'google', c)),
+      .then((c) => profileForIdentity(db, 'google', c)),
     /limited to altier\.co\.ug/,
   )
   delete process.env.SSO_ALLOWED_DOMAINS
@@ -428,7 +439,7 @@ async function main() {
   console.log('\nUnlinking')
   /* Not an SsoError: the API turns this one into a 409 with the reason,
      which is a different answer from a failed sign-in. */
-  const lastWayIn = await unlinkIdentity(db, { id: owner.id, passwordHash: null }, 'google')
+  const lastWayIn = await unlinkIdentity(db, { id: ownerProfile, passwordHash: null }, 'google')
     .then(() => null, (e: Error) => e)
   check(
     'the only way into an account cannot be removed',
@@ -436,22 +447,22 @@ async function main() {
     lastWayIn ? `${lastWayIn.constructor.name}: ${lastWayIn.message}` : 'it was removed',
   )
 
-  await setPassword(db, owner.id, 'a-perfectly-fine-password')
-  await unlinkIdentity(db, { id: owner.id, passwordHash: 'set' }, 'google')
-  check('with a password set, it unlinks', (await identitiesFor(db, owner.id)).length === 0)
+  await setPassword(db, ownerProfile, 'a-perfectly-fine-password')
+  await unlinkIdentity(db, { id: ownerProfile, passwordHash: 'set' }, 'google')
+  check('with a password set, it unlinks', (await identitiesFor(db, ownerProfile)).length === 0)
   check(
     'unlinking what is not linked is its own kind too',
-    await unlinkIdentity(db, { id: owner.id, passwordHash: 'set' }, 'google')
+    await unlinkIdentity(db, { id: ownerProfile, passwordHash: 'set' }, 'google')
       .then(() => false, (e) => e instanceof NotLinked),
   )
 
   console.log('\nRemoving a person takes their links with them')
   const relink = await signIn({ sub: 'link-me-again', email: owner.email })
-  await memberForIdentity(db, 'google', await completeOauth(db, 'google', relink.state, 'c', relink.browserSecret))
-  check('linked again', (await identitiesFor(db, owner.id)).length === 1)
-  await db.delete(t.teamMembers).where(eq(t.teamMembers.id, owner.id))
+  await profileForIdentity(db, 'google', await completeOauth(db, 'google', relink.state, 'c', relink.browserSecret))
+  check('linked again', (await identitiesFor(db, ownerProfile)).length === 1)
+  await db.delete(t.profiles).where(eq(t.profiles.id, ownerProfile))
   check(
-    'and the link is gone with the member',
+    'and the link is gone with the account',
     (await db.select().from(t.identities)).length === 0,
   )
 

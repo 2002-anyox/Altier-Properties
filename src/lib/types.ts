@@ -2,7 +2,19 @@
    Altier Properties — domain model
    ============================================================ */
 
-export type Role = 'owner' | 'manager' | 'staff' | 'accountant'
+/**
+ * Five roles, one list. The first four are staff — people who work on the
+ * portfolio and occupy a paid seat. 'tenant' is a portal login for a
+ * renter or guest: it reads that one person's own agreement, charges and
+ * documents, and it is not a seat. Keeping it in the same list means
+ * there is one membership table, and therefore one place where access is
+ * decided rather than two that can disagree.
+ */
+export type Role = 'owner' | 'manager' | 'staff' | 'accountant' | 'tenant'
+
+/** The four that count against a subscription's seats. */
+export const STAFF_ROLES = ['owner', 'manager', 'accountant', 'staff'] as const
+export type StaffRole = typeof STAFF_ROLES[number]
 
 export type PropertyStatus =
   | 'available'
@@ -257,6 +269,16 @@ export interface TeamMember {
   email: string
   phone: string
   since: string
+  /**
+   * Which properties this person works on.
+   *
+   * Only meaningful for a manager or staff member: an owner and an
+   * accountant see the whole workspace, so an empty list means "all" for
+   * them and "nothing yet" for the other two. The database reads the same
+   * assignments to decide what their queries return, so this is the list,
+   * not a copy of it.
+   */
+  propertyIds?: string[]
 }
 
 export interface ReminderSettings {

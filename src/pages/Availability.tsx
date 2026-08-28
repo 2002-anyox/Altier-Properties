@@ -10,7 +10,7 @@ import {
   SegmentedControl, Select, StatusChip, cx,
 } from '../components/ui'
 import { useStore } from '../lib/store.js'
-import { TODAY, addDays, daysBetween, iso } from '../lib/data.js'
+import { TODAY, addDays, daysBetween, iso } from '../lib/dates.js'
 import { mediumDate, money, relativeDay, shortDate } from '../lib/format.js'
 import { buildMonthGrid, endOf, isOpenEnded, upcomingAvailability } from '../lib/derive.js'
 import { itemVariants, listVariants } from '../lib/motion.js'

@@ -18,7 +18,7 @@ import { promisify } from 'node:util'
 import { and, eq, lt, sql } from 'drizzle-orm'
 import type { NextFunction, Request, Response } from 'express'
 import { can, type Permission } from '../src/lib/rbac.js'
-import type { Role, TeamMember } from '../src/lib/types.js'
+import type { Role } from '../src/lib/types.js'
 import type { Db } from './db/client.js'
 import {
   SsoError, authorizeUrl, exchangeCode, providerFor, verifyIdToken, type Claims,
@@ -102,12 +102,15 @@ export function rejectPassword(password: string, member: { name: string; email: 
 /** The row holds this, never the token, so the table is not a key ring. */
 const digest = (token: string) => createHash('sha256').update(token).digest('hex')
 
-export async function createSession(db: Db, memberId: string, userAgent?: string) {
+export async function createSession(
+  db: Db, profileId: string, organizationId: string | null, userAgent?: string,
+) {
   const token = randomBytes(TOKEN_BYTES).toString('base64url')
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 86_400_000)
   await db.insert(t.sessions).values({
     tokenHash: digest(token),
-    memberId,
+    profileId,
+    organizationId,
     expiresAt,
     userAgent: userAgent?.slice(0, 300) ?? null,
   })
@@ -116,14 +119,24 @@ export async function createSession(db: Db, memberId: string, userAgent?: string
   return { token, expiresAt }
 }
 
+/**
+ * Who is asking, and which workspace they are looking at.
+ *
+ * The membership is read here rather than trusted from the cookie: the
+ * session names an organization, and this returns one only if a row in
+ * organization_members says that pairing is real and active. The database
+ * policies make the same check independently, so a mistake here narrows
+ * what is visible rather than widening it.
+ */
 export async function readSession(db: Db, token: string | undefined) {
   if (!token) return null
   const rows = await db.select({
-    member: t.teamMembers,
+    profile: t.profiles,
+    organizationId: t.sessions.organizationId,
     expiresAt: t.sessions.expiresAt,
   })
     .from(t.sessions)
-    .innerJoin(t.teamMembers, eq(t.teamMembers.id, t.sessions.memberId))
+    .innerJoin(t.profiles, eq(t.profiles.id, t.sessions.profileId))
     .where(eq(t.sessions.tokenHash, digest(token)))
 
   const row = rows[0]
@@ -135,15 +148,24 @@ export async function readSession(db: Db, token: string | undefined) {
   await db.update(t.sessions)
     .set({ lastSeenAt: new Date() })
     .where(eq(t.sessions.tokenHash, digest(token)))
-  return row.member
+
+  const membership = row.organizationId
+    ? (await db.select().from(t.organizationMembers).where(and(
+        eq(t.organizationMembers.profileId, row.profile.id),
+        eq(t.organizationMembers.organizationId, row.organizationId),
+        eq(t.organizationMembers.status, 'active'),
+      )))[0] ?? null
+    : null
+
+  return { profile: row.profile, membership }
 }
 
 export const destroySession = (db: Db, token: string | undefined) =>
   token ? db.delete(t.sessions).where(eq(t.sessions.tokenHash, digest(token))) : Promise.resolve()
 
 /** Signing out everywhere: what a password change should always do. */
-export const destroyAllSessions = (db: Db, memberId: string) =>
-  db.delete(t.sessions).where(eq(t.sessions.memberId, memberId))
+export const destroyAllSessions = (db: Db, profileId: string) =>
+  db.delete(t.sessions).where(eq(t.sessions.profileId, profileId))
 
 /* ------------------------------ throttle --------------------------- */
 
@@ -152,18 +174,18 @@ export const lockedFor = (member: { lockedUntil: Date | null }) => {
   return Math.max(0, Math.ceil((member.lockedUntil.getTime() - Date.now()) / 60_000))
 }
 
-export async function recordFailure(db: Db, memberId: string, attempts: number) {
+export async function recordFailure(db: Db, profileId: string, attempts: number) {
   const next = attempts + 1
-  await db.update(t.teamMembers).set({
+  await db.update(t.profiles).set({
     failedAttempts: next,
     lockedUntil: next >= MAX_ATTEMPTS ? new Date(Date.now() + LOCK_MINUTES * 60_000) : null,
-  }).where(eq(t.teamMembers.id, memberId))
+  }).where(eq(t.profiles.id, profileId))
 }
 
-export const clearFailures = (db: Db, memberId: string) =>
-  db.update(t.teamMembers)
+export const clearFailures = (db: Db, profileId: string) =>
+  db.update(t.profiles)
     .set({ failedAttempts: 0, lockedUntil: null })
-    .where(eq(t.teamMembers.id, memberId))
+    .where(eq(t.profiles.id, profileId))
 
 /* ------------------------------- cookie ---------------------------- */
 
@@ -218,38 +240,74 @@ export function clearOauthCookie(res: Response, crossSite: boolean) {
 export class Unauthorized extends Error {}
 export class Forbidden extends Error {}
 
-/** The signed-in member, attached by the middleware below. */
+/**
+ * Who is signed in, and as what.
+ *
+ * Two halves, because they answer different questions. The profile is the
+ * person — one login, one password, one set of linked Google and Apple
+ * accounts, and it is the same row whichever workspace they are looking
+ * at. The membership is the seat they hold in the workspace this request
+ * is about: it carries the role, and it is what every permission decision
+ * and every database policy reads. A profile with no membership is
+ * signed in and cannot see a thing, which is exactly right for somebody
+ * an owner has just removed.
+ */
+export interface Viewer {
+  profile: typeof t.profiles.$inferSelect
+  membership: typeof t.organizationMembers.$inferSelect | null
+}
+
 export interface Authed extends Request {
-  member?: TeamMember & { passwordHash: string | null }
+  viewer?: Viewer
 }
 
 /**
- * Attaches the session's member to the request, or nothing. Reading is
+ * Attaches the session's viewer to the request, or nothing. Reading is
  * separate from requiring so that the login and setup routes can see who
  * is asking without demanding that anybody be signed in.
  */
-export const attachMember = (db: Db) =>
+export const attachViewer = (db: Db) =>
   (req: Authed, _res: Response, next: NextFunction) => {
     readSession(db, req.cookies?.[SESSION_COOKIE] as string | undefined)
-      .then((member) => { req.member = member ?? undefined; next() })
+      .then((viewer) => { req.viewer = viewer ?? undefined; next() })
       .catch(next)
   }
 
-export function requireMember(req: Authed) {
-  if (!req.member) throw new Unauthorized('Sign in to continue.')
-  return req.member
+export function requireViewer(req: Authed): Viewer {
+  if (!req.viewer) throw new Unauthorized('Sign in to continue.')
+  return req.viewer
+}
+
+/**
+ * The workspace this request is working in.
+ *
+ * Being signed in is not the same as belonging somewhere. Somebody whose
+ * membership was suspended still holds a valid session cookie, and this
+ * is where that stops mattering.
+ */
+export function requireMembership(req: Authed) {
+  const viewer = requireViewer(req)
+  if (!viewer.membership) {
+    throw new Forbidden('Your account is not an active member of this workspace.')
+  }
+  return viewer.membership
 }
 
 /**
  * The whole point of this file: a permission the role does not hold is
  * refused here, not merely hidden in the interface. A staff account can
  * open devtools and call the API directly; this is what stops it.
+ *
+ * It is the outer of two locks. The inner one is in the database, which
+ * narrows every query to the workspace and the properties this membership
+ * reaches — so a route that forgets its filter returns nothing rather
+ * than everything.
  */
 export const requirePermission = (permission: Permission) =>
   (req: Authed, _res: Response, next: NextFunction) => {
     try {
-      const member = requireMember(req)
-      if (!can(member.role as Role, permission)) {
+      const membership = requireMembership(req)
+      if (!can(membership.role as Role, permission)) {
         throw new Forbidden(`Your role does not allow this (${permission}).`)
       }
       next()
@@ -261,24 +319,24 @@ export const requirePermission = (permission: Permission) =>
 /** True while nobody can sign in — the only window the setup route opens. */
 export async function noAccountsYet(db: Db) {
   const [row] = await db.select({ n: sql<number>`count(*)::int` })
-    .from(t.teamMembers)
-    .where(sql`${t.teamMembers.passwordHash} IS NOT NULL`)
+    .from(t.profiles)
+    .where(sql`${t.profiles.passwordHash} IS NOT NULL`)
   return (row?.n ?? 0) === 0
 }
 
 export async function findByEmail(db: Db, email: string) {
-  const rows = await db.select().from(t.teamMembers)
-    .where(and(sql`lower(${t.teamMembers.email}) = ${email.trim().toLowerCase()}`))
+  const rows = await db.select().from(t.profiles)
+    .where(and(sql`lower(${t.profiles.email}) = ${email.trim().toLowerCase()}`))
   return rows[0] ?? null
 }
 
-export async function setPassword(db: Db, memberId: string, password: string) {
-  await db.update(t.teamMembers).set({
+export async function setPassword(db: Db, profileId: string, password: string) {
+  await db.update(t.profiles).set({
     passwordHash: await hashPassword(password),
     passwordSetAt: new Date(),
     failedAttempts: 0,
     lockedUntil: null,
-  }).where(eq(t.teamMembers.id, memberId))
+  }).where(eq(t.profiles.id, profileId))
 }
 
 /* ---------------------- Google and Apple sign-in ------------------- *
@@ -359,27 +417,27 @@ export async function completeOauth(
 }
 
 /**
- * Turns a verified identity into a team member, or refuses.
+ * Turns a verified identity into a profile, or refuses.
  *
  * The order matters. An already-linked account signs in on the strength
  * of the subject alone, so a person who later changes their Google
- * address keeps their access. An unlinked one has to match a member by
+ * address keeps their access. An unlinked one has to match a profile by
  * verified email, and that is the only way a link is ever created.
  */
-export async function memberForIdentity(db: Db, providerId: string, claims: Claims) {
+export async function profileForIdentity(db: Db, providerId: string, claims: Claims) {
   const provider = providerFor(providerId)
 
-  const [existing] = await db.select({ memberId: t.identities.memberId })
+  const [existing] = await db.select({ profileId: t.identities.profileId })
     .from(t.identities)
     .where(and(eq(t.identities.provider, provider.id), eq(t.identities.subject, claims.sub)))
 
   if (existing) {
-    const [member] = await db.select().from(t.teamMembers).where(eq(t.teamMembers.id, existing.memberId))
-    if (!member) throw new SsoError('The account that link belonged to has been removed.')
+    const [profile] = await db.select().from(t.profiles).where(eq(t.profiles.id, existing.profileId))
+    if (!profile) throw new SsoError('The account that link belonged to has been removed.')
     await db.update(t.identities)
       .set({ lastUsedAt: new Date(), email: claims.email ?? null })
       .where(and(eq(t.identities.provider, provider.id), eq(t.identities.subject, claims.sub)))
-    return member
+    return profile
   }
 
   /* First time. From here on the email is doing the work, so it has to be
@@ -397,23 +455,23 @@ export async function memberForIdentity(db: Db, providerId: string, claims: Clai
     throw new SsoError(`Single sign-on on this deployment is limited to ${allowed.join(', ')}.`)
   }
 
-  const member = await findByEmail(db, claims.email)
-  if (!member) {
+  const profile = await findByEmail(db, claims.email)
+  if (!profile) {
     /* Deliberately explicit rather than vague. This is not a login form
        an attacker probes for valid addresses — reaching it costs a real
        Google or Apple account — and a person locked out by a typo in
        their address deserves to know that is what happened. */
-    throw new SsoError(`No Altier team member uses ${claims.email}. Ask an owner to add that address to your account first.`)
+    throw new SsoError(`No Altier account uses ${claims.email}. Ask an owner to invite that address first.`)
   }
 
   await db.insert(t.identities).values({
     provider: provider.id,
     subject: claims.sub,
-    memberId: member.id,
+    profileId: profile.id,
     email: claims.email,
     lastUsedAt: new Date(),
   })
-  return member
+  return profile
 }
 
 /** Optional: restrict linking to addresses at your own domains. */
@@ -421,29 +479,29 @@ const allowedDomains = () =>
   (process.env.SSO_ALLOWED_DOMAINS ?? '')
     .split(',').map((d) => d.trim().toLowerCase().replace(/^@/, '')).filter(Boolean)
 
-export const identitiesFor = (db: Db, memberId: string) =>
+export const identitiesFor = (db: Db, profileId: string) =>
   db.select({
     provider: t.identities.provider,
     email: t.identities.email,
     linkedAt: t.identities.linkedAt,
     lastUsedAt: t.identities.lastUsedAt,
-  }).from(t.identities).where(eq(t.identities.memberId, memberId))
+  }).from(t.identities).where(eq(t.identities.profileId, profileId))
 
 /**
  * Unlinking. Refused when it would be the last way in — an account with
  * no password and no remaining link is one nobody can open, including
  * the person doing the unlinking.
  */
-export async function unlinkIdentity(db: Db, member: { id: string; passwordHash: string | null }, providerId: string) {
-  const links = await identitiesFor(db, member.id)
+export async function unlinkIdentity(db: Db, profile: { id: string; passwordHash: string | null }, providerId: string) {
+  const links = await identitiesFor(db, profile.id)
   if (!links.some((l) => l.provider === providerId)) {
     throw new NotLinked('That account is not linked.')
   }
-  if (!member.passwordHash && links.length === 1) {
+  if (!profile.passwordHash && links.length === 1) {
     throw new LastWayIn('That is the only way into this account. Set a password first.')
   }
   await db.delete(t.identities)
-    .where(and(eq(t.identities.provider, providerId as 'google' | 'apple'), eq(t.identities.memberId, member.id)))
+    .where(and(eq(t.identities.provider, providerId as 'google' | 'apple'), eq(t.identities.profileId, profile.id)))
 }
 
 export class NotLinked extends Error {}

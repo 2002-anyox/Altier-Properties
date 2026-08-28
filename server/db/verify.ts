@@ -10,13 +10,15 @@
  * ------------------------------------------------------------------ */
 
 import { sql } from 'drizzle-orm'
-import { INVOICES, TODAY, iso } from '../../src/lib/data.js'
+import { INVOICES } from '../../scripts/fixture/portfolio.js'
+import { DEFAULT_REMINDERS } from '../../src/lib/defaults.js'
+import { TODAY, iso } from '../../src/lib/dates.js'
 import { chargeClass, deferredPortion, earnedInMonth } from '../../src/lib/derive.js'
 import type { Invoice } from '../../src/lib/types.js'
 import { MEMORY, connect } from './client.js'
 import { readPortfolio } from './read.js'
 import * as t from './schema.js'
-import { seed } from './seed.js'
+import { SEED_ORG, seed } from './seed.js'
 
 const fail: string[] = []
 const ok = (cond: boolean, msg: string) => { if (!cond) fail.push(msg) }
@@ -76,7 +78,7 @@ console.log(`recognition check: 12 months, worst difference ${money(worst)}`)
 const openEnded = rows.length && await db.select({ n: sql<number>`count(*)::int` })
   .from(t.bookings).where(sql`${t.bookings.endsOn} IS NULL`)
 const openEndedDb = Number(openEnded ? openEnded[0].n : 0)
-const openEndedMem = (await import('../../src/lib/data.js')).BOOKINGS.filter((b) => b.end === null).length
+const openEndedMem = (await import('../../scripts/fixture/portfolio.js')).BOOKINGS.filter((b) => b.end === null).length
 ok(openEndedDb === openEndedMem,
    `open-ended rentals: ${openEndedDb} in database, ${openEndedMem} generated`)
 ok(openEndedDb > 0, 'no open-ended rentals survived the round trip')
@@ -150,8 +152,8 @@ console.log(`constraint check: 5 invalid rows offered, all refused`)
 /* 9. The reader is the exact inverse of the seeder. A mis-mapped column
       would not fail any constraint — it would just quietly show the wrong
       thing on every page — so compare what comes back to what went in. */
-const portfolio = await readPortfolio(db)
-const data = await import('../../src/lib/data.js')
+const portfolio = await readPortfolio(db, SEED_ORG)
+const data = await import('../../scripts/fixture/portfolio.js')
 
 /** Order is cosmetic for these, so compare them as sets. */
 const normalise = (value: unknown): unknown => {
@@ -200,7 +202,7 @@ for (const [name, fromDb, fromMemory] of [
   const d = diff(normalise(sortById(fromDb)), normalise(sortById(fromMemory)))
   ok(!d, `${name} differ after the round trip — ${d}`)
 }
-const rd = diff(normalise(portfolio.reminders), normalise(data.DEFAULT_REMINDERS))
+const rd = diff(normalise(portfolio.reminders), normalise(DEFAULT_REMINDERS))
 ok(!rd, `reminder settings differ after the round trip — ${rd}`)
 console.log(`reader check: 6 collections + settings identical to the generator`)
 

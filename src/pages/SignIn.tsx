@@ -89,7 +89,7 @@ export default function SignIn() {
                 <Input
                   id="si-name" autoComplete="name" autoFocus
                   value={name} onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Ronald Okello"
+                  placeholder="Your full name"
                 />
               </Field>
             )}

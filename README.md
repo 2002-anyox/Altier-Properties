@@ -81,7 +81,7 @@ dashboard leads with revenue *earned* on that accrual basis and shows cash colle
 buying time ahead, and deposits separately — so a six-month advance cannot masquerade as growth, and
 a quiet collection month cannot masquerade as decline.
 
-**Role-based access** for Owner, Property Manager, Staff and Accountant, enforced in the navigation,
+**Role-based access** for Owner, Property Manager, Accountant, Staff and tenant portal logins, enforced in the navigation,
 at the route and on individual actions and figures. Switch role from the avatar menu to see it.
 
 ## Design
@@ -110,8 +110,8 @@ npm run check:sso         # identity-token verification, against forged tokens
 npm run check:unbundled   # the API resolves when compiled a file at a time
 ```
 
-That runs against the bundled demo portfolio, entirely in the browser. To run it against a real
-database instead, seed one and start the API alongside the dev server:
+The dev server alone has nothing to show: the app holds no records of its own and asks the API for
+everything. Start one alongside it, against a database with something in it:
 
 ```bash
 npm run db:seed    # development only: sample records into Postgres (or PGlite)
@@ -119,10 +119,14 @@ npm run api        # http://localhost:5174
 npm run dev        # in a second terminal
 ```
 
-The dev server proxies `/api` to the API process, so nothing needs configuring. Settings → Profile
-says which of the two is in play — **Live database** or **Sample data** — and every change is
-written through. If the API is not running the app falls back to the bundled portfolio rather than
-failing, which is exactly how the published single-file build works.
+The dev server proxies `/api` to the API process, so nothing needs configuring. Every change is
+written through to the database. If the API is not running the app says so and stops — there is
+no bundled portfolio to fall back to.
+
+`npm run db:seed` loads a sample portfolio from `scripts/fixture/` into a **development** database
+so the checks have a year of agreements and charges to run against. It lives outside `src/` for a
+reason: nothing under `src/` may import it, so no build can reach it. `npm run check:nodata` greps
+the built bundle for the names in that fixture and fails if it finds one.
 
 ### How it fits together
 
@@ -146,6 +150,12 @@ guessing. Every mutation endpoint answers with the refreshed portfolio for that 
 | `POST /api/clients` | add a client |
 | `POST /api/bookings` | open an agreement, with its opening charges |
 | `PUT /api/settings/reminders` | change reminder timing |
+| `GET /api/workspace` | the plan, the seats it covers, how many are spent, and who is still to accept |
+| `POST /api/workspace/invitations` | invite somebody; 402 with the seat figures when the plan is full |
+| `DELETE /api/workspace/invitations/:id` | withdraw one, giving the seat back |
+| `POST /api/clients/:id/portal` | open a tenant's portal login |
+| `DELETE /api/clients/:id/portal` | close it again |
+| `GET /api/admin/organizations` | every workspace and its size — Altier's own support staff only |
 
 Plus the ones outside the gate: `GET /api/auth/me`, `POST /api/auth/login`,
 `POST /api/auth/logout`, and `GET /api/auth/claimable` + `POST /api/auth/setup`
@@ -165,16 +175,45 @@ owner. That window shuts permanently the moment any account has a password.
 do, whoever opens the page first becomes the owner. Set `SETUP_TOKEN` in the
 environment if you would rather the first account also need a secret.
 
-Afterwards, an owner adds people from Settings → Team and sets their initial
-password there. Tell them out of band, and ask them to change it from Settings →
-Profile; changing a password signs out every other device.
+Afterwards, an owner works from **Team & access**. Two ways in:
+
+- **Invite** them, which is the usual one. They get a link, choose their own
+  password, and the seat is held from the moment the invitation goes out until
+  they accept or it is withdrawn. Altier has no mail server, so the link is
+  handed back to you to pass on rather than claimed to have been sent.
+- **Add directly**, for somebody with no email you can reach — you set their
+  first password and tell them out of band. Refused if the address already has
+  an Altier account, because attaching a stranger's login to your workspace
+  would hand you a password reset for an account that may open somebody else's
+  books.
+
+Either way a manager or staff member needs properties assigned, or they sign in
+to an empty portfolio: those assignments are what the database reads to decide
+what their queries return. Owners and accountants see the whole workspace and
+have none.
+
+Renters are separate, on **Tenants & guests**. A portal login there opens one
+person's own agreement, charges and documents, and on every plan but a
+specially configured one it costs no seat.
+
+| Plan | Seats |
+|---|---|
+| Starter | 3 |
+| Professional | 10 |
+| Enterprise | unlimited |
+
+The limit is stored on the workspace's subscription rather than read from that
+table, so a number agreed with one customer survives a change to the published
+plans. Pending invitations count against it. Running out answers 402 — the
+request was fine, the subscription is what is in the way — and the interface
+shows what the next plan gives rather than an error.
 
 | | |
 |---|---|
 | Passwords | scrypt (`node:crypto`), OWASP N=2^15 r=8 p=3, per-password salt |
 | Sessions | opaque 32-byte token in an httpOnly, SameSite=Lax cookie; 14 days |
 | Storage | only the SHA-256 of the token is stored, so the table is not a key ring |
-| Revocation | removing a team member cascades to their sessions immediately |
+| Revocation | removing somebody from a workspace ends their sessions in it immediately; the policies stop answering them the moment the membership row goes |
 | Throttling | 8 failed attempts locks an account for 15 minutes, recorded on the row so it survives across serverless instances |
 | Enumeration | an unknown email and a wrong password give the same message, and take the same time |
 
@@ -183,18 +222,45 @@ receives no charges at all from `GET /api/portfolio` — they are withheld rathe
 than hidden — and a request it may not make is answered 403. The smoke test
 asserts both, and was verified to fail when the gate is removed.
 
+### One workspace cannot see another
+
+Altier holds many customers in one database, and the wall between them is in
+the database rather than in the API's `WHERE` clauses.
+
+Every business row carries an `organization_id`, and every one of those tables
+has row-level security switched on and forced. The API connects as the owning
+role, and each request then runs inside a transaction that drops to
+`altier_app` — a role that bypasses nothing — and says who is asking and which
+workspace they claim. The claim is only a proposal: the policy looks the pairing
+up in `organization_members` and agrees only if a row says the membership is
+real and active. So a bug in a route can name a workspace that is not theirs and
+see an empty portfolio; it cannot see somebody else's.
+
+The same policies narrow further by role. An owner and an accountant see the
+whole workspace; a manager and a staff member see the properties they are
+assigned and the agreements, charges, jobs and clients attached to those; a
+tenant sees their own agreement and charges and nothing else.
+
+`npm run check:isolation` is the proof. It connects as `altier_app`, claims to
+be four different people — including one claiming a workspace they have no
+membership in — and counts what unfiltered `SELECT count(*)` returns from nine
+tables. It also tries three writes that would widen access, such as assigning
+one's own staff a property belonging to another workspace, and insists each is
+refused. Replacing the workspace function with one that believes what it is told
+makes it fail.
+
 ### Google and Apple
 
 Both are supported, and both are optional — set no environment variables and
 Altier works exactly as above, with passwords only. Set them and the sign-in
 page grows a button per provider it has keys for.
 
-A Google or Apple account is a **way into an existing team member**, never a
-way to create one. An owner adds somebody in Settings → Team with their real
+A Google or Apple account is a **way into an account that already exists**,
+never a way to create one. An owner adds or invites somebody with their real
 email; that person presses *Continue with Google*; the verified address is
-matched against the team, and an address that matches nobody is refused. Nobody
-can sign themselves up, and single sign-on stays closed until the first account
-has a password.
+matched against the accounts here, and an address that matches nobody is
+refused. Nobody can sign themselves up, and single sign-on stays closed until
+the first account has a password.
 
 The flow is written directly against both providers in `server/oidc.ts` — the
 OpenID Connect authorization-code flow, PKCE on Google, a one-time state row
@@ -208,19 +274,16 @@ refused. **[docs/SIGN-IN-WITH-GOOGLE-AND-APPLE.md](docs/SIGN-IN-WITH-GOOGLE-AND-
 has the console-by-console setup, including the fact that Apple needs a paid
 developer account.
 
-There is no sample data in a real deployment, and no fallback to any. If the
-API cannot be reached the app says so and stops, rather than quietly serving
-the bundled portfolio — a wrong connection string that shows twenty-four
-plausible properties is the kind of fault nobody thinks to check for. The one
-exception is the single-file build (`npm run build:single`), which has no
-server by design, carries its own sample portfolio, and keeps the role switcher
-as a way to see what each role reaches.
+The build carries no records at all, so there is nothing to fall back to even
+by accident. If the API cannot be reached the app says so and stops — a wrong
+connection string that shows twenty-four plausible properties is the kind of
+fault nobody thinks to check for. `npm run check:nodata` enforces it in CI by
+searching the built bundle for names that exist only in the test fixture.
 
 ## Deploying
 
-The published build works with no server at all — it falls back to the bundled
-portfolio and keeps every change in the browser tab. That is fine for a demo and
-useless for running a business, so a real deployment needs a database behind it.
+The build is the app and nothing else: it holds no records, so it needs a
+database behind it before it can show anybody anything.
 
 Three steps, once:
 
@@ -267,9 +330,9 @@ Check it landed by opening `/api/health` on the deployed URL:
 ```
 
 `"schema": "missing"` means step 2 has not been run against that database.
-A 500 naming `DATABASE_URL` means step 3 has not. And if Settings → Profile
-still says **Sample data**, the app never reached the API at all — the browser's
-network tab on `/api/portfolio` will say why.
+A 500 naming `DATABASE_URL` means step 3 has not. And if the app shows the
+"portfolio could not be loaded" screen instead of a sign-in, it never reached
+the API at all — the browser's network tab on `/api/portfolio` will say why.
 
 ### Pasting the connection string
 
@@ -366,10 +429,10 @@ smoke test and the production build on every pull request and on every push to `
 
 ## Database
 
-The app runs off the bundled generated portfolio unless an API is reachable. `server/db/` is the
-persistence layer beneath it: a Postgres schema, migrations, and a seeder that loads the demo
-portfolio using the very generator the UI runs on — so the seeded database holds exactly the data
-the interface shows, anchored to today.
+Everything on screen comes from Postgres. `server/db/` is that layer: the schema, the migrations,
+the reader that reassembles rows into the objects the pages work on, and a seeder that loads the
+`scripts/fixture/` portfolio into a development database so the checks have something to run
+against. The fixture is dated relative to today, so due dates, arrivals and arrears stay live.
 
 ```bash
 npm run db:generate   # regenerate migrations after changing the schema
@@ -415,11 +478,10 @@ Invariants the database enforces rather than trusting the application to maintai
 | `bookings_open_ended_is_rental` | only a rental may omit an end date |
 | `maintenance_completed_consistent` | a job is completed exactly when it has a completion date |
 
-Requires Node 18 or newer. There is no backend: the sample portfolio — 24 properties across Kampala,
-Wakiso and Entebbe, priced in Ugandan shillings — is generated deterministically at load and anchored
-to today's date, so due dates, arrivals and overdue balances are always live.
-Role and reminder preferences persist in `localStorage`; **Settings → Profile → Reset demo data**
-restores everything.
+Requires Node 20 or newer, and a database — the app carries no records of its own. Amounts are held
+in Ugandan shillings and converted at display time. Region, currency and language preferences persist
+in `localStorage`; **Settings → Profile → Reload from database** re-reads everything from the
+server.
 
 ## Stack
 

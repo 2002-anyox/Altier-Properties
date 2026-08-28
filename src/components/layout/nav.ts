@@ -1,6 +1,6 @@
 import {
   BellRing, Building2, CalendarRange, ClipboardList, CreditCard, LayoutDashboard,
-  PieChart, Settings, Users, Wrench,
+  LifeBuoy, PieChart, Settings, UserRound, Users, UsersRound, Wrench,
 } from 'lucide-react'
 import type { Permission } from '../../lib/rbac.js'
 
@@ -13,6 +13,8 @@ export interface NavItem {
   /** Shown as a count pill in the rail. */
   badge?: 'notifications' | 'overdue' | 'maintenance'
   hint: string
+  /** Altier's own staff only — never drawn for a customer, whatever role. */
+  superAdmin?: boolean
 }
 
 /* Organised by object, not by department — a manager thinks
@@ -45,7 +47,20 @@ export const NAV: Array<{ sectionKey: string; items: NavItem[] }> = [
     sectionKey: 'nav.insight',
     items: [
       { to: '/reports', labelKey: 'nav.reports', icon: PieChart, permission: 'view:reports', hint: 'Occupancy, revenue, performance' },
-      { to: '/settings', labelKey: 'nav.settings', icon: Settings, permission: 'manage:settings', hint: 'Team, roles and reminders' },
+    ],
+  },
+  {
+    sectionKey: 'nav.workspace',
+    items: [
+      { to: '/team', labelKey: 'nav.team', icon: UsersRound, permission: 'manage:team', hint: 'People, roles, seats and invitations' },
+      { to: '/tenants', labelKey: 'nav.tenants', icon: UserRound, permission: 'view:clients', hint: 'Renters and their portal logins' },
+      { to: '/settings', labelKey: 'nav.settings', icon: Settings, permission: 'manage:settings', hint: 'Your profile, reminders and appearance' },
+    ],
+  },
+  {
+    sectionKey: 'nav.internal',
+    items: [
+      { to: '/admin', labelKey: 'nav.support', icon: LifeBuoy, permission: 'view:dashboard', superAdmin: true, hint: 'Every workspace on this deployment' },
     ],
   },
 ]

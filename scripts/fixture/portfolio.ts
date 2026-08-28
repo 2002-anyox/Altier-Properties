@@ -1,14 +1,32 @@
-import { presentation } from './money.js'
-import type {
-  AppNotification, Booking, BookingSource, Client, Invoice, MaintenanceRequest,
-  Property, PropertyDocument, PropertyStatus, PropertyType, ReminderSettings,
-  TeamMember, TenancyMode,
-} from './types.js'
-
 /* ------------------------------------------------------------------ *
- * Deterministic PRNG — the demo portfolio must look identical on every
- * load, while still being anchored to today's real date.
+ * The sample portfolio — a test fixture, and nothing else
+ *
+ * Twenty-four invented homes in Kampala, the people renting them, and a
+ * year of agreements, charges and repair jobs, all generated from one
+ * fixed seed so every run produces the same figures.
+ *
+ * It lives here, outside src/, because that is the only way to be sure
+ * of what it is. Nothing under src/ may import it, so `vite build` cannot
+ * reach it and not one of these invented names can end up in a browser.
+ * What it is for is the checks: the round trip reads the portfolio back
+ * out of Postgres and compares it to what went in, the accounting check
+ * asserts the revenue-recognition invariants against a year of charges,
+ * and the isolation check needs two workspaces with enough in them for a
+ * leak to be visible.
+ *
+ *   npm run db:seed   loads it into a development database
+ *
+ * Never into a real one. A production database starts empty and the first
+ * owner fills it in.
  * ------------------------------------------------------------------ */
+
+import { TODAY, addDays, dayOffset, daysBetween, iso } from '../../src/lib/dates.js'
+import { AMENITY_POOL, COMMERCIAL_AMENITIES } from '../../src/lib/defaults.js'
+import type {
+  Booking, BookingSource, Client, Invoice, MaintenanceRequest, Property,
+  PropertyDocument, PropertyStatus, PropertyType, TeamMember, TenancyMode,
+} from '../../src/lib/types.js'
+
 function mulberry(seed: number) {
   let a = seed >>> 0
   return () => {
@@ -23,23 +41,6 @@ const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)]
 const between = (lo: number, hi: number) => lo + rnd() * (hi - lo)
 const intBetween = (lo: number, hi: number) => Math.floor(between(lo, hi + 1))
 const chance = (p: number) => rnd() < p
-
-/* ------------------------------ dates ----------------------------- */
-export const TODAY = (() => {
-  const d = new Date()
-  d.setHours(0, 0, 0, 0)
-  return d
-})()
-
-export const iso = (d: Date) => d.toISOString().slice(0, 10)
-export const addDays = (d: Date | string, n: number) => {
-  const base = typeof d === 'string' ? new Date(d + 'T00:00:00') : new Date(d)
-  base.setDate(base.getDate() + n)
-  return base
-}
-export const dayOffset = (n: number) => iso(addDays(TODAY, n))
-export const daysBetween = (a: string, b: string) =>
-  Math.round((new Date(b + 'T00:00:00').getTime() - new Date(a + 'T00:00:00').getTime()) / 86400000)
 
 /* ------------------------------- team ----------------------------- */
 export const TEAM: TeamMember[] = [
@@ -96,19 +97,6 @@ const SEEDS: Seed[] = [
   { name: 'Lubowa Ridge Terrace', type: 'apartment', mode: 'short_stay', status: 'reserved', district: 'Lubowa', beds: 3, baths: 2, sqm: 145, price: 520_000, x: 0.30, y: 0.80 },
   { name: 'Kira Residence 11', type: 'apartment', mode: 'rental', status: 'maintenance', district: 'Kira', beds: 2, baths: 1, sqm: 84, price: 950_000, x: 0.86, y: 0.26 },
   { name: 'Kampala Road Retail Front', type: 'commercial', mode: 'long_term', status: 'occupied', district: 'Central', beds: 0, baths: 1, sqm: 150, price: 11_000_000, x: 0.44, y: 0.50 },
-]
-
-export const AMENITY_POOL = [
-  'Standby generator', 'Borehole water', 'Water storage tank', 'Solar backup',
-  '24-hour security', 'Gated compound', 'Perimeter wall', 'Servants quarters',
-  'Air conditioning', 'Fitted kitchen', 'Fibre internet', 'DSTV connection',
-  'Secure parking', 'Private garden', 'Balcony', 'Swimming pool',
-  'Gym access', 'Lift access', 'Furnished', 'Mosquito screens',
-]
-export const COMMERCIAL_AMENITIES = [
-  'Loading bay', '3-phase power', 'Standby generator', 'Fibre internet',
-  'Secure parking', 'CCTV', 'Air conditioning', 'Meeting rooms',
-  'Street frontage', 'Goods lift', '24-hour security',
 ]
 
 const DOC_NAMES: Array<[PropertyDocument['category'], string]> = [
@@ -733,153 +721,27 @@ export const MAINTENANCE: MaintenanceRequest[] = (() => {
 })()
 
 /* --------------------------- preferences -------------------------- */
-export const DEFAULT_REMINDERS: ReminderSettings = {
-  rentDueLeadDays: 5,
-  leaseExpiryLeadDays: 60,
-  checkInLeadHours: 24,
-  vacancyAlertDays: 14,
-  maintenanceLeadDays: 3,
-  channels: { inApp: true, email: true, sms: false, push: true },
-  quietHours: { enabled: true, from: '21:00', to: '07:30' },
-  digest: 'daily',
-}
-
-/* -------------------------- notifications ------------------------- */
-export function buildNotifications(
-  properties: Property[],
-  invoices: Invoice[],
-  bookings: Booking[],
-  maintenance: MaintenanceRequest[],
-  clients: Client[],
-  reminders: ReminderSettings,
-): AppNotification[] {
-  const today = iso(TODAY)
-  const out: AppNotification[] = []
-  const nameOf = (id: string) => properties.find((p) => p.id === id)?.name ?? 'Property'
-  const clientOf = (id: string) => clients.find((c) => c.id === id)?.name ?? 'Client'
-
-  invoices.forEach((inv) => {
-    const gap = daysBetween(today, inv.dueOn)
-    if (inv.status === 'overdue') {
-      out.push({
-        id: `n-inv-${inv.id}`, kind: 'payment_overdue', priority: Math.abs(gap) > 14 ? 'critical' : 'high',
-        title: `Payment overdue · ${formatMoney(inv.amount - inv.paidAmount)}`,
-        body: `${clientOf(inv.clientId)} — ${nameOf(inv.propertyId)}. ${Math.abs(gap)} days past due on ${inv.number}.`,
-        createdAt: inv.dueOn, read: false, entity: { type: 'invoice', id: inv.id }, actionLabel: 'Chase payment',
-      })
-    } else if ((inv.status === 'pending' || inv.status === 'upcoming') && gap >= 0 && gap <= reminders.rentDueLeadDays) {
-      out.push({
-        id: `n-inv-${inv.id}`, kind: 'payment_due', priority: gap <= 1 ? 'high' : 'normal',
-        title: `${inv.type === 'rent' ? 'Rent' : 'Payment'} due ${gap === 0 ? 'today' : `in ${gap} day${gap > 1 ? 's' : ''}`}`,
-        body: `${formatMoney(inv.amount)} from ${clientOf(inv.clientId)} for ${nameOf(inv.propertyId)}.`,
-        createdAt: dayOffset(-Math.max(0, reminders.rentDueLeadDays - gap)), read: false,
-        entity: { type: 'invoice', id: inv.id }, actionLabel: 'Send reminder',
-      })
-    } else if (inv.status === 'partial') {
-      out.push({
-        id: `n-inv-${inv.id}`, kind: 'payment_due', priority: 'normal',
-        title: `Part payment received · ${formatMoney(inv.paidAmount)} of ${formatMoney(inv.amount)}`,
-        body: `${clientOf(inv.clientId)} — balance of ${formatMoney(inv.amount - inv.paidAmount)} outstanding on ${inv.number}.`,
-        createdAt: inv.dueOn, read: false, entity: { type: 'invoice', id: inv.id }, actionLabel: 'Review balance',
-      })
-    }
-  })
-
-  bookings.forEach((b) => {
-    const inDays = daysBetween(today, b.start)
-    const outDays = b.end ? daysBetween(today, b.end) : Number.POSITIVE_INFINITY
-    if (b.status === 'upcoming' && inDays >= 0 && inDays <= 3) {
-      out.push({
-        id: `n-in-${b.id}`, kind: 'check_in', priority: inDays === 0 ? 'high' : 'normal',
-        title: `Check-in ${inDays === 0 ? 'today' : inDays === 1 ? 'tomorrow' : `in ${inDays} days`} · ${b.checkIn}`,
-        body: `${clientOf(b.clientId)} arriving at ${nameOf(b.propertyId)} · ${b.guests} guest${b.guests > 1 ? 's' : ''} · ${b.reference}.`,
-        createdAt: dayOffset(-1), read: false, entity: { type: 'booking', id: b.id }, actionLabel: 'Prepare arrival',
-      })
-    }
-    if (b.status === 'in_progress' && b.mode === 'short_stay' && outDays >= 0 && outDays <= 2) {
-      out.push({
-        id: `n-out-${b.id}`, kind: 'check_out', priority: 'normal',
-        title: `Check-out ${outDays === 0 ? 'today' : `in ${outDays} day${outDays > 1 ? 's' : ''}`} · ${b.checkOut}`,
-        body: `${nameOf(b.propertyId)} — schedule turnover clean after ${clientOf(b.clientId)} departs.`,
-        createdAt: dayOffset(0), read: false, entity: { type: 'booking', id: b.id }, actionLabel: 'Schedule turnover',
-      })
-    }
-    /* An open-ended rental never expires — what matters is how far the rent
-       is paid through, and whether the advance is running down. */
-    if (b.mode === 'rental' && b.status === 'in_progress' && b.paidThrough) {
-      const covered = daysBetween(today, b.paidThrough)
-      if (covered < 0) {
-        out.push({
-          id: `n-rent-${b.id}`, kind: 'payment_overdue', priority: covered < -21 ? 'critical' : 'high',
-          title: `Rent lapsed ${Math.abs(covered)} days ago`,
-          body: `${clientOf(b.clientId)} at ${nameOf(b.propertyId)} is occupying beyond the paid period. Advance was ${b.advanceMonths} months at move-in.`,
-          createdAt: b.paidThrough, read: false, entity: { type: 'booking', id: b.id }, actionLabel: 'Chase rent',
-        })
-      } else if (covered <= reminders.rentDueLeadDays * 3) {
-        out.push({
-          id: `n-rent-${b.id}`, kind: 'payment_due', priority: covered <= 7 ? 'high' : 'normal',
-          title: `Rent covered for ${covered} more day${covered === 1 ? '' : 's'}`,
-          body: `${clientOf(b.clientId)} at ${nameOf(b.propertyId)} is paid through ${b.paidThrough}. Collect the next month before it lapses.`,
-          createdAt: dayOffset(-1), read: false, entity: { type: 'booking', id: b.id }, actionLabel: 'Request rent',
-        })
-      }
-    }
-
-    if (b.mode === 'long_term' && b.status === 'in_progress' && b.end) {
-      const expiry = daysBetween(today, b.end)
-      if (expiry >= 0 && expiry <= reminders.leaseExpiryLeadDays) {
-        out.push({
-          id: `n-lease-${b.id}`, kind: 'lease_expiry', priority: expiry <= 21 ? 'high' : 'normal',
-          title: `Lease expires in ${expiry} days`,
-          body: `${clientOf(b.clientId)} at ${nameOf(b.propertyId)} — decide on renewal or start re-marketing.`,
-          createdAt: dayOffset(-2), read: false, entity: { type: 'booking', id: b.id }, actionLabel: 'Open renewal',
-        })
-      }
-    }
-  })
-
-  properties.forEach((p) => {
-    if (p.status === 'available' && p.availableFrom) {
-      const vacantFor = Math.abs(daysBetween(p.availableFrom, today))
-      if (vacantFor >= reminders.vacancyAlertDays) {
-        out.push({
-          id: `n-vac-${p.id}`, kind: 'vacancy', priority: vacantFor > 30 ? 'high' : 'normal',
-          title: `Vacant ${vacantFor} days · ${formatMoney(p.mode === 'short_stay' ? p.price * 30 : p.price)} monthly exposure`,
-          body: `${p.name} in ${p.address.district} has had no booking since ${p.availableFrom}.`,
-          createdAt: dayOffset(-1), read: false, entity: { type: 'property', id: p.id }, actionLabel: 'Review listing',
-        })
-      }
-    }
-  })
-
-  maintenance.forEach((m) => {
-    if (m.status === 'completed') return
-    const gap = daysBetween(today, m.dueOn)
-    if (gap <= reminders.maintenanceLeadDays) {
-      out.push({
-        id: `n-mnt-${m.id}`, kind: 'maintenance',
-        priority: m.priority === 'urgent' ? 'critical' : gap < 0 ? 'high' : 'normal',
-        title: gap < 0 ? `Maintenance ${Math.abs(gap)} days overdue` : `Maintenance due ${gap === 0 ? 'today' : `in ${gap} day${gap > 1 ? 's' : ''}`}`,
-        body: `${m.title} — ${nameOf(m.propertyId)} · ${m.vendor}.`,
-        createdAt: dayOffset(Math.min(0, gap)), read: false, entity: { type: 'maintenance', id: m.id }, actionLabel: 'Open job',
-      })
-    }
-  })
-
-  /* Nothing is appended here. Every notification above is derived from a
-     record that exists, so an empty portfolio produces an empty list —
-     which is the honest answer, and the one a new deployment needs. */
-  return out.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
-}
-
-/* ------------------------------ helpers --------------------------- */
-/** Notification copy is built from the same presentation settings as the
- *  rest of the UI, so a currency change reaches the alerts too. */
-export function formatMoney(n: number) {
-  const value = n * presentation.rate
-  return new Intl.NumberFormat(presentation.locale, {
-    style: 'currency',
-    currency: presentation.currency,
-    maximumFractionDigits: 0,
-  }).format(value)
+/**
+ * Who works on what.
+ *
+ * Filled in here rather than written into the list above, because it is
+ * already recorded twice over: a property names its manager, and a
+ * maintenance job names the person doing it. Deriving the assignments
+ * from those keeps the sample portfolio consistent with itself.
+ *
+ * It also makes the sample usable. Assignments are what the database
+ * reads to decide what a manager or staff member's queries return, so
+ * without this, signing in as anybody but the owner or the accountant
+ * would show an empty portfolio.
+ */
+for (const member of TEAM) {
+  /* Empty for an owner and an accountant, and it means what it says: no
+     per-property restriction, because they see the whole workspace. */
+  if (member.role !== 'manager' && member.role !== 'staff') {
+    member.propertyIds = []
+    continue
+  }
+  const managed = PROPERTIES.filter((p) => p.managerId === member.id).map((p) => p.id)
+  const worked = MAINTENANCE.filter((m) => m.assigneeId === member.id).map((m) => m.propertyId)
+  member.propertyIds = [...new Set([...managed, ...worked])].sort()
 }

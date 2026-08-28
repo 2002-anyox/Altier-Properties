@@ -90,4 +90,762 @@ CREATE INDEX "oauth_states_expiry_idx" ON "oauth_states" USING btree ("expires_a
   END IF;
 END $mig_2$;
 
+-- ---------------------------------------------------------------
+-- migration: 0003_multitenancy
+-- ---------------------------------------------------------------
+DO $mig_3$
+BEGIN
+  IF EXISTS (SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE hash = '087b50bf9df500d0518f6298fc6f8fe7ceadac84f7bc30384fae9cc71112bba1') THEN
+    RAISE NOTICE 'already applied: 0003_multitenancy';
+  ELSE
+    EXECUTE $mig_3_sql$
+CREATE TYPE "public"."plan" AS ENUM('starter', 'professional', 'enterprise');
+CREATE TYPE "public"."subscription_status" AS ENUM('trialing', 'active', 'past_due', 'cancelled');
+CREATE TYPE "public"."membership_status" AS ENUM('invited', 'active', 'suspended');
+CREATE TYPE "public"."invitation_status" AS ENUM('pending', 'accepted', 'revoked', 'expired');
+
+-- 'tenant' is a portal role, not a staff seat. It joins the existing enum
+-- so there stays one membership table and therefore one place where
+-- access is decided.
+--
+-- Replaced rather than extended: ALTER TYPE ... ADD VALUE cannot be used
+-- by anything in the same transaction that adds it, and the check
+-- constraint below names 'tenant'. Building the type afresh keeps this
+-- migration one atomic step, which matters more than the extra lines.
+ALTER TYPE "public"."role" RENAME TO "role_before_tenants";
+CREATE TYPE "public"."role" AS ENUM('owner', 'manager', 'staff', 'accountant', 'tenant');
+
+CREATE TABLE "organizations" (
+	"id" text PRIMARY KEY NOT NULL,
+	"name" text NOT NULL,
+	"slug" text NOT NULL UNIQUE,
+	"country" text DEFAULT 'Uganda' NOT NULL,
+	"currency" text DEFAULT 'UGX' NOT NULL,
+	"locale" text DEFAULT 'en-UG' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE "subscriptions" (
+	"organization_id" text PRIMARY KEY NOT NULL,
+	"plan" "plan" DEFAULT 'starter' NOT NULL,
+	"status" "subscription_status" DEFAULT 'trialing' NOT NULL,
+	"seat_limit" integer,
+	"tenants_count_as_seats" boolean DEFAULT false NOT NULL,
+	"current_period_start" date,
+	"current_period_end" date,
+	"trial_ends_at" date,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE "profiles" (
+	"id" text PRIMARY KEY NOT NULL,
+	"name" text NOT NULL,
+	"email" text NOT NULL UNIQUE,
+	"phone" text DEFAULT '' NOT NULL,
+	"password_hash" text,
+	"password_set_at" timestamp with time zone,
+	"failed_attempts" integer DEFAULT 0 NOT NULL,
+	"locked_until" timestamp with time zone,
+	"is_super_admin" boolean DEFAULT false NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE "organization_members" (
+	"id" text PRIMARY KEY NOT NULL,
+	"organization_id" text NOT NULL,
+	"profile_id" text NOT NULL,
+	"role" "role" NOT NULL,
+	"title" text DEFAULT '' NOT NULL,
+	"status" "membership_status" DEFAULT 'active' NOT NULL,
+	"since" date NOT NULL,
+	"client_id" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "organization_members_tenant_link"
+	  CHECK ((role = 'tenant') = (client_id IS NOT NULL))
+);
+
+CREATE TABLE "member_properties" (
+	"member_id" text NOT NULL,
+	"property_id" text NOT NULL,
+	CONSTRAINT "member_properties_member_id_property_id_pk" PRIMARY KEY("member_id","property_id")
+);
+
+CREATE TABLE "invitations" (
+	"id" text PRIMARY KEY NOT NULL,
+	"organization_id" text NOT NULL,
+	"email" text NOT NULL,
+	"role" "role" NOT NULL,
+	"title" text DEFAULT '' NOT NULL,
+	"token_hash" text NOT NULL UNIQUE,
+	"status" "invitation_status" DEFAULT 'pending' NOT NULL,
+	"invited_by" text,
+	"expires_at" timestamp with time zone NOT NULL,
+	"accepted_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE "invitation_properties" (
+	"invitation_id" text NOT NULL,
+	"property_id" text NOT NULL,
+	CONSTRAINT "invitation_properties_invitation_id_property_id_pk" PRIMARY KEY("invitation_id","property_id")
+);
+
+CREATE TABLE "notification_reads" (
+	"organization_id" text NOT NULL,
+	"member_id" text NOT NULL,
+	"notification_id" text NOT NULL,
+	"read_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "notification_reads_member_id_notification_id_pk" PRIMARY KEY("member_id","notification_id")
+);
+-- ---------------------------------------------------------------
+-- Everything that exists today belongs to one workspace
+--
+-- A database in service already holds one customer's records; they
+-- simply had nowhere to say so. This creates that workspace and puts
+-- every existing row in it, so an upgrade changes who can see the data
+-- rather than what the data is.
+--
+-- Only when there is something to move. A database being created for the
+-- first time has no team and no properties, and giving it a workspace
+-- nobody belongs to would leave a phantom customer sitting beside the
+-- real one the first owner is about to create.
+-- ---------------------------------------------------------------
+INSERT INTO "organizations" (id, name, slug)
+SELECT 'org-000000000001', 'Altier Properties', 'altier'
+WHERE EXISTS (SELECT 1 FROM "team_members")
+   OR EXISTS (SELECT 1 FROM "reminder_settings")
+ON CONFLICT DO NOTHING;
+
+INSERT INTO "subscriptions" (organization_id, plan, status, seat_limit)
+SELECT 'org-000000000001', 'professional', 'active', 10
+WHERE EXISTS (SELECT 1 FROM "organizations" WHERE id = 'org-000000000001')
+ON CONFLICT DO NOTHING;
+
+-- A team member was an identity and a role in one row. Split it: the
+-- person becomes a profile, their place in the workspace a membership,
+-- and the membership keeps the old id so every manager_id and
+-- assignee_id already pointing at it stays correct.
+INSERT INTO "profiles" (id, name, email, phone, password_hash, password_set_at,
+                        failed_attempts, locked_until)
+SELECT 'pr-' || substr(md5(id), 1, 14), name, email, phone, password_hash,
+       password_set_at, failed_attempts, locked_until
+FROM "team_members";
+
+INSERT INTO "organization_members" (id, organization_id, profile_id, role, title, status, since)
+SELECT id, 'org-000000000001', 'pr-' || substr(md5(id), 1, 14),
+       role::text::"public"."role", title, 'active', since
+FROM "team_members";
+
+-- Who works on what, derived from what the database already records: a
+-- property names its manager, a job names the person doing it. Managers
+-- and staff are held to their assignments from here on, so without this
+-- an upgrade would show them an empty portfolio and look like data loss.
+-- Owners and accountants get no rows, which is how "the whole workspace"
+-- is written.
+INSERT INTO "member_properties" (member_id, property_id)
+SELECT om.id, p.id
+FROM "organization_members" om
+JOIN "properties" p ON p.manager_id = om.id
+WHERE om.role IN ('manager', 'staff')
+UNION
+SELECT om.id, m.property_id
+FROM "organization_members" om
+JOIN "maintenance_requests" m ON m.assignee_id = om.id
+WHERE om.role IN ('manager', 'staff')
+ON CONFLICT DO NOTHING;
+
+-- Sessions and linked accounts belong to the person, not the membership.
+ALTER TABLE "sessions" ADD COLUMN "profile_id" text;
+ALTER TABLE "sessions" ADD COLUMN "organization_id" text;
+UPDATE "sessions" SET
+  profile_id = 'pr-' || substr(md5(member_id), 1, 14),
+  organization_id = 'org-000000000001';
+ALTER TABLE "sessions" ALTER COLUMN "profile_id" SET NOT NULL;
+ALTER TABLE "sessions" DROP COLUMN "member_id";
+
+ALTER TABLE "identities" ADD COLUMN "profile_id" text;
+UPDATE "identities" SET profile_id = 'pr-' || substr(md5(member_id), 1, 14);
+ALTER TABLE "identities" ALTER COLUMN "profile_id" SET NOT NULL;
+ALTER TABLE "identities" DROP COLUMN "member_id";
+
+-- Properties and jobs point at a membership now, not a bare person. The
+-- membership kept the old id, so the values are already right; only the
+-- constraint has to be re-aimed.
+ALTER TABLE "properties" DROP CONSTRAINT IF EXISTS "properties_manager_id_team_members_id_fk";
+ALTER TABLE "maintenance_requests" DROP CONSTRAINT IF EXISTS "maintenance_requests_assignee_id_team_members_id_fk";
+DROP TABLE "team_members";
+-- Nothing refers to the old type once its one table is gone.
+DROP TYPE "public"."role_before_tenants";
+ALTER TABLE "properties" ADD CONSTRAINT "properties_manager_id_fk"
+  FOREIGN KEY ("manager_id") REFERENCES "public"."organization_members"("id");
+ALTER TABLE "maintenance_requests" ADD CONSTRAINT "maintenance_requests_assignee_id_fk"
+  FOREIGN KEY ("assignee_id") REFERENCES "public"."organization_members"("id");
+-- ---------------------------------------------------------------
+-- organization_id on every business table
+--
+-- Not a convention: the policies in the next migration read this column
+-- and nothing else, so a table without it would be a table without
+-- isolation.
+-- ---------------------------------------------------------------
+ALTER TABLE "properties" ADD COLUMN "organization_id" text;
+UPDATE "properties" SET organization_id = 'org-000000000001';
+ALTER TABLE "properties" ALTER COLUMN "organization_id" SET NOT NULL;
+ALTER TABLE "clients" ADD COLUMN "organization_id" text;
+UPDATE "clients" SET organization_id = 'org-000000000001';
+ALTER TABLE "clients" ALTER COLUMN "organization_id" SET NOT NULL;
+ALTER TABLE "bookings" ADD COLUMN "organization_id" text;
+UPDATE "bookings" SET organization_id = 'org-000000000001';
+ALTER TABLE "bookings" ALTER COLUMN "organization_id" SET NOT NULL;
+ALTER TABLE "invoices" ADD COLUMN "organization_id" text;
+UPDATE "invoices" SET organization_id = 'org-000000000001';
+ALTER TABLE "invoices" ALTER COLUMN "organization_id" SET NOT NULL;
+ALTER TABLE "maintenance_requests" ADD COLUMN "organization_id" text;
+UPDATE "maintenance_requests" SET organization_id = 'org-000000000001';
+ALTER TABLE "maintenance_requests" ALTER COLUMN "organization_id" SET NOT NULL;
+ALTER TABLE "communications" ADD COLUMN "organization_id" text;
+UPDATE "communications" SET organization_id = 'org-000000000001';
+ALTER TABLE "communications" ALTER COLUMN "organization_id" SET NOT NULL;
+ALTER TABLE "occupancy_spells" ADD COLUMN "organization_id" text;
+UPDATE "occupancy_spells" SET organization_id = 'org-000000000001';
+ALTER TABLE "occupancy_spells" ALTER COLUMN "organization_id" SET NOT NULL;
+ALTER TABLE "client_documents" ADD COLUMN "organization_id" text;
+UPDATE "client_documents" SET organization_id = 'org-000000000001';
+ALTER TABLE "client_documents" ALTER COLUMN "organization_id" SET NOT NULL;
+ALTER TABLE "property_documents" ADD COLUMN "organization_id" text;
+UPDATE "property_documents" SET organization_id = 'org-000000000001';
+ALTER TABLE "property_documents" ALTER COLUMN "organization_id" SET NOT NULL;
+ALTER TABLE "property_maintenance_notes" ADD COLUMN "organization_id" text;
+UPDATE "property_maintenance_notes" SET organization_id = 'org-000000000001';
+ALTER TABLE "property_maintenance_notes" ALTER COLUMN "organization_id" SET NOT NULL;
+ALTER TABLE "maintenance_events" ADD COLUMN "organization_id" text;
+UPDATE "maintenance_events" SET organization_id = 'org-000000000001';
+ALTER TABLE "maintenance_events" ALTER COLUMN "organization_id" SET NOT NULL;
+ALTER TABLE "property_amenities" ADD COLUMN "organization_id" text;
+UPDATE "property_amenities" SET organization_id = 'org-000000000001';
+ALTER TABLE "property_amenities" ALTER COLUMN "organization_id" SET NOT NULL;
+ALTER TABLE "client_properties" ADD COLUMN "organization_id" text;
+UPDATE "client_properties" SET organization_id = 'org-000000000001';
+ALTER TABLE "client_properties" ALTER COLUMN "organization_id" SET NOT NULL;
+-- Reminder timing is a customer's preference, not the platform's.
+ALTER TABLE "reminder_settings" ADD COLUMN "organization_id" text;
+-- One row per workspace now, rather than the single row the whole
+-- installation shared. Whatever is here belongs to the workspace the
+-- block above created; on a database being built for the first time
+-- there is nothing here at all.
+UPDATE "reminder_settings" SET organization_id = 'org-000000000001';
+ALTER TABLE "reminder_settings" DROP CONSTRAINT IF EXISTS "reminder_settings_single_row";
+ALTER TABLE "reminder_settings" DROP CONSTRAINT IF EXISTS "reminder_settings_pkey";
+ALTER TABLE "reminder_settings" DROP COLUMN IF EXISTS "id";
+ALTER TABLE "reminder_settings" ALTER COLUMN "organization_id" SET NOT NULL;
+ALTER TABLE "reminder_settings" ADD PRIMARY KEY ("organization_id");
+
+-- ---------------------------------------------------------------
+-- Keys
+-- ---------------------------------------------------------------
+ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_organization_id_fk"
+  FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+ALTER TABLE "organization_members" ADD CONSTRAINT "organization_members_organization_id_fk"
+  FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+ALTER TABLE "organization_members" ADD CONSTRAINT "organization_members_profile_id_fk"
+  FOREIGN KEY ("profile_id") REFERENCES "public"."profiles"("id") ON DELETE cascade;
+ALTER TABLE "member_properties" ADD CONSTRAINT "member_properties_member_id_fk"
+  FOREIGN KEY ("member_id") REFERENCES "public"."organization_members"("id") ON DELETE cascade;
+ALTER TABLE "invitations" ADD CONSTRAINT "invitations_organization_id_fk"
+  FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+ALTER TABLE "invitations" ADD CONSTRAINT "invitations_invited_by_fk"
+  FOREIGN KEY ("invited_by") REFERENCES "public"."profiles"("id") ON DELETE set null;
+ALTER TABLE "invitation_properties" ADD CONSTRAINT "invitation_properties_invitation_id_fk"
+  FOREIGN KEY ("invitation_id") REFERENCES "public"."invitations"("id") ON DELETE cascade;
+ALTER TABLE "notification_reads" ADD CONSTRAINT "notification_reads_organization_id_fk"
+  FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+ALTER TABLE "notification_reads" ADD CONSTRAINT "notification_reads_member_id_fk"
+  FOREIGN KEY ("member_id") REFERENCES "public"."organization_members"("id") ON DELETE cascade;
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_profile_id_fk"
+  FOREIGN KEY ("profile_id") REFERENCES "public"."profiles"("id") ON DELETE cascade;
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_organization_id_fk"
+  FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+ALTER TABLE "identities" ADD CONSTRAINT "identities_profile_id_fk"
+  FOREIGN KEY ("profile_id") REFERENCES "public"."profiles"("id") ON DELETE cascade;
+
+CREATE INDEX "profiles_email_idx" ON "profiles" ("email");
+CREATE UNIQUE INDEX "organization_members_unique" ON "organization_members" ("organization_id","profile_id");
+CREATE INDEX "organization_members_profile_idx" ON "organization_members" ("profile_id");
+CREATE INDEX "organization_members_org_idx" ON "organization_members" ("organization_id");
+CREATE INDEX "member_properties_property_idx" ON "member_properties" ("property_id");
+CREATE INDEX "invitations_org_idx" ON "invitations" ("organization_id");
+CREATE INDEX "invitations_email_idx" ON "invitations" ("email");
+CREATE INDEX "notification_reads_org_idx" ON "notification_reads" ("organization_id");
+CREATE INDEX "sessions_profile_idx" ON "sessions" ("profile_id");
+CREATE INDEX "identities_profile_idx" ON "identities" ("profile_id");
+ALTER TABLE "properties" ADD CONSTRAINT "properties_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+CREATE INDEX "properties_org_idx" ON "properties" ("organization_id");
+ALTER TABLE "clients" ADD CONSTRAINT "clients_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+CREATE INDEX "clients_org_idx" ON "clients" ("organization_id");
+ALTER TABLE "bookings" ADD CONSTRAINT "bookings_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+CREATE INDEX "bookings_org_idx" ON "bookings" ("organization_id");
+ALTER TABLE "invoices" ADD CONSTRAINT "invoices_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+CREATE INDEX "invoices_org_idx" ON "invoices" ("organization_id");
+ALTER TABLE "maintenance_requests" ADD CONSTRAINT "maintenance_requests_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+CREATE INDEX "maintenance_requests_org_idx" ON "maintenance_requests" ("organization_id");
+ALTER TABLE "communications" ADD CONSTRAINT "communications_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+CREATE INDEX "communications_org_idx" ON "communications" ("organization_id");
+ALTER TABLE "occupancy_spells" ADD CONSTRAINT "occupancy_spells_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+CREATE INDEX "occupancy_spells_org_idx" ON "occupancy_spells" ("organization_id");
+ALTER TABLE "client_documents" ADD CONSTRAINT "client_documents_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+CREATE INDEX "client_documents_org_idx" ON "client_documents" ("organization_id");
+ALTER TABLE "property_documents" ADD CONSTRAINT "property_documents_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+CREATE INDEX "property_documents_org_idx" ON "property_documents" ("organization_id");
+ALTER TABLE "property_maintenance_notes" ADD CONSTRAINT "property_maintenance_notes_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+CREATE INDEX "property_maintenance_notes_org_idx" ON "property_maintenance_notes" ("organization_id");
+ALTER TABLE "maintenance_events" ADD CONSTRAINT "maintenance_events_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+CREATE INDEX "maintenance_events_org_idx" ON "maintenance_events" ("organization_id");
+ALTER TABLE "property_amenities" ADD CONSTRAINT "property_amenities_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+CREATE INDEX "property_amenities_org_idx" ON "property_amenities" ("organization_id");
+ALTER TABLE "client_properties" ADD CONSTRAINT "client_properties_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+CREATE INDEX "client_properties_org_idx" ON "client_properties" ("organization_id");
+ALTER TABLE "reminder_settings" ADD CONSTRAINT "reminder_settings_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+    $mig_3_sql$;
+    INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at)
+    VALUES ('087b50bf9df500d0518f6298fc6f8fe7ceadac84f7bc30384fae9cc71112bba1', 1787900000000);
+    RAISE NOTICE 'applied: 0003_multitenancy';
+  END IF;
+END $mig_3$;
+
+-- ---------------------------------------------------------------
+-- migration: 0004_isolation
+-- ---------------------------------------------------------------
+DO $mig_4$
+BEGIN
+  IF EXISTS (SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE hash = 'a9e9ddc39af86088acabbed935ec0bd771bffcdb34bb47938ce904d0e81b822e') THEN
+    RAISE NOTICE 'already applied: 0004_isolation';
+  ELSE
+    EXECUTE $mig_4_sql$
+-- ---------------------------------------------------------------
+-- Isolation, enforced by the database
+--
+-- Until now the API connected as an owning superuser, which bypasses
+-- row-level security entirely: policies would have been decoration. So
+-- this creates a role they apply to, and the API takes it for the length
+-- of each request.
+--
+-- The session says who is asking and which workspace they claim. A policy
+-- believes neither on its own: it looks the pairing up in
+-- organization_members and agrees only if a row says the membership is
+-- real and active. So the worst a mistake in the API can do is name a
+-- membership that does not exist, and see nothing at all.
+-- ---------------------------------------------------------------
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'altier_app') THEN
+    CREATE ROLE altier_app NOLOGIN;
+  END IF;
+END $$;
+
+-- The API connects as the owning role and takes this one for the length
+-- of each request. SET ROLE only works between roles the connecting one
+-- is a member of, and a superuser is a member of everything — so this
+-- matters on a managed Postgres, where the account you are given is the
+-- owner and not a superuser.
+DO $$
+BEGIN
+  IF NOT pg_has_role(current_user, 'altier_app', 'MEMBER') THEN
+    EXECUTE format('GRANT altier_app TO %I', current_user);
+  END IF;
+END $$;
+
+GRANT USAGE ON SCHEMA public TO altier_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO altier_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO altier_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO altier_app;
+
+-- ---------------------------------------------------------------
+-- Who is asking
+-- ---------------------------------------------------------------
+
+-- The profile the request is running as, or null. Null makes every
+-- policy below fail closed, which is the right answer for a query that
+-- forgot to say who it was for.
+CREATE OR REPLACE FUNCTION altier_profile() RETURNS text
+  LANGUAGE sql STABLE AS $$
+  SELECT nullif(current_setting('altier.profile_id', true), '')
+$$;
+
+-- Altier's own support staff, and nothing a customer can grant.
+CREATE OR REPLACE FUNCTION altier_is_super_admin() RETURNS boolean
+  LANGUAGE sql STABLE SECURITY DEFINER AS $$
+  SELECT coalesce((SELECT is_super_admin FROM profiles WHERE id = altier_profile()), false)
+$$;
+
+-- The workspace this request may see: the claimed one, but only if the
+-- claim matches an active membership. The membership table is the
+-- authority; the session variable is only a proposal.
+CREATE OR REPLACE FUNCTION altier_org() RETURNS text
+  LANGUAGE sql STABLE SECURITY DEFINER AS $$
+  SELECT om.organization_id
+  FROM organization_members om
+  WHERE om.profile_id = altier_profile()
+    AND om.organization_id = nullif(current_setting('altier.organization_id', true), '')
+    AND om.status = 'active'
+  LIMIT 1
+$$;
+
+-- The membership itself, for the per-property rules a manager and staff
+-- member are held to.
+CREATE OR REPLACE FUNCTION altier_member() RETURNS text
+  LANGUAGE sql STABLE SECURITY DEFINER AS $$
+  SELECT om.id FROM organization_members om
+  WHERE om.profile_id = altier_profile()
+    AND om.organization_id = altier_org()
+    AND om.status = 'active'
+  LIMIT 1
+$$;
+
+CREATE OR REPLACE FUNCTION altier_role() RETURNS text
+  LANGUAGE sql STABLE SECURITY DEFINER AS $$
+  SELECT om.role::text FROM organization_members om WHERE om.id = altier_member()
+$$;
+
+-- The client a tenant login speaks for; null for staff.
+CREATE OR REPLACE FUNCTION altier_tenant_client() RETURNS text
+  LANGUAGE sql STABLE SECURITY DEFINER AS $$
+  SELECT om.client_id FROM organization_members om
+  WHERE om.id = altier_member() AND om.role = 'tenant'
+$$;
+
+-- Whether this request may reach a given property. Owners and
+-- accountants see the whole workspace; managers and staff see what they
+-- have been assigned; a tenant sees where they hold an agreement.
+CREATE OR REPLACE FUNCTION altier_may_see_property(pid text) RETURNS boolean
+  LANGUAGE sql STABLE SECURITY DEFINER AS $$
+  SELECT CASE
+    WHEN altier_is_super_admin() THEN true
+    WHEN altier_role() IN ('owner', 'accountant') THEN true
+    WHEN altier_role() IN ('manager', 'staff') THEN EXISTS (
+      SELECT 1 FROM member_properties mp
+      WHERE mp.member_id = altier_member() AND mp.property_id = pid)
+    WHEN altier_role() = 'tenant' THEN EXISTS (
+      SELECT 1 FROM bookings b
+      WHERE b.property_id = pid AND b.client_id = altier_tenant_client())
+    ELSE false
+  END
+$$;
+
+-- Creating a login for somebody who does not have one yet.
+--
+-- The policy on profiles lets a request see itself and its colleagues,
+-- and write neither — which is right, and leaves no way to add the first
+-- row for a new colleague. This is that way, and it is deliberately the
+-- narrowest one: it creates an account and refuses if the address already
+-- has one. It cannot touch an existing profile, so it cannot be turned
+-- into a way to take somebody's account over by adding their address to a
+-- workspace they never joined. Attaching an existing person to a
+-- workspace is what an invitation is for, and they have to accept it.
+CREATE OR REPLACE FUNCTION altier_create_profile(
+  p_id text, p_email text, p_name text, p_phone text, p_password_hash text
+) RETURNS text LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM profiles WHERE lower(email) = lower(p_email)) THEN
+    RAISE EXCEPTION 'account exists' USING ERRCODE = 'unique_violation';
+  END IF;
+  INSERT INTO profiles (id, name, email, phone, password_hash, password_set_at)
+  VALUES (p_id, p_name, lower(p_email), coalesce(p_phone, ''), p_password_hash,
+          CASE WHEN p_password_hash IS NULL THEN NULL ELSE now() END);
+  RETURN p_id;
+END $$;
+
+REVOKE ALL ON FUNCTION altier_create_profile(text, text, text, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION altier_create_profile(text, text, text, text, text) TO altier_app;
+
+-- ---------------------------------------------------------------
+-- The policies
+--
+-- One shape, applied everywhere: the row's organization must be the one
+-- this request has an active membership in. Super admins are the single
+-- exception, and that flag lives on a profile no customer can write.
+-- ---------------------------------------------------------------
+ALTER TABLE "properties" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "properties" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "properties_isolation" ON "properties";
+CREATE POLICY "properties_isolation" ON "properties" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND altier_may_see_property(id))) WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND altier_may_see_property(id)));
+ALTER TABLE "clients" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "clients" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "clients_isolation" ON "clients";
+CREATE POLICY "clients_isolation" ON "clients" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND CASE
+    WHEN altier_role() IN ('owner', 'accountant') THEN true
+    WHEN altier_role() = 'tenant' THEN id = altier_tenant_client()
+    ELSE EXISTS (SELECT 1 FROM bookings b
+                 WHERE b.client_id = clients.id AND altier_may_see_property(b.property_id))
+  END)) WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND CASE
+    WHEN altier_role() IN ('owner', 'accountant') THEN true
+    WHEN altier_role() = 'tenant' THEN id = altier_tenant_client()
+    ELSE EXISTS (SELECT 1 FROM bookings b
+                 WHERE b.client_id = clients.id AND altier_may_see_property(b.property_id))
+  END));
+ALTER TABLE "bookings" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "bookings" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "bookings_isolation" ON "bookings";
+CREATE POLICY "bookings_isolation" ON "bookings" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND altier_may_see_property(property_id))) WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND altier_may_see_property(property_id)));
+ALTER TABLE "invoices" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "invoices" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "invoices_isolation" ON "invoices";
+CREATE POLICY "invoices_isolation" ON "invoices" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND altier_may_see_property(property_id))) WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND altier_may_see_property(property_id)));
+ALTER TABLE "maintenance_requests" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "maintenance_requests" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "maintenance_requests_isolation" ON "maintenance_requests";
+CREATE POLICY "maintenance_requests_isolation" ON "maintenance_requests" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND altier_may_see_property(property_id))) WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND altier_may_see_property(property_id)));
+ALTER TABLE "communications" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "communications" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "communications_isolation" ON "communications";
+CREATE POLICY "communications_isolation" ON "communications" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND EXISTS (SELECT 1 FROM clients c WHERE c.id = communications.client_id))) WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND EXISTS (SELECT 1 FROM clients c WHERE c.id = communications.client_id)));
+ALTER TABLE "occupancy_spells" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "occupancy_spells" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "occupancy_spells_isolation" ON "occupancy_spells";
+CREATE POLICY "occupancy_spells_isolation" ON "occupancy_spells" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND altier_may_see_property(property_id))) WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND altier_may_see_property(property_id)));
+ALTER TABLE "client_documents" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "client_documents" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "client_documents_isolation" ON "client_documents";
+CREATE POLICY "client_documents_isolation" ON "client_documents" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND EXISTS (SELECT 1 FROM clients c WHERE c.id = client_documents.client_id))) WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND EXISTS (SELECT 1 FROM clients c WHERE c.id = client_documents.client_id)));
+ALTER TABLE "property_documents" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "property_documents" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "property_documents_isolation" ON "property_documents";
+CREATE POLICY "property_documents_isolation" ON "property_documents" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND altier_may_see_property(property_id))) WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND altier_may_see_property(property_id)));
+ALTER TABLE "property_maintenance_notes" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "property_maintenance_notes" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "property_maintenance_notes_isolation" ON "property_maintenance_notes";
+CREATE POLICY "property_maintenance_notes_isolation" ON "property_maintenance_notes" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND altier_may_see_property(property_id))) WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND altier_may_see_property(property_id)));
+ALTER TABLE "maintenance_events" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "maintenance_events" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "maintenance_events_isolation" ON "maintenance_events";
+CREATE POLICY "maintenance_events_isolation" ON "maintenance_events" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR organization_id = altier_org()) WITH CHECK (altier_is_super_admin() OR organization_id = altier_org());
+ALTER TABLE "property_amenities" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "property_amenities" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "property_amenities_isolation" ON "property_amenities";
+CREATE POLICY "property_amenities_isolation" ON "property_amenities" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND altier_may_see_property(property_id))) WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND altier_may_see_property(property_id)));
+ALTER TABLE "client_properties" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "client_properties" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "client_properties_isolation" ON "client_properties";
+CREATE POLICY "client_properties_isolation" ON "client_properties" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND EXISTS (SELECT 1 FROM clients c WHERE c.id = client_properties.client_id))) WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND EXISTS (SELECT 1 FROM clients c WHERE c.id = client_properties.client_id)));
+ALTER TABLE "reminder_settings" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "reminder_settings" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "reminder_settings_isolation" ON "reminder_settings";
+CREATE POLICY "reminder_settings_isolation" ON "reminder_settings" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR organization_id = altier_org()) WITH CHECK (altier_is_super_admin() OR organization_id = altier_org());
+ALTER TABLE "notification_reads" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "notification_reads" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "notification_reads_isolation" ON "notification_reads";
+CREATE POLICY "notification_reads_isolation" ON "notification_reads" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR organization_id = altier_org()) WITH CHECK (altier_is_super_admin() OR organization_id = altier_org());
+ALTER TABLE "invitations" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "invitations" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "invitations_isolation" ON "invitations";
+CREATE POLICY "invitations_isolation" ON "invitations" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR organization_id = altier_org()) WITH CHECK (altier_is_super_admin() OR organization_id = altier_org());
+ALTER TABLE "invitation_properties" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "invitation_properties" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "invitation_properties_isolation" ON "invitation_properties";
+CREATE POLICY "invitation_properties_isolation" ON "invitation_properties" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR EXISTS (SELECT 1 FROM invitations p WHERE p.id = invitation_properties.invitation_id AND p.organization_id = altier_org())) WITH CHECK (altier_is_super_admin() OR EXISTS (SELECT 1 FROM invitations p WHERE p.id = invitation_properties.invitation_id AND p.organization_id = altier_org()));
+ALTER TABLE "member_properties" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "member_properties" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "member_properties_isolation" ON "member_properties";
+-- Both ends have to be in this workspace. Checking only the membership
+-- would let a workspace assign one of its own staff a property belonging
+-- to somebody else, and an assignment is what altier_may_see_property()
+-- reads — so that would be a way to widen your own access by writing a
+-- row. The property is looked up with a plain SELECT, which the policy on
+-- properties has already narrowed to this workspace.
+CREATE POLICY "member_properties_isolation" ON "member_properties" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (EXISTS (SELECT 1 FROM organization_members p WHERE p.id = member_properties.member_id AND p.organization_id = altier_org()) AND EXISTS (SELECT 1 FROM properties q WHERE q.id = member_properties.property_id AND q.organization_id = altier_org()))) WITH CHECK (altier_is_super_admin() OR (EXISTS (SELECT 1 FROM organization_members p WHERE p.id = member_properties.member_id AND p.organization_id = altier_org()) AND EXISTS (SELECT 1 FROM properties q WHERE q.id = member_properties.property_id AND q.organization_id = altier_org())));
+ALTER TABLE "organization_members" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "organization_members" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "organization_members_isolation" ON "organization_members";
+CREATE POLICY "organization_members_isolation" ON "organization_members" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR organization_id = altier_org()) WITH CHECK (altier_is_super_admin() OR organization_id = altier_org());
+ALTER TABLE "organizations" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "organizations" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "organizations_isolation" ON "organizations";
+CREATE POLICY "organizations_isolation" ON "organizations" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR id = altier_org()) WITH CHECK (altier_is_super_admin() OR id = altier_org());
+ALTER TABLE "subscriptions" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "subscriptions" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "subscriptions_isolation" ON "subscriptions";
+CREATE POLICY "subscriptions_isolation" ON "subscriptions" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR organization_id = altier_org()) WITH CHECK (altier_is_super_admin() OR organization_id = altier_org());
+ALTER TABLE "profiles" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "profiles" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "profiles_isolation" ON "profiles";
+CREATE POLICY "profiles_isolation" ON "profiles" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR id = altier_profile() OR EXISTS (
+    SELECT 1 FROM organization_members om
+    WHERE om.profile_id = profiles.id AND om.organization_id = altier_org())) WITH CHECK (altier_is_super_admin() OR id = altier_profile() OR EXISTS (
+    SELECT 1 FROM organization_members om
+    WHERE om.profile_id = profiles.id AND om.organization_id = altier_org()));
+ALTER TABLE "sessions" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "sessions" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "sessions_isolation" ON "sessions";
+CREATE POLICY "sessions_isolation" ON "sessions" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR profile_id = altier_profile()) WITH CHECK (altier_is_super_admin() OR profile_id = altier_profile());
+ALTER TABLE "identities" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "identities" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "identities_isolation" ON "identities";
+CREATE POLICY "identities_isolation" ON "identities" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR profile_id = altier_profile()) WITH CHECK (altier_is_super_admin() OR profile_id = altier_profile());
+    $mig_4_sql$;
+    INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at)
+    VALUES ('a9e9ddc39af86088acabbed935ec0bd771bffcdb34bb47938ce904d0e81b822e', 1787900100000);
+    RAISE NOTICE 'applied: 0004_isolation';
+  END IF;
+END $mig_4$;
+
+-- ---------------------------------------------------------------
+-- migration: 0005_tenant_scope
+-- ---------------------------------------------------------------
+DO $mig_5$
+BEGIN
+  IF EXISTS (SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE hash = '8639019e53a5a33518ea4a433eadb4765bf739ca9fa939e0b76c5c621141de53') THEN
+    RAISE NOTICE 'already applied: 0005_tenant_scope';
+  ELSE
+    EXECUTE $mig_5_sql$
+-- ---------------------------------------------------------------
+-- A tenant sees their own records, and only their own
+--
+-- 0004 narrowed a tenant login to the properties they hold an agreement
+-- on, which was the wrong unit of measurement. A block of flats is one
+-- property: every renter in it held an agreement on it, so each of them
+-- could read the others' rent charges, the names and revenue of whoever
+-- lived there before, the deeds and inspection reports the landlord keeps
+-- on the building, the staff directory, and the landlord's own
+-- subscription.
+--
+-- The property was never the right boundary for this role. The client
+-- record is. Below, every table a tenant can reach is narrowed to rows
+-- that name them, and the ones that have no such column — a maintenance
+-- job, an inspection report, a previous stay — are closed to them
+-- entirely rather than guessed at.
+-- ---------------------------------------------------------------
+
+-- Reads more clearly at the end of each policy than altier_role() = 'tenant'
+-- repeated fourteen times, and is the thing every one of them turns on.
+CREATE OR REPLACE FUNCTION altier_is_tenant() RETURNS boolean
+  LANGUAGE sql STABLE AS $$ SELECT altier_role() = 'tenant' $$;
+
+REVOKE ALL ON FUNCTION altier_is_tenant() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION altier_is_tenant() TO altier_app;
+
+-- Their own agreements and their own charges — decided by whose name is
+-- on the row, not by which building it is about. Adding the property test
+-- as well would hide a charge from the person who owes it the moment
+-- their tenancy there ended, which is exactly when they most want to see
+-- it. Staff are still held to the properties they were assigned.
+DROP POLICY IF EXISTS "bookings_isolation" ON "bookings";
+CREATE POLICY "bookings_isolation" ON "bookings" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND CASE
+    WHEN altier_is_tenant() THEN client_id = altier_tenant_client()
+    ELSE altier_may_see_property(property_id) END))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND CASE
+    WHEN altier_is_tenant() THEN client_id = altier_tenant_client()
+    ELSE altier_may_see_property(property_id) END));
+
+DROP POLICY IF EXISTS "invoices_isolation" ON "invoices";
+CREATE POLICY "invoices_isolation" ON "invoices" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND CASE
+    WHEN altier_is_tenant() THEN client_id = altier_tenant_client()
+    ELSE altier_may_see_property(property_id) END))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND CASE
+    WHEN altier_is_tenant() THEN client_id = altier_tenant_client()
+    ELSE altier_may_see_property(property_id) END));
+
+-- A maintenance request records who reported it as a name typed into a
+-- box, not as a link to anybody, so there is no honest way to hand a
+-- tenant "their own". Closed until there is one.
+DROP POLICY IF EXISTS "maintenance_requests_isolation" ON "maintenance_requests";
+CREATE POLICY "maintenance_requests_isolation" ON "maintenance_requests" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org()
+    AND altier_may_see_property(property_id) AND NOT altier_is_tenant()))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org()
+    AND altier_may_see_property(property_id) AND NOT altier_is_tenant()));
+
+DROP POLICY IF EXISTS "maintenance_events_isolation" ON "maintenance_events";
+CREATE POLICY "maintenance_events_isolation" ON "maintenance_events" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND NOT altier_is_tenant()))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND NOT altier_is_tenant()));
+
+-- The landlord's papers on the building, and the notes staff keep on it.
+DROP POLICY IF EXISTS "property_documents_isolation" ON "property_documents";
+CREATE POLICY "property_documents_isolation" ON "property_documents" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org()
+    AND altier_may_see_property(property_id) AND NOT altier_is_tenant()))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org()
+    AND altier_may_see_property(property_id) AND NOT altier_is_tenant()));
+
+DROP POLICY IF EXISTS "property_maintenance_notes_isolation" ON "property_maintenance_notes";
+CREATE POLICY "property_maintenance_notes_isolation" ON "property_maintenance_notes" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org()
+    AND altier_may_see_property(property_id) AND NOT altier_is_tenant()))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org()
+    AND altier_may_see_property(property_id) AND NOT altier_is_tenant()));
+
+-- Who lived there before, what they paid, and for how long.
+DROP POLICY IF EXISTS "occupancy_spells_isolation" ON "occupancy_spells";
+CREATE POLICY "occupancy_spells_isolation" ON "occupancy_spells" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org()
+    AND altier_may_see_property(property_id) AND NOT altier_is_tenant()))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org()
+    AND altier_may_see_property(property_id) AND NOT altier_is_tenant()));
+
+-- Who else works here. A tenant sees the one membership that is theirs,
+-- which is also what narrows profiles: that policy asks this table who is
+-- a colleague, and for a tenant the answer is nobody.
+DROP POLICY IF EXISTS "organization_members_isolation" ON "organization_members";
+CREATE POLICY "organization_members_isolation" ON "organization_members" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org()
+    AND (NOT altier_is_tenant() OR profile_id = altier_profile())))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org()
+    AND (NOT altier_is_tenant() OR profile_id = altier_profile())));
+
+-- How the business is run and what it pays.
+DROP POLICY IF EXISTS "subscriptions_isolation" ON "subscriptions";
+CREATE POLICY "subscriptions_isolation" ON "subscriptions" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND NOT altier_is_tenant()))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND NOT altier_is_tenant()));
+
+DROP POLICY IF EXISTS "reminder_settings_isolation" ON "reminder_settings";
+CREATE POLICY "reminder_settings_isolation" ON "reminder_settings" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND NOT altier_is_tenant()))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND NOT altier_is_tenant()));
+
+DROP POLICY IF EXISTS "invitations_isolation" ON "invitations";
+CREATE POLICY "invitations_isolation" ON "invitations" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND NOT altier_is_tenant()))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND NOT altier_is_tenant()));
+
+DROP POLICY IF EXISTS "member_properties_isolation" ON "member_properties";
+CREATE POLICY "member_properties_isolation" ON "member_properties" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (NOT altier_is_tenant()
+    AND EXISTS (SELECT 1 FROM organization_members p WHERE p.id = member_properties.member_id AND p.organization_id = altier_org())
+    AND EXISTS (SELECT 1 FROM properties q WHERE q.id = member_properties.property_id AND q.organization_id = altier_org())))
+  WITH CHECK (altier_is_super_admin() OR (NOT altier_is_tenant()
+    AND EXISTS (SELECT 1 FROM organization_members p WHERE p.id = member_properties.member_id AND p.organization_id = altier_org())
+    AND EXISTS (SELECT 1 FROM properties q WHERE q.id = member_properties.property_id AND q.organization_id = altier_org())));
+    $mig_5_sql$;
+    INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at)
+    VALUES ('8639019e53a5a33518ea4a433eadb4765bf739ca9fa939e0b76c5c621141de53', 1787900200000);
+    RAISE NOTICE 'applied: 0005_tenant_scope';
+  END IF;
+END $mig_5$;
+
 -- Done. Redeploy so the app picks up the code that uses this schema.

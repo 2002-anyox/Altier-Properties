@@ -6,6 +6,7 @@ import { Button } from '../ui'
 import { useStore } from '../../lib/store.js'
 import { diagnose, type Diagnosis } from '../../lib/api.js'
 import SignIn from '../../pages/SignIn.js'
+import Join from '../../pages/Join.js'
 
 /**
  * Shown when there should be an API and there is not.
@@ -79,9 +80,15 @@ export function BootGate({ children }: { children: React.ReactNode }) {
   /* A fault is reported, never papered over with sample data. */
   if (state.hydrated && state.source === 'unreachable') return <Unreachable />
 
-  /* A live API with nobody signed in is the door, not the dashboard. The
-     single-file demo has no server to sign in to, so this never applies. */
-  if (state.hydrated && state.source === 'database' && !state.member) return <SignIn />
+  /* An API with nobody signed in is the door, not the dashboard. */
+  if (state.hydrated && state.source === 'database' && !state.member) {
+    /* Except for somebody arriving on an invitation link, who has no
+       account yet and would find the sign-in form a dead end. Read off
+       the address rather than the router, because this runs above it. */
+    const invitation = /^#\/join\/([A-Za-z0-9_-]+)/.exec(window.location.hash)
+    if (invitation) return <Join token={invitation[1]!} />
+    return <SignIn />
+  }
 
   if (state.hydrated) return <>{children}</>
 

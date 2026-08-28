@@ -6,9 +6,11 @@
  * underlying figures — the same way a real system holds one booking
  * currency and presents another.
  *
- * Rates are indicative demo values, not live FX. A production build
- * would read them from a rates provider and stamp each invoice with the
- * rate used at the time it was raised, so historic figures never drift.
+ * The conversion rates below are fixed in the build, not live FX, and
+ * they are for reading a figure in a familiar unit — never for billing.
+ * A deployment that actually charges in more than one currency needs a
+ * rates provider, and needs to stamp each invoice with the rate used when
+ * it was raised, so historic figures never drift.
  * ------------------------------------------------------------------ */
 
 export const BASE_CURRENCY = 'UGX'

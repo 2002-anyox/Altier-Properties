@@ -1,11 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { TODAY, dayOffset, iso } from './dates.js'
+import { buildNotifications } from './notify.js'
 import {
-  BOOKINGS, CLIENTS, DEFAULT_REMINDERS, INVOICES, MAINTENANCE, PROPERTIES, TEAM, TODAY,
-  buildNotifications, dayOffset, iso,
-} from './data.js'
-import {
-  IS_DEMO_BUILD, api, auth, emptyPortfolio, initialPortfolio, isSignedOut, loadPortfolio,
-  probeSession, type DataSource, type Identity, type SessionMember,
+  api, auth, emptyPortfolio, isSignedOut, loadPortfolio,
+  probeSession, workspace, type DataSource, type Identity, type Membership, type SessionMember,
 } from './api.js'
 import { statusForBooking } from './create.js'
 import { REGIONS, currencyDef, setPresentation } from './money.js'
@@ -38,7 +36,7 @@ interface State {
   hydrated: boolean
   /**
    * Who is signed in, when a server is enforcing it. Null with a live API
-   * means the login screen; null in demo mode means there is nobody to be.
+   * means the login screen.
    */
   member: SessionMember | null
   /** True only before any account has a password — the first-run window. */
@@ -46,6 +44,14 @@ interface State {
   /** The ways the signed-in account can be opened. */
   hasPassword: boolean
   identities: Identity[]
+  /**
+   * Which workspace this session is looking at, and the others this
+   * account could switch to. Usually one; an agency bookkeeper keeping
+   * two landlords' books has two, and they are separate portfolios that
+   * happen to share a login.
+   */
+  workspace: Membership | null
+  workspaces: Membership[]
 }
 
 type Action =
@@ -85,6 +91,7 @@ type Action =
   | { type: 'signed-out' }
   | { type: 'setup-needed'; needed: boolean }
   | { type: 'account'; hasPassword: boolean; identities: Identity[] }
+  | { type: 'workspaces'; workspace: Membership | null; workspaces: Membership[] }
   | { type: 'reset' }
 
 /** Notifications are derived, never stored, so they are rebuilt on every load. */
@@ -111,6 +118,8 @@ const stateFrom = (p: Portfolio, source: DataSource, hydrated: boolean): State =
   setupNeeded: false,
   hasPassword: false,
   identities: [],
+  workspace: null,
+  workspaces: [],
 })
 
 /* Nothing, until the probe says what there is. An app that starts with
@@ -139,8 +148,10 @@ export function currentMember(state: State): TeamMember {
   }
 }
 
-const seed = (): State =>
-  stateFrom(initialPortfolio(), IS_DEMO_BUILD ? 'demo' : 'database', false)
+/* Nothing until the server answers. There is no bundled portfolio to
+   start from, so the first frame is empty and the boot gate holds the app
+   behind it until the real one arrives. */
+const seed = (): State => stateFrom(emptyPortfolio(), 'database', false)
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -379,12 +390,20 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         member: action.member,
-        role: action.member.role,
+        /* Null while somebody is signed in and belongs to no workspace —
+           an account whose membership an owner has just removed. Staff is
+           the narrowest role there is, so the interface offers least
+           until the server says otherwise, and the server is the one
+           refusing anyway. */
+        role: action.member.role ?? 'staff',
         currentUserId: action.member.id,
         setupNeeded: false,
       }
     case 'signed-out':
-      return { ...state, member: null, identities: [], hasPassword: false }
+      return {
+        ...state, member: null, identities: [], hasPassword: false,
+        workspace: null, workspaces: [],
+      }
     case 'setup-needed':
       return { ...state, setupNeeded: action.needed }
     /* How this account can be opened: a password, a linked Google or
@@ -392,6 +411,8 @@ function reducer(state: State, action: Action): State {
        one would leave nobody able to get in. */
     case 'account':
       return { ...state, hasPassword: action.hasPassword, identities: action.identities }
+    case 'workspaces':
+      return { ...state, workspace: action.workspace, workspaces: action.workspaces }
     case 'reset':
       return { ...seed(), hydrated: true, role: state.role, currentUserId: state.currentUserId,
                locale: state.locale, currency: state.currency, language: state.language }
@@ -420,6 +441,7 @@ interface Ctx {
   /** Throws with the server's reason on failure, for the form to show. */
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
+  switchWorkspace: (organizationId: string) => Promise<void>
   /** First run only: creates the owner account on an empty portfolio. */
   createOwner: (owner: { name: string; email: string; password: string; token?: string }) => Promise<void>
   /** Re-reads which ways in the account has, after linking or unlinking. */
@@ -480,7 +502,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (parsed.language) base.language = parsed.language
       }
     } catch {
-      /* storage unavailable — the demo still runs */
+      /* storage unavailable — a preference is not worth failing over */
     }
     return base
   })
@@ -532,8 +554,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   /* Boot in two steps, because the answers are different. First: is there
      a server, and does it know us? Only then load the portfolio — asking
-     for it while signed out would fall back to demo data and quietly show
-     someone sample figures instead of the login screen. */
+     for it while signed out would answer with nothing and look like an
+     empty portfolio rather than a login screen. */
   useEffect(() => {
     let cancelled = false
     probeSession().then((session) => {
@@ -545,6 +567,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           type: 'account',
           hasPassword: !!session.hasPassword,
           identities: session.identities ?? [],
+        })
+        dispatch({
+          type: 'workspaces',
+          workspace: session.workspace ?? null,
+          workspaces: session.workspaces ?? [],
         })
         if (!session.member) {
           // Signed out: nothing to load, and the gate will ask for a password.
@@ -580,6 +607,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       hasPassword: !!session.hasPassword,
       identities: session.identities ?? [],
     })
+    dispatch({
+      type: 'workspaces',
+      workspace: session.workspace ?? null,
+      workspaces: session.workspaces ?? [],
+    })
   }, [])
 
   const signIn = useCallback(async (email: string, password: string) => {
@@ -597,6 +629,26 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'sync', portfolio, source: 'database' })
     await refreshAccount().catch(() => { /* cosmetic; the session is real */ })
   }, [refreshAccount])
+
+  /**
+   * Moving to another workspace this account belongs to.
+   *
+   * A whole reload rather than a re-render: the session now names a
+   * different organization, and every figure the app is holding belongs
+   * to the last one. Merging the two would show one workspace's numbers
+   * under the other's name for as long as it took to notice.
+   */
+  const switchWorkspace = useCallback(async (organizationId: string) => {
+    try {
+      const { member } = await workspace.switchTo(organizationId)
+      dispatch({ type: 'signed-in', member })
+      const { portfolio } = await loadPortfolio()
+      dispatch({ type: 'sync', portfolio, source: 'database' })
+      await refreshAccount().catch(() => { /* cosmetic; the session is real */ })
+    } catch (error) {
+      toast({ title: 'Could not switch', body: (error as Error).message, tone: 'critical' })
+    }
+  }, [refreshAccount, toast])
 
   const signOut = useCallback(async () => {
     await auth.logout().catch(() => { /* the cookie is going either way */ })
@@ -648,7 +700,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const dispatchWithSync = useCallback<React.Dispatch<Action>>((action) => {
     const live = stateRef.current.source === 'database'
     /* With a database behind it, "reset" means re-reading the server rather
-       than restoring the bundled demo, so the local reducer is skipped. */
+       than restoring anything local, so the reducer is skipped. */
     if (!(live && action.type === 'reset')) dispatch(action)
     if (!live) return
     const call = requestFor(action)
@@ -684,13 +736,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setPaletteOpen,
       signIn,
       signOut,
+      switchWorkspace,
       createOwner,
       refreshAccount,
       ssoError,
       clearSsoError,
     }),
     [state, theme, toasts, toast, dismissToast, paletteOpen, dispatchWithSync, signIn, signOut,
-     createOwner, refreshAccount, ssoError, clearSsoError],
+     switchWorkspace, createOwner, refreshAccount, ssoError, clearSsoError],
   )
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

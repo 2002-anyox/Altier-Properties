@@ -105,11 +105,20 @@ jobs:
           DATABASE_URL: postgres://altier:altier@localhost:5432/altier
           VERCEL: '1'
 
-      # The path a real deployment takes: an empty database that still has to
-      # serve a portfolio. It has its own failure mode — the reminder settings
-      # singleton and the team are not optional, and nothing else notices.
+      # The path a real deployment takes: an empty database that still has
+      # to answer for itself before anybody has signed up.
       - name: Empty portfolio bootstrap
-        run: PGLITE_PATH=memory:// npm run db:init | tee /dev/stderr | grep -q 'empty portfolio ready'
+        run: PGLITE_PATH=memory:// npm run db:init | tee /dev/stderr | grep -q 'no workspace yet'
+
+      # One workspace cannot read another's records. Not a test of the
+      # API's WHERE clauses — it connects as the application role, claims
+      # to be various people (including one claiming a workspace they are
+      # not in) and counts what an unfiltered query returns. Everything
+      # else in this file would still pass if the policies were deleted.
+      - name: One workspace cannot see another
+        run: npm run db:seed && npm run check:isolation
+        env:
+          DATABASE_URL: postgres://altier:altier@localhost:5432/altier
 
       # The round trip never starts a server. This boots the real API against
       # the seeded database and exercises a read, a write and two error paths,
@@ -122,3 +131,10 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # The sample portfolio used to live under src/, imported by the store,
+      # so every browser downloaded twenty-four properties belonging to
+      # nobody. It is a fixture outside src/ now, and this greps the built
+      # bundle for the names in it so that cannot come back unnoticed.
+      - name: Nothing invented ships
+        run: npm run check:nodata

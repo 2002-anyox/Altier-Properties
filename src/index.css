@@ -181,6 +181,11 @@
     scrollbar-width: thin;
   }
 
+  .scroll-y {
+    @apply overflow-y-auto;
+    scrollbar-width: thin;
+  }
+
   .link-underline {
     background-image: linear-gradient(currentColor, currentColor);
     background-size: 0% 1px;
