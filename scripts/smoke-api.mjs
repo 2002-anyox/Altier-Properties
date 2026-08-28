@@ -634,6 +634,72 @@ try {
 
   const payAttempt = await get('/invoices/i-01/payment', { method: 'POST' })
   ok(payAttempt.status === 403, `staff cannot record a payment (got ${payAttempt.status})`)
+
+  /* ------------------------- the matrix is real ---------------------- *
+   * It used to be a constant compiled into the app, drawn as ticks
+   * nobody could press. The point of making them pressable is that the
+   * server changes its answer — so that is what this asserts, from both
+   * sides, with the same request either way.
+   * ------------------------------------------------------------------- */
+  const staffCookie = cookie
+  cookie = ownerCookie
+
+  await get('/permissions', put({ role: 'staff', permission: 'view:payments', allowed: true }))
+  const granted = await get('/permissions', put({
+    role: 'staff', permission: 'edit:payments', allowed: true,
+  }))
+  ok(granted.status === 200, `an owner can grant a permission (got ${granted.status})`)
+  const grantedMatrix = (await granted.json()).permissions
+  ok(grantedMatrix?.staff?.includes('edit:payments'),
+     'and the portfolio comes back carrying the change')
+
+  /* The whole point: the same account, the same request, a different
+     answer — and not merely permitted but carried out. */
+  cookie = staffCookie
+  const withCharges = await get('/portfolio').then((r) => r.json())
+  ok(withCharges.invoices.length > 0,
+     `staff now receive the charges they were withheld (${withCharges.invoices.length})`)
+
+  const payable = withCharges.invoices.find((i) => i.paidAmount < i.amount)
+  if (payable) {
+    const paid = await get(`/invoices/${payable.id}/payment`, { method: 'POST' })
+    ok(paid.status === 200, `and the payment staff were refused now goes through (got ${paid.status})`)
+    const settled = (await paid.json()).invoices.find((i) => i.id === payable.id)
+    ok(settled?.status === 'paid', `the charge is settled (${settled?.status})`)
+  }
+
+  cookie = ownerCookie
+  const revoked = await get('/permissions', put({
+    role: 'manager', permission: 'edit:bookings', allowed: false,
+  }))
+  ok(revoked.status === 200, `and take one away (got ${revoked.status})`)
+  ok(!(await revoked.json()).permissions?.manager?.includes('edit:bookings'),
+     'which the matrix reflects')
+
+  const suicide = await get('/permissions', put({
+    role: 'owner', permission: 'manage:team', allowed: false,
+  }))
+  ok(suicide.status === 400,
+     `an owner cannot take team access from owners (got ${suicide.status})`)
+
+  const nonsense = await get('/permissions', put({
+    role: 'staff', permission: 'edit:everything', allowed: true,
+  }))
+  ok(nonsense.status === 400, `nor invent a permission (got ${nonsense.status})`)
+
+  const restored = await get('/permissions', { method: 'DELETE' })
+  ok(restored.status === 200, `resetting puts the defaults back (got ${restored.status})`)
+  const defaults = (await restored.json()).permissions
+  ok(!defaults?.staff?.includes('edit:payments') && defaults?.manager?.includes('edit:bookings'),
+     'both roles reach what they started with')
+
+  cookie = staffCookie
+  const withheldAgain = await get('/portfolio').then((r) => r.json())
+  ok(withheldAgain.invoices.length === 0,
+     `and staff have the charges withheld again (${withheldAgain.invoices.length})`)
+  const refusedAgain = await get('/invoices/i-01/payment', { method: 'POST' })
+  ok(refusedAgain.status === 403,
+     `and the payment is refused again (got ${refusedAgain.status})`)
   const teamAttempt = await get('/team', jsonInit({
     id: 'tm-evil', name: 'Mallory', role: 'owner', title: 'x',
     email: 'mallory@example.com', phone: 'x', since: today,

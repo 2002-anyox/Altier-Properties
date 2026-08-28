@@ -29,7 +29,7 @@ import {
   updateProperty, updateReminders, type Workspace,
 } from './mutations.js'
 import type { Booking, Client, Invoice, Property, TeamMember } from '../src/lib/types.js'
-import { can } from '../src/lib/rbac.js'
+import { ALL_PERMISSIONS, type Permission } from '../src/lib/rbac.js'
 import {
   Forbidden, LastWayIn, NotLinked, OAUTH_COOKIE, MIN_PASSWORD, SESSION_COOKIE, Unauthorized,
   attachViewer, beginOauth, clearFailures, clearOauthCookie, clearSessionCookie,
@@ -41,8 +41,9 @@ import {
 import { scoped } from './scope.js'
 import {
   BadInvitation, NoSubscription, SeatLimit, createWorkspace, defaultOrganization,
-  acceptInvitation, invitationByToken, inviteMember, membershipsFor, openInvitations,
-  revokeInvitation, seatUsage,
+  BadPermission, acceptInvitation, invitationByToken, inviteMember, membershipsFor,
+  openInvitations, permissionMatrix, resetPermissions, revokeInvitation, seatUsage,
+  setRolePermission,
 } from './workspace.js'
 import { SsoError, configuredProviders } from './oidc.js'
 
@@ -134,8 +135,14 @@ export function createApp(db: Db, driver: string) {
     readPortfolio(tx, w.organizationId).then((portfolio) => res.json(visibleTo(portfolio, req)))
 
   const visibleTo = (portfolio: Awaited<ReturnType<typeof readPortfolio>>, req: Authed) => {
-    const role = req.viewer?.membership?.role
-    if (role && !can(role, 'view:payments')) return { ...portfolio, invoices: [] }
+    /* This workspace's matrix, carried on the request — not the defaults
+       compiled into the app. One process answers for every customer, so
+       a module-level can() here would give an owner who granted their
+       staff the books the same answer as one who did not. */
+    const viewer = req.viewer
+    if (viewer?.membership && !viewer.permissions.has('view:payments')) {
+      return { ...portfolio, invoices: [] }
+    }
     return portfolio
   }
 
@@ -300,7 +307,10 @@ export function createApp(db: Db, driver: string) {
           eq(organizationMembers.status, 'active'),
         )))[0] ?? null
       : null
-    return { profile, membership }
+    const permissions = membership
+      ? new Set((await permissionMatrix(db, membership.organizationId))[membership.role] ?? [])
+      : new Set<Permission>()
+    return { profile, membership, permissions }
   }
 
   app.post('/api/auth/login', route(async (req, res) => {
@@ -886,6 +896,35 @@ export function createApp(db: Db, driver: string) {
       })
     }))
 
+  /* --------------------------- permissions --------------------------- *
+   * What each role reaches, which used to be a constant compiled into the
+   * app and drawn in Settings as ticks nobody could press. It is the
+   * customer's question — whether their accountant may edit a tenancy,
+   * whether a manager sees the books — so they answer it.
+   * ------------------------------------------------------------------- */
+
+  app.get('/api/permissions', requirePermission('manage:settings'),
+    inWorkspace(async (tx, w, _req, res) => {
+      res.json({ permissions: await permissionMatrix(tx, w.organizationId), all: ALL_PERMISSIONS })
+    }))
+
+  app.put('/api/permissions', requirePermission('manage:team'),
+    inWorkspace(async (tx, w, req, res) => {
+      const role = String(req.body?.role ?? '') as TeamMember['role']
+      const permission = String(req.body?.permission ?? '') as Permission
+      const allowed = req.body?.allowed === true
+      if (!role || !permission) throw new BadRequest('A role and a permission are required.')
+      await setRolePermission(tx, w.organizationId, role, permission, allowed)
+      return withPortfolio(tx, w, res, req)
+    }))
+
+  app.delete('/api/permissions', requirePermission('manage:team'),
+    inWorkspace(async (tx, w, req, res) => {
+      const role = String(req.query?.role ?? '') as TeamMember['role']
+      await resetPermissions(tx, w.organizationId, role || undefined)
+      return withPortfolio(tx, w, res, req)
+    }))
+
   /* ------------------------ tenants and guests ----------------------- *
    * Portal access is granted from the tenant's own record rather than
    * from the staff list, because it is a different kind of thing: it
@@ -1008,6 +1047,10 @@ export function createApp(db: Db, driver: string) {
     }
     // A refusal the caller can act on: the request was well formed, the
     // state of the portfolio is what stands in the way.
+    if (err instanceof BadPermission) {
+      res.status(400).json({ error: err.message })
+      return
+    }
     if (err instanceof Conflict || err instanceof BadInvitation) {
       res.status(409).json({ error: err.message })
       return

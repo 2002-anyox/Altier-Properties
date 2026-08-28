@@ -894,4 +894,57 @@ UPDATE "bookings" SET departed_on = coalesce(ends_on, starts_on)
   END IF;
 END $mig_6$;
 
+-- ---------------------------------------------------------------
+-- migration: 0007_permissions
+-- ---------------------------------------------------------------
+DO $mig_7$
+BEGIN
+  IF EXISTS (SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE hash = 'b422ae1153da2056f9ab7b1a8fb3f4afef1720a14872230389a999cb7a7d9f1f') THEN
+    RAISE NOTICE 'already applied: 0007_permissions';
+  ELSE
+    EXECUTE $mig_7_sql$
+-- ---------------------------------------------------------------
+-- What each role reaches, per workspace
+--
+-- The matrix was a constant compiled into the app, and Settings drew it
+-- as ticks nobody could press. Every customer got the same answer to a
+-- question that is theirs: whether their accountant may edit a tenancy,
+-- whether their managers may see the books.
+--
+-- A row here is a deliberate departure from the built-in default. No
+-- rows means the defaults stand, which is what every workspace starts
+-- with and most will keep — so this table is empty until somebody
+-- actually changes something, and reading it is cheap.
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS "role_permissions" (
+	"organization_id" text NOT NULL,
+	"role" "role" NOT NULL,
+	"permission" text NOT NULL,
+	"allowed" boolean NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "role_permissions_pk" PRIMARY KEY("organization_id","role","permission")
+);
+
+ALTER TABLE "role_permissions" ADD CONSTRAINT "role_permissions_organization_id_fk"
+  FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON "role_permissions" TO altier_app;
+
+ALTER TABLE "role_permissions" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "role_permissions" FORCE ROW LEVEL SECURITY;
+
+-- Everybody in the workspace may read it — the interface has to know what
+-- to draw, and a role learning what it may do is not a disclosure. Only
+-- an owner writes it, which is enforced in the API and again here.
+DROP POLICY IF EXISTS "role_permissions_isolation" ON "role_permissions";
+CREATE POLICY "role_permissions_isolation" ON "role_permissions" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND NOT altier_is_tenant()))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND altier_role() = 'owner'));
+    $mig_7_sql$;
+    INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at)
+    VALUES ('b422ae1153da2056f9ab7b1a8fb3f4afef1720a14872230389a999cb7a7d9f1f', 1787900400000);
+    RAISE NOTICE 'applied: 0007_permissions';
+  END IF;
+END $mig_7$;
+
 -- Done. Redeploy so the app picks up the code that uses this schema.

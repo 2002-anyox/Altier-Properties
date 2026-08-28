@@ -313,6 +313,17 @@ export interface PortalLogin {
   since: string
 }
 
+export const permissions = {
+  /** Changing one cell. Answers with the refreshed portfolio, matrix and all. */
+  set: (role: Role, permission: string, allowed: boolean) =>
+    request('/permissions', {
+      method: 'PUT', body: JSON.stringify({ role, permission, allowed }),
+    }),
+  /** Back to the product's defaults, for one role or for all of them. */
+  reset: (role?: Role) =>
+    request(`/permissions${role ? `?role=${encodeURIComponent(role)}` : ''}`, { method: 'DELETE' }),
+}
+
 export const workspace = {
   read: () => send('/workspace') as Promise<WorkspaceView>,
   invite: (input: { email: string; role: Role; title?: string; propertyIds?: string[] }) =>

@@ -1,3 +1,7 @@
+/* Type-only, so it is erased at compile time — rbac.ts imports Role
+   back from here, and a cycle of types is not a cycle at runtime. */
+import type { Permission } from './rbac.js'
+
 /* ============================================================
    Altier Properties — domain model
    ============================================================ */
@@ -318,4 +322,11 @@ export interface Portfolio {
   maintenance: MaintenanceRequest[]
   team: TeamMember[]
   reminders: ReminderSettings
+  /**
+   * What each role reaches in this workspace — the product's defaults
+   * with whatever the workspace has changed laid over them. Carried here
+   * because every screen that gates on a permission already holds the
+   * portfolio, and a second fetch would be a second thing to go stale.
+   */
+  permissions?: Partial<Record<Role, Permission[]>>
 }

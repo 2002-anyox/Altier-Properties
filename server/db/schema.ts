@@ -588,6 +588,26 @@ export const occupancySpells = pgTable('occupancy_spells', {
   revenue: money('revenue').notNull(),
 }, (t) => [index('occupancy_property_idx').on(t.propertyId)])
 
+/**
+ * What each role reaches in one workspace.
+ *
+ * A row is a deliberate departure from the built-in default in
+ * src/lib/rbac.ts, never a copy of it. No rows means the defaults stand,
+ * which is what a new workspace has and what most will keep — so this
+ * table is empty until somebody changes something, and there is exactly
+ * one place a default is written down.
+ */
+export const rolePermissions = pgTable('role_permissions', {
+  organizationId: text('organization_id').notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  role: roleEnum('role').notNull(),
+  permission: text('permission').notNull(),
+  allowed: boolean('allowed').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.organizationId, t.role, t.permission] }),
+])
+
 /* ----------------------------- settings ---------------------------- */
 /** Reminder thresholds are org-wide configuration, held as a single row. */
 /**

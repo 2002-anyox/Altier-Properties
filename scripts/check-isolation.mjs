@@ -237,6 +237,7 @@ if (tenant) {
   const deeper = await asTables(tenant.p, tenant.o, [
     'maintenance_requests', 'property_documents', 'occupancy_spells',
     'property_maintenance_notes', 'organization_members', 'profiles',
+    'role_permissions',
   ])
   check('nor the jobs, deeds and inspections on the building',
     deeper.maintenance_requests === 0 && deeper.property_documents === 0
@@ -247,6 +248,8 @@ if (tenant) {
   check('nor the staff directory',
     deeper.organization_members === 1 && deeper.profiles === 1,
     `${deeper.organization_members} memberships, ${deeper.profiles} accounts`)
+  check('nor how the workspace has set its roles up',
+    deeper.role_permissions === 0, `${deeper.role_permissions} rows`)
 }
 
 /* Writes, not just reads. An assignment is what decides which properties

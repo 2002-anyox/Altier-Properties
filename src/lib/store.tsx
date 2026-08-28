@@ -3,9 +3,11 @@ import { TODAY, dayOffset, iso } from './dates.js'
 import { buildNotifications } from './notify.js'
 import {
   api, auth, emptyPortfolio, isSignedOut, loadPortfolio,
-  probeSession, workspace, type DataSource, type Identity, type Membership, type SessionMember,
+  permissions as permissionsApi, probeSession, workspace,
+  type DataSource, type Identity, type Membership, type SessionMember,
 } from './api.js'
 import { statusForBooking } from './create.js'
+import { DEFAULT_PERMISSIONS, setPermissions, type Permission } from './rbac.js'
 import { REGIONS, currencyDef, setPresentation } from './money.js'
 import { setLanguage, type Language } from './strings.js'
 import { takeSsoError } from './sso.js'
@@ -52,6 +54,8 @@ interface State {
    */
   workspace: Membership | null
   workspaces: Membership[]
+  /** What each role reaches here, as the server last reported it. */
+  permissions: Partial<Record<Role, Permission[]>> | null
 }
 
 type Action =
@@ -74,6 +78,8 @@ type Action =
   | { type: 'end-booking'; booking: Booking }
   | { type: 'check-in'; id: string; on: string }
   | { type: 'check-out'; id: string; on: string }
+  | { type: 'set-permission'; role: Role; permission: Permission; allowed: boolean }
+  | { type: 'reset-permissions'; role?: Role }
   | { type: 'delete-property'; id: string }
   | { type: 'delete-client'; id: string }
   | { type: 'delete-booking'; id: string }
@@ -100,7 +106,12 @@ type Action =
 const notificationsFor = (p: Portfolio) =>
   buildNotifications(p.properties, p.invoices, p.bookings, p.maintenance, p.clients, p.reminders)
 
-const stateFrom = (p: Portfolio, source: DataSource, hydrated: boolean): State => ({
+const stateFrom = (p: Portfolio, source: DataSource, hydrated: boolean): State => {
+  /* The workspace's own matrix, before anything reads a permission off
+     it. can() is called during the render this state feeds, so applying
+     it any later would draw one frame against the wrong rules. */
+  setPermissions(p.permissions)
+  return {
   properties: p.properties,
   clients: p.clients,
   bookings: p.bookings,
@@ -122,7 +133,9 @@ const stateFrom = (p: Portfolio, source: DataSource, hydrated: boolean): State =
   identities: [],
   workspace: null,
   workspaces: [],
-})
+  permissions: p.permissions ?? null,
+  }
+}
 
 /* Nothing, until the probe says what there is. An app that starts with
    records already in it has to unlearn them, and for one frame shows
@@ -290,6 +303,25 @@ function reducer(state: State, action: Action): State {
             ? { ...p, status: 'available' as const, availableFrom: action.on }
             : p)),
       }
+    /* Applied here as well as on the server, so a tick moves under the
+       press rather than after the round trip. The server's answer
+       replaces this a moment later either way. */
+    case 'set-permission': {
+      const current = state.permissions ?? {}
+      const list = new Set(current[action.role] ?? DEFAULT_PERMISSIONS[action.role] ?? [])
+      if (action.allowed) list.add(action.permission)
+      else list.delete(action.permission)
+      const next = { ...current, [action.role]: [...list] }
+      setPermissions(next)
+      return { ...state, permissions: next }
+    }
+    case 'reset-permissions': {
+      const next = action.role
+        ? { ...(state.permissions ?? {}), [action.role]: [...(DEFAULT_PERMISSIONS[action.role] ?? [])] }
+        : null
+      setPermissions(next)
+      return { ...state, permissions: next }
+    }
     /* Removing a property takes its whole record with it — the database
        cascades, and the screen has to agree or it will look like the
        charges survived. */
@@ -707,6 +739,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       case 'end-booking': return () => api.updateBooking(action.booking)
       case 'check-in': return () => api.checkIn(action.id, action.on)
       case 'check-out': return () => api.checkOut(action.id, action.on)
+      case 'set-permission':
+        return () => permissionsApi.set(action.role, action.permission, action.allowed)
+      case 'reset-permissions': return () => permissionsApi.reset(action.role)
       case 'delete-property': return () => api.deleteProperty(action.id)
       case 'delete-client': return () => api.deleteClient(action.id)
       case 'delete-booking': return () => api.deleteBooking(action.id)

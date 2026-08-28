@@ -18,6 +18,9 @@ import { and, eq, inArray, sql } from 'drizzle-orm'
 import { DEFAULT_REMINDERS } from '../src/lib/defaults.js'
 import type { Db } from './db/client.js'
 import * as t from './db/schema.js'
+import {
+  ALL_PERMISSIONS, DEFAULT_PERMISSIONS, isLocked, type Permission,
+} from '../src/lib/rbac.js'
 import type { Role } from '../src/lib/types.js'
 
 /** What each plan comes with. Null seats means unlimited, not a big number. */
@@ -184,6 +187,99 @@ export async function defaultOrganization(db: Db, profileId: string): Promise<st
   if (!rows.length) return null
   return (rows.find((r) => r.role === 'owner') ?? rows[0]!).organizationId
 }
+
+/* -------------------------- permissions ---------------------------- *
+ * What each role reaches in one workspace. The defaults in
+ * src/lib/rbac.ts are the product's opinion; a stored row is a customer
+ * disagreeing with it, and the absence of rows is the ordinary case.
+ * ------------------------------------------------------------------- */
+
+/**
+ * The effective matrix for one workspace: the defaults, with whatever
+ * that workspace has changed laid over them.
+ *
+ * Read per request rather than held in module state, because one server
+ * process answers for every customer and a cached matrix would be the
+ * wrong one for whoever asked next.
+ */
+export async function permissionMatrix(
+  db: Db, organizationId: string,
+): Promise<Record<Role, Permission[]>> {
+  const rows = await db.select().from(t.rolePermissions)
+    .where(eq(t.rolePermissions.organizationId, organizationId))
+
+  const out = Object.fromEntries(
+    Object.entries(DEFAULT_PERMISSIONS).map(([role, list]) => [role, new Set(list)]),
+  ) as Record<Role, Set<Permission>>
+
+  for (const row of rows) {
+    const role = row.role as Role
+    const permission = row.permission as Permission
+    if (!out[role]) continue
+    if (row.allowed) out[role].add(permission)
+    else out[role].delete(permission)
+  }
+
+  return Object.fromEntries(
+    Object.entries(out).map(([role, set]) => [role, [...set]]),
+  ) as Record<Role, Permission[]>
+}
+
+/**
+ * Changing what a role reaches.
+ *
+ * Only a departure from the default is stored, so setting something back
+ * to its default deletes the row rather than recording agreement. That
+ * keeps the table small and, more usefully, means a change to the
+ * product's defaults reaches every workspace that never disagreed.
+ */
+export async function setRolePermission(
+  db: Db, organizationId: string, role: Role, permission: Permission, allowed: boolean,
+) {
+  if (role === 'tenant') {
+    throw new BadPermission('A tenant portal login is not a role to grant things to.')
+  }
+  if (!ALL_PERMISSIONS.includes(permission)) {
+    throw new BadPermission(`There is no such permission as ${permission}.`)
+  }
+  if (isLocked(role, permission) && !allowed) {
+    throw new BadPermission(
+      'An owner has to keep team and settings access. Taking it away would shut the '
+      + 'only door back to this screen.',
+    )
+  }
+
+  const isDefault = (DEFAULT_PERMISSIONS[role] ?? []).includes(permission) === allowed
+  const where = and(
+    eq(t.rolePermissions.organizationId, organizationId),
+    eq(t.rolePermissions.role, role),
+    eq(t.rolePermissions.permission, permission),
+  )
+
+  if (isDefault) {
+    await db.delete(t.rolePermissions).where(where)
+    return
+  }
+
+  await db.insert(t.rolePermissions)
+    .values({ organizationId, role, permission, allowed })
+    .onConflictDoUpdate({
+      target: [t.rolePermissions.organizationId, t.rolePermissions.role, t.rolePermissions.permission],
+      set: { allowed, updatedAt: new Date() },
+    })
+}
+
+/** Putting one role, or the whole matrix, back to the product's defaults. */
+export async function resetPermissions(db: Db, organizationId: string, role?: Role) {
+  await db.delete(t.rolePermissions).where(role
+    ? and(
+        eq(t.rolePermissions.organizationId, organizationId),
+        eq(t.rolePermissions.role, role),
+      )
+    : eq(t.rolePermissions.organizationId, organizationId))
+}
+
+export class BadPermission extends Error {}
 
 /* --------------------------- invitations --------------------------- */
 

@@ -50,6 +50,13 @@
       "when": 1787900300000,
       "tag": "0006_arrivals",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787900400000,
+      "tag": "0007_permissions",
+      "breakpoints": true
     }
   ]
 }
