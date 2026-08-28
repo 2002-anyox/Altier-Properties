@@ -939,6 +939,131 @@ CREATE POLICY "identities_isolation" ON "identities" FOR ALL TO altier_app
   USING (altier_is_super_admin() OR profile_id = altier_profile()) WITH CHECK (altier_is_super_admin() OR profile_id = altier_profile());
 
 -- ---------------------------------------------------------------
+-- migration: 0005_tenant_scope
+-- ---------------------------------------------------------------
+-- ---------------------------------------------------------------
+-- A tenant sees their own records, and only their own
+--
+-- 0004 narrowed a tenant login to the properties they hold an agreement
+-- on, which was the wrong unit of measurement. A block of flats is one
+-- property: every renter in it held an agreement on it, so each of them
+-- could read the others' rent charges, the names and revenue of whoever
+-- lived there before, the deeds and inspection reports the landlord keeps
+-- on the building, the staff directory, and the landlord's own
+-- subscription.
+--
+-- The property was never the right boundary for this role. The client
+-- record is. Below, every table a tenant can reach is narrowed to rows
+-- that name them, and the ones that have no such column — a maintenance
+-- job, an inspection report, a previous stay — are closed to them
+-- entirely rather than guessed at.
+-- ---------------------------------------------------------------
+
+-- Reads more clearly at the end of each policy than altier_role() = 'tenant'
+-- repeated fourteen times, and is the thing every one of them turns on.
+CREATE OR REPLACE FUNCTION altier_is_tenant() RETURNS boolean
+  LANGUAGE sql STABLE AS $$ SELECT altier_role() = 'tenant' $$;
+
+REVOKE ALL ON FUNCTION altier_is_tenant() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION altier_is_tenant() TO altier_app;
+
+-- Their own agreements and their own charges — decided by whose name is
+-- on the row, not by which building it is about. Adding the property test
+-- as well would hide a charge from the person who owes it the moment
+-- their tenancy there ended, which is exactly when they most want to see
+-- it. Staff are still held to the properties they were assigned.
+DROP POLICY IF EXISTS "bookings_isolation" ON "bookings";
+CREATE POLICY "bookings_isolation" ON "bookings" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND CASE
+    WHEN altier_is_tenant() THEN client_id = altier_tenant_client()
+    ELSE altier_may_see_property(property_id) END))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND CASE
+    WHEN altier_is_tenant() THEN client_id = altier_tenant_client()
+    ELSE altier_may_see_property(property_id) END));
+
+DROP POLICY IF EXISTS "invoices_isolation" ON "invoices";
+CREATE POLICY "invoices_isolation" ON "invoices" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND CASE
+    WHEN altier_is_tenant() THEN client_id = altier_tenant_client()
+    ELSE altier_may_see_property(property_id) END))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND CASE
+    WHEN altier_is_tenant() THEN client_id = altier_tenant_client()
+    ELSE altier_may_see_property(property_id) END));
+
+-- A maintenance request records who reported it as a name typed into a
+-- box, not as a link to anybody, so there is no honest way to hand a
+-- tenant "their own". Closed until there is one.
+DROP POLICY IF EXISTS "maintenance_requests_isolation" ON "maintenance_requests";
+CREATE POLICY "maintenance_requests_isolation" ON "maintenance_requests" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org()
+    AND altier_may_see_property(property_id) AND NOT altier_is_tenant()))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org()
+    AND altier_may_see_property(property_id) AND NOT altier_is_tenant()));
+
+DROP POLICY IF EXISTS "maintenance_events_isolation" ON "maintenance_events";
+CREATE POLICY "maintenance_events_isolation" ON "maintenance_events" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND NOT altier_is_tenant()))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND NOT altier_is_tenant()));
+
+-- The landlord's papers on the building, and the notes staff keep on it.
+DROP POLICY IF EXISTS "property_documents_isolation" ON "property_documents";
+CREATE POLICY "property_documents_isolation" ON "property_documents" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org()
+    AND altier_may_see_property(property_id) AND NOT altier_is_tenant()))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org()
+    AND altier_may_see_property(property_id) AND NOT altier_is_tenant()));
+
+DROP POLICY IF EXISTS "property_maintenance_notes_isolation" ON "property_maintenance_notes";
+CREATE POLICY "property_maintenance_notes_isolation" ON "property_maintenance_notes" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org()
+    AND altier_may_see_property(property_id) AND NOT altier_is_tenant()))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org()
+    AND altier_may_see_property(property_id) AND NOT altier_is_tenant()));
+
+-- Who lived there before, what they paid, and for how long.
+DROP POLICY IF EXISTS "occupancy_spells_isolation" ON "occupancy_spells";
+CREATE POLICY "occupancy_spells_isolation" ON "occupancy_spells" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org()
+    AND altier_may_see_property(property_id) AND NOT altier_is_tenant()))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org()
+    AND altier_may_see_property(property_id) AND NOT altier_is_tenant()));
+
+-- Who else works here. A tenant sees the one membership that is theirs,
+-- which is also what narrows profiles: that policy asks this table who is
+-- a colleague, and for a tenant the answer is nobody.
+DROP POLICY IF EXISTS "organization_members_isolation" ON "organization_members";
+CREATE POLICY "organization_members_isolation" ON "organization_members" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org()
+    AND (NOT altier_is_tenant() OR profile_id = altier_profile())))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org()
+    AND (NOT altier_is_tenant() OR profile_id = altier_profile())));
+
+-- How the business is run and what it pays.
+DROP POLICY IF EXISTS "subscriptions_isolation" ON "subscriptions";
+CREATE POLICY "subscriptions_isolation" ON "subscriptions" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND NOT altier_is_tenant()))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND NOT altier_is_tenant()));
+
+DROP POLICY IF EXISTS "reminder_settings_isolation" ON "reminder_settings";
+CREATE POLICY "reminder_settings_isolation" ON "reminder_settings" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND NOT altier_is_tenant()))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND NOT altier_is_tenant()));
+
+DROP POLICY IF EXISTS "invitations_isolation" ON "invitations";
+CREATE POLICY "invitations_isolation" ON "invitations" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND NOT altier_is_tenant()))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND NOT altier_is_tenant()));
+
+DROP POLICY IF EXISTS "member_properties_isolation" ON "member_properties";
+CREATE POLICY "member_properties_isolation" ON "member_properties" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (NOT altier_is_tenant()
+    AND EXISTS (SELECT 1 FROM organization_members p WHERE p.id = member_properties.member_id AND p.organization_id = altier_org())
+    AND EXISTS (SELECT 1 FROM properties q WHERE q.id = member_properties.property_id AND q.organization_id = altier_org())))
+  WITH CHECK (altier_is_super_admin() OR (NOT altier_is_tenant()
+    AND EXISTS (SELECT 1 FROM organization_members p WHERE p.id = member_properties.member_id AND p.organization_id = altier_org())
+    AND EXISTS (SELECT 1 FROM properties q WHERE q.id = member_properties.property_id AND q.organization_id = altier_org())));
+
+-- ---------------------------------------------------------------
 -- Record the migrations as applied, so `npm run db:migrate`
 -- against this database does nothing rather than failing.
 -- ---------------------------------------------------------------
@@ -953,6 +1078,7 @@ INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('fd0a043
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('7995837e230ff8c1a909c8683ab738da26d778c999fedfc08aed767d9f15f827', 1787810234659);
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('087b50bf9df500d0518f6298fc6f8fe7ceadac84f7bc30384fae9cc71112bba1', 1787900000000);
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('a9e9ddc39af86088acabbed935ec0bd771bffcdb34bb47938ce904d0e81b822e', 1787900100000);
+INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('8639019e53a5a33518ea4a433eadb4765bf739ca9fa939e0b76c5c621141de53', 1787900200000);
 
 -- ---------------------------------------------------------------
 -- Reminder settings. One row, always id 1 — the app reads it on

@@ -63,6 +63,24 @@ async function as(profileId, organizationId) {
   }
 }
 
+/** The same claim as `as`, over whichever tables the caller names. */
+async function asTables(profileId, organizationId, tables) {
+  await client.query('BEGIN')
+  try {
+    await client.query('SET LOCAL ROLE altier_app')
+    await client.query(`SELECT set_config('altier.profile_id', $1, true)`, [profileId])
+    await client.query(`SELECT set_config('altier.organization_id', $1, true)`, [organizationId])
+    const counts = {}
+    for (const t of tables) {
+      const { rows } = await client.query(`SELECT count(*)::int AS n FROM ${t}`)
+      counts[t] = rows[0].n
+    }
+    return counts
+  } finally {
+    await client.query('ROLLBACK')
+  }
+}
+
 const one = async (sql) => (await client.query(sql)).rows[0]
 
 /* ------------------------------- fixture --------------------------- *
@@ -98,6 +116,27 @@ async function fixture() {
       '1 Rival Road', 'Nakasero', 'Kampala', 'Uganda', 40, 40, 3, 2, 180, 4000000,
       'om-rival-owner', 4.5, CURRENT_DATE, 7.5, '', 1)
     ON CONFLICT DO NOTHING`)
+
+  /* A tenant portal login, for the client with the most on file — the
+     one with the most to leak if the policies are wrong. */
+  const renter = await one(`SELECT c.id, c.email, c.name, om.organization_id AS org
+    FROM clients c
+    JOIN bookings b ON b.client_id = c.id
+    JOIN organization_members om ON om.organization_id = c.organization_id
+    WHERE c.organization_id <> 'org-rival' AND c.email <> ''
+    GROUP BY c.id, c.email, c.name, om.organization_id
+    ORDER BY count(*) DESC LIMIT 1`)
+  if (renter) {
+    await client.query(
+      `INSERT INTO profiles (id, name, email) VALUES ('pr-portal-check', $1, $2)
+       ON CONFLICT DO NOTHING`, [renter.name, `portal-check+${renter.email}`])
+    await client.query(
+      `INSERT INTO organization_members
+         (id, organization_id, profile_id, role, title, status, since, client_id)
+       VALUES ('om-portal-check', $1, 'pr-portal-check', 'tenant', 'Tenant portal',
+               'active', CURRENT_DATE, $2)
+       ON CONFLICT DO NOTHING`, [renter.org, renter.id])
+  }
 
   /* Three properties for a staff member of the seeded workspace. */
   const staff = await one(`SELECT om.id FROM organization_members om
@@ -163,6 +202,51 @@ if (staff) {
     seen.invoices < mine.invoices, `${seen.invoices} of ${mine.invoices}`)
   check('and only the clients who hold them',
     seen.clients < mine.clients, `${seen.clients} of ${mine.clients}`)
+}
+
+/* A tenant portal login. The narrowest role there is, and the one whose
+   failure mode is worst: a renter reading the other renters' charges, the
+   names of whoever lived there before them, the landlord's documents and
+   the landlord's bill. "Their own records" has to mean their own. */
+const tenant = await one(`SELECT om.profile_id AS p, om.organization_id AS o, om.client_id AS c
+  FROM organization_members om WHERE om.role = 'tenant' LIMIT 1`)
+if (tenant) {
+  const theirs = await as(tenant.p, tenant.o)
+  const own = async (sql) => Number((await one(sql))?.n ?? 0)
+
+  check('a tenant sees the properties they hold', theirs.properties > 0,
+    `${theirs.properties} properties`)
+  check('and only their own client record', theirs.clients === 1, `${theirs.clients} clients`)
+
+  const ownBookings = await own(
+    `SELECT count(*)::int AS n FROM bookings WHERE client_id = '${tenant.c}'`)
+  check('and only their own agreements', theirs.bookings === ownBookings,
+    `${theirs.bookings} visible, ${ownBookings} are theirs`)
+
+  const ownInvoices = await own(
+    `SELECT count(*)::int AS n FROM invoices WHERE client_id = '${tenant.c}'`)
+  check('and only their own charges', theirs.invoices === ownInvoices,
+    `${theirs.invoices} visible, ${ownInvoices} are theirs`)
+
+  /* Nothing about how the business is run: the landlord's plan, the
+     workspace's settings, whom else they employ. */
+  check('and nothing of the landlord\'s billing',
+    theirs.subscriptions === 0 && theirs.reminder_settings === 0,
+    `${theirs.subscriptions} subscriptions, ${theirs.reminder_settings} settings`)
+
+  const deeper = await asTables(tenant.p, tenant.o, [
+    'maintenance_requests', 'property_documents', 'occupancy_spells',
+    'property_maintenance_notes', 'organization_members', 'profiles',
+  ])
+  check('nor the jobs, deeds and inspections on the building',
+    deeper.maintenance_requests === 0 && deeper.property_documents === 0
+    && deeper.property_maintenance_notes === 0,
+    JSON.stringify(deeper))
+  check('nor who lived there before them',
+    deeper.occupancy_spells === 0, `${deeper.occupancy_spells} previous stays`)
+  check('nor the staff directory',
+    deeper.organization_members === 1 && deeper.profiles === 1,
+    `${deeper.organization_members} memberships, ${deeper.profiles} accounts`)
 }
 
 /* Writes, not just reads. An assignment is what decides which properties

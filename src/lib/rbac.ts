@@ -51,12 +51,16 @@ const MATRIX: Record<Role, Permission[]> = {
     'view:payments', 'edit:payments', 'view:reports', 'view:financials', 'manage:settings',
   ],
   /* A tenant reaches the same endpoints as everybody else and sees almost
-     nothing through them: the database returns only the rows tied to the
-     agreement they hold. The short list here is the second lock, not the
-     first — it keeps a tenant out of the routes that have no per-person
-     answer at all, like the team list and the settings. */
+     nothing through them: the database returns only the rows that name
+     them. The short list here is the second lock, not the first — it
+     keeps a tenant out of the routes that have no per-person answer at
+     all, like the team list and the settings.
+     Maintenance is absent on purpose. A job records who reported it as a
+     name typed into a box rather than a link to anybody, so there is no
+     honest "their own" to hand a tenant, and handing them the building's
+     is handing them their neighbours'. */
   tenant: [
-    'view:dashboard', 'view:bookings', 'view:payments', 'view:maintenance',
+    'view:dashboard', 'view:bookings', 'view:payments',
   ],
 }
 
