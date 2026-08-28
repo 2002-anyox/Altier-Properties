@@ -367,6 +367,103 @@ try {
   const removed = await get(`/team/${member.id}`, { method: 'DELETE' })
   ok(removed.status === 200, `an unencumbered team member is removed (got ${removed.status})`)
 
+  /* ------------------------- seats and invitations ------------------- *
+   * The subscription decides how many people can work here, and this is
+   * the check that the number is counted where the rows are rather than
+   * believed from the browser. The sample workspace is Professional: ten
+   * seats, seven of them already taken by the seeded team.
+   * ------------------------------------------------------------------- */
+  const workspace = await get('/workspace').then((r) => r.json())
+  ok(workspace.seats?.plan === 'professional' && workspace.seats?.limit === 10,
+     `the plan and its seat count come back (${workspace.seats?.planLabel}, ${workspace.seats?.limit})`)
+  const spent = workspace.seats.used
+  ok(spent === portfolio.team.length,
+     `every member of the team holds one (${spent} seats, ${portfolio.team.length} people)`)
+  ok(workspace.seats.remaining === workspace.seats.limit - spent,
+     `and what is left is the difference (${workspace.seats.remaining})`)
+
+  const invitee = `invited-${stamp}@altier.co.ug`
+  const invited = await get('/workspace/invitations', json({
+    email: invitee, role: 'manager', title: 'Lettings',
+  })).then((r) => r.json())
+  ok(!!invited.link && invited.link.includes('/join/'),
+     'inviting somebody hands back a link to pass on')
+  ok(invited.seats.used === spent + 1,
+     `a pending invitation holds a seat (${invited.seats.used} of ${invited.seats.limit})`)
+  ok(invited.invitations.some((i) => i.email === invitee), 'and it is listed as outstanding')
+
+  const twice = await get('/workspace/invitations', json({ email: invitee, role: 'staff' }))
+  ok(twice.status === 409, `inviting the same address twice is refused (got ${twice.status})`)
+
+  /* Fill the plan, then ask for one more. The refusal is a 402 rather
+     than a 403: nothing is wrong, the workspace has simply run out. */
+  const filler = []
+  while (true) {
+    const seats = await get('/workspace').then((r) => r.json())
+    if (seats.seats.remaining === 0) break
+    const email = `filler-${filler.length}-${stamp}@altier.co.ug`
+    const res = await get('/workspace/invitations', json({ email, role: 'staff' }))
+    if (res.status !== 200) { ok(false, `filling a seat answered ${res.status}`); break }
+    filler.push((await res.json()).invitation.id)
+  }
+  const overLimit = await get('/workspace/invitations', json({
+    email: `one-too-many-${stamp}@altier.co.ug`, role: 'staff',
+  }))
+  const refusal = await overLimit.json()
+  ok(overLimit.status === 402, `a full plan refuses the next invitation as 402 (got ${overLimit.status})`)
+  ok(refusal.upgrade === true && /Professional plan covers 10 seats/.test(refusal.error ?? ''),
+     `and says what is full and what the next plan gives (${refusal.error})`)
+  ok(refusal.seats?.used === refusal.seats?.limit, 'with the figures the prompt needs')
+
+  const givenBack = await get(`/workspace/invitations/${filler.pop()}`, { method: 'DELETE' })
+    .then((r) => r.json())
+  ok(givenBack.seats.remaining === 1, 'withdrawing one gives the seat back')
+
+  /* A tenant's portal login is not a paid seat. */
+  const tenantOf = stillThere.clients.find((c) => c.email && c.kind === 'tenant')
+  if (tenantOf) {
+    const before = await get('/workspace').then((r) => r.json())
+    const portal = await get(`/clients/${tenantOf.id}/portal`, json({}))
+    ok(portal.status === 200, `portal access opens for a tenant (got ${portal.status})`)
+    const after = await get('/workspace').then((r) => r.json())
+    ok(after.seats.used === before.seats.used,
+       `and costs no seat (${before.seats.used} before, ${after.seats.used} after)`)
+    ok(after.seats.tenants === before.seats.tenants + 1,
+       `though it is counted as a portal login (${after.seats.tenants})`)
+    const closed = await get(`/clients/${tenantOf.id}/portal`, { method: 'DELETE' })
+    ok(closed.status === 200, `and it can be closed again (got ${closed.status})`)
+  }
+
+  /* Accepting the invitation, in what is effectively another browser:
+     the token is the whole credential, and it works once. */
+  const ownerSession = cookie
+  const joinToken = invited.link.split('/join/')[1]
+  cookie = ''
+  const onOffer = await get(`/auth/invitation/${joinToken}`).then((r) => r.json())
+  ok(onOffer.invitation?.email === invitee && onOffer.invitation?.role === 'manager',
+     'a stranger holding the link is told what it offers, and for whom')
+
+  const joined = await get(`/auth/invitation/${joinToken}`, json({
+    name: 'Invited Manager', password: 'a-perfectly-fine-password',
+  }))
+  ok(joined.status === 200, `accepting it creates the membership and signs them in (got ${joined.status})`)
+  const joinedAs = (await joined.json()).member
+  ok(joinedAs?.role === 'manager', `in the role they were invited to (${joinedAs?.role})`)
+
+  const replay = await get(`/auth/invitation/${joinToken}`, json({
+    name: 'Someone Else', password: 'another-fine-password',
+  }))
+  ok(replay.status === 409, `and the link cannot be used twice (got ${replay.status})`)
+
+  cookie = ownerSession
+  const afterJoining = await get('/workspace').then((r) => r.json())
+  ok(!afterJoining.invitations.some((i) => i.email === invitee),
+     'the accepted invitation is no longer outstanding')
+  ok(afterJoining.seats.used === invited.seats.used + filler.length,
+     `and the seat it held is now the seat they hold (${afterJoining.seats.used})`)
+
+  for (const id of filler) await get(`/workspace/invitations/${id}`, { method: 'DELETE' })
+
   /* ---------------------- the roles are enforced --------------------- *
    * The matrix used to decide what the interface drew. This is the check
    * that it now decides what the server will do, which is the only place
