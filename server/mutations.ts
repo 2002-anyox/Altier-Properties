@@ -146,6 +146,8 @@ export interface NewMaintenance {
   priority: MaintenancePriority
   vendor: string
   dueOn: string
+  /** Who is doing it. Left out, it sits with whoever logged it. */
+  assigneeId?: string
 }
 
 export async function addMaintenance(db: Db, w: Workspace, input: NewMaintenance) {
@@ -165,10 +167,7 @@ export async function addMaintenance(db: Db, w: Workspace, input: NewMaintenance
     status: 'reported',
     vendor: input.vendor,
     trade: 'Building',
-    /* It sits with whoever logged it until they hand it on. The old code
-       named a seeded member here, which in a real workspace is somebody
-       who does not exist. */
-    assigneeId: w.memberId,
+    assigneeId: await assignableTo(db, w, input.assigneeId),
     reportedBy: w.name,
     reportedOn: today(w),
     dueOn: input.dueOn,
@@ -181,6 +180,70 @@ export async function addMaintenance(db: Db, w: Workspace, input: NewMaintenance
     at: today(w), label: 'Request logged', by: w.name,
   })
   return id
+}
+
+/**
+ * Who a job may be handed to.
+ *
+ * A colleague in this workspace, or nobody named — in which case it sits
+ * with whoever logged it, which is at least somebody real. The check is
+ * here rather than in the form because the form is not what stops a
+ * request naming a member of another landlord's staff.
+ */
+async function assignableTo(db: Db, w: Workspace, assigneeId?: string) {
+  if (!assigneeId) return w.memberId
+  const rows = await db.select({ id: t.organizationMembers.id })
+    .from(t.organizationMembers).where(and(
+      eq(t.organizationMembers.id, assigneeId),
+      eq(t.organizationMembers.organizationId, w.organizationId),
+      ne(t.organizationMembers.role, 'tenant'),
+    ))
+  if (!rows.length) throw new NotFound(`team member ${assigneeId} not found`)
+  return assigneeId
+}
+
+/**
+ * Handing a job to somebody else, and saying so on its timeline.
+ *
+ * A reassignment is a thing that happened to the job, so it belongs in
+ * the history rather than only in the current value of a column.
+ */
+export async function reassignMaintenance(
+  db: Db, w: Workspace, id: string, assigneeId: string,
+) {
+  const request = await requireOne(
+    await db.select().from(t.maintenanceRequests).where(and(
+      eq(t.maintenanceRequests.id, id),
+      eq(t.maintenanceRequests.organizationId, w.organizationId),
+    )),
+    `maintenance request ${id}`,
+  )
+  const next = await assignableTo(db, w, assigneeId)
+  if (next === request.assigneeId) return
+
+  const [who] = await db.select({ name: t.profiles.name })
+    .from(t.organizationMembers)
+    .innerJoin(t.profiles, eq(t.profiles.id, t.organizationMembers.profileId))
+    .where(eq(t.organizationMembers.id, next))
+
+  await db.update(t.maintenanceRequests)
+    .set({ assigneeId: next })
+    .where(eq(t.maintenanceRequests.id, id))
+
+  const [{ position }] = await db
+    .select({ position: sql<number>`coalesce(max(${t.maintenanceEvents.position}), -1) + 1` })
+    .from(t.maintenanceEvents)
+    .where(eq(t.maintenanceEvents.requestId, id))
+
+  await db.insert(t.maintenanceEvents).values({
+    id: `${id}-event-${position}`,
+    organizationId: w.organizationId,
+    requestId: id,
+    position: Number(position),
+    at: today(w),
+    label: `Assigned to ${who?.name ?? 'a colleague'}`,
+    by: w.name,
+  })
 }
 
 export async function addNote(db: Db, w: Workspace, clientId: string, text: string) {

@@ -444,6 +444,44 @@ try {
   const removed = await get(`/team/${member.id}`, { method: 'DELETE' })
   ok(removed.status === 200, `an unencumbered team member is removed (got ${removed.status})`)
 
+  /* --------------------------- who does the job ---------------------- *
+   * A new job used to be assigned to a seeded identifier that does not
+   * exist in a real workspace. It goes to whoever logged it unless
+   * somebody is named, and it can be handed on afterwards.
+   * ------------------------------------------------------------------- */
+  const logged = await get('/maintenance', json({
+    propertyId: portfolio.properties[0].id,
+    title: `Smoke job ${stamp}`,
+    description: 'Raised by the smoke test.',
+    priority: 'medium',
+    vendor: 'Test Vendor',
+    dueOn: plusDays(today, 7),
+  })).then((r) => r.json())
+  const job = logged.maintenance.find((m) => m.title === `Smoke job ${stamp}`)
+  ok(!!job, 'a maintenance job can be raised')
+  ok(logged.team.some((t) => t.id === job?.assigneeId),
+     `and lands with somebody who exists (${job?.assigneeId})`)
+
+  const other = logged.team.find((t) => t.id !== job?.assigneeId && t.role !== 'tenant')
+  if (job && other) {
+    const handed = await get(`/maintenance/${job.id}/assignee`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ assigneeId: other.id }),
+    })
+    ok(handed.status === 200, `and be handed to a colleague (got ${handed.status})`)
+    const after = (await handed.json()).maintenance.find((m) => m.id === job.id)
+    ok(after?.assigneeId === other.id, `who now has it (${after?.assigneeId})`)
+    ok(after?.timeline?.some((e) => e.label.includes(other.name)),
+       'with the handover on its timeline')
+
+    const stranger = await get(`/maintenance/${job.id}/assignee`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ assigneeId: 'om-somebody-elses-staff' }),
+    })
+    ok(stranger.status === 404,
+       `but not to somebody outside this workspace (got ${stranger.status})`)
+  }
+
   /* ------------------------- seats and invitations ------------------- *
    * The subscription decides how many people can work here, and this is
    * the check that the number is counted where the rows are rather than

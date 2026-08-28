@@ -78,6 +78,7 @@ type Action =
   | { type: 'end-booking'; booking: Booking }
   | { type: 'check-in'; id: string; on: string }
   | { type: 'check-out'; id: string; on: string }
+  | { type: 'reassign-maintenance'; id: string; assigneeId: string }
   | { type: 'set-permission'; role: Role; permission: Permission; allowed: boolean }
   | { type: 'reset-permissions'; role?: Role }
   | { type: 'delete-property'; id: string }
@@ -302,6 +303,12 @@ function reducer(state: State, action: Action): State {
           (p.id === state.bookings.find((b) => b.id === action.id)?.propertyId
             ? { ...p, status: 'available' as const, availableFrom: action.on }
             : p)),
+      }
+    case 'reassign-maintenance':
+      return {
+        ...state,
+        maintenance: state.maintenance.map((m) =>
+          (m.id === action.id ? { ...m, assigneeId: action.assigneeId } : m)),
       }
     /* Applied here as well as on the server, so a tick moves under the
        press rather than after the round trip. The server's answer
@@ -731,6 +738,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return () => api.addMaintenance({
           propertyId: r.propertyId, title: r.title, description: r.description,
           priority: r.priority, vendor: r.vendor, dueOn: r.dueOn,
+          assigneeId: r.assigneeId || undefined,
         })
       }
       case 'add-property': return () => api.addProperty(action.property)
@@ -739,6 +747,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       case 'end-booking': return () => api.updateBooking(action.booking)
       case 'check-in': return () => api.checkIn(action.id, action.on)
       case 'check-out': return () => api.checkOut(action.id, action.on)
+      case 'reassign-maintenance':
+        return () => api.reassignMaintenance(action.id, action.assigneeId)
       case 'set-permission':
         return () => permissionsApi.set(action.role, action.permission, action.allowed)
       case 'reset-permissions': return () => permissionsApi.reset(action.role)

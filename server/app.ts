@@ -25,7 +25,8 @@ import {
   Conflict, NotFound, addBooking, addClient, addMaintenance, addMember, addNote,
   addProperty, checkIn, checkOut, deleteBooking, deleteClient, deleteMember, deleteProperty,
   grantPortalAccess, recordPayment, revokePortalAccess, sendReminder,
-  setMaintenanceStatus, setPropertyStatus, updateBooking, updateClient, updateMember,
+  reassignMaintenance, setMaintenanceStatus, setPropertyStatus, updateBooking, updateClient,
+  updateMember,
   updateProperty, updateReminders, type Workspace,
 } from './mutations.js'
 import type { Booking, Client, Invoice, Property, TeamMember } from '../src/lib/types.js'
@@ -675,6 +676,14 @@ export function createApp(db: Db, driver: string) {
   app.patch('/api/maintenance/:id/status', requirePermission('edit:maintenance'),
     inWorkspace(async (tx, w, req, res) => {
       await setMaintenanceStatus(tx, w, param(req, 'id'), req.body?.status)
+      return withPortfolio(tx, w, res, req)
+    }))
+
+  app.patch('/api/maintenance/:id/assignee', requirePermission('edit:maintenance'),
+    inWorkspace(async (tx, w, req, res) => {
+      const assigneeId = String(req.body?.assigneeId ?? '').trim()
+      if (!assigneeId) throw new BadRequest('Say who is taking it on.')
+      await reassignMaintenance(tx, w, param(req, 'id'), assigneeId)
       return withPortfolio(tx, w, res, req)
     }))
 

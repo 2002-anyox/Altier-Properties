@@ -9,8 +9,8 @@ import {
   Button, Card, Chip, Drawer, EmptyState, Field, Input, MAINTENANCE_STATUS_META, MaintenanceChip,
   Modal, PRIORITY_META, PriorityChip, SearchInput, SegmentedControl, Select, Textarea, cx,
 } from '../components/ui'
-import { useStore } from '../lib/store.js'
-import { can } from '../lib/rbac.js'
+import { currentMember, useStore } from '../lib/store.js'
+import { can, roleLabel } from '../lib/rbac.js'
 import { TODAY, dayOffset, daysBetween, iso } from '../lib/dates.js'
 import { mediumDate, money, relativeDay, shortDate } from '../lib/format.js'
 import { itemVariants, listVariants } from '../lib/motion.js'
@@ -26,7 +26,20 @@ export default function Maintenance() {
   const [propertyId, setPropertyId] = useState('all')
   const [open, setOpen] = useState<MaintenanceRequest | null>(null)
   const [creating, setCreating] = useState(false)
-  const [draft, setDraft] = useState({ title: '', propertyId: state.properties[0]?.id ?? '', priority: 'medium' as MaintenancePriority, description: '', vendor: '', dueOn: dayOffset(7) })
+  /* Staff, not tenants — a portal login is not somebody to hand a job to. */
+  const assignable = state.team.filter((t) => t.role !== 'tenant')
+  const [draft, setDraft] = useState({
+    title: '',
+    propertyId: state.properties[0]?.id ?? '',
+    priority: 'medium' as MaintenancePriority,
+    description: '',
+    vendor: '',
+    dueOn: dayOffset(7),
+    /* Whoever is logging it, until they say otherwise. Somebody has to
+       own a job from the moment it exists, and it is fairer that it is
+       the person raising it than a name picked by the code. */
+    assigneeId: state.currentUserId || assignable[0]?.id || '',
+  })
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -58,14 +71,14 @@ export default function Maintenance() {
       status: 'reported',
       vendor: draft.vendor,
       trade: 'Building',
-      assigneeId: 'tm-06',
-      reportedBy: 'You',
+      assigneeId: draft.assigneeId,
+      reportedBy: currentMember(state).name,
       reportedOn: iso(TODAY),
       dueOn: draft.dueOn,
       completedOn: null,
       estimatedCost: 0,
       actualCost: null,
-      timeline: [{ at: iso(TODAY), label: 'Request logged', by: 'You' }],
+      timeline: [{ at: iso(TODAY), label: 'Request logged', by: currentMember(state).name }],
     }
     dispatch({ type: 'add-maintenance', request })
     setCreating(false)
@@ -297,7 +310,30 @@ export default function Maintenance() {
               <Detail label="Property" value={<Link to={`/properties/${open.propertyId}`} className="text-ink hover:text-gold">{openProperty?.name}</Link>} />
               <Detail label="Reported by" value={open.reportedBy} />
               <Detail label="Vendor" value={open.vendor} />
-              <Detail label="Assigned to" value={assignee?.name ?? '—'} />
+              <Detail
+                label="Assigned to"
+                value={can(state.role, 'edit:maintenance') && open.status !== 'completed' ? (
+                  <Select
+                    aria-label={`Who is doing ${open.reference}`}
+                    className="w-full"
+                    value={open.assigneeId ?? ''}
+                    onChange={(e) => {
+                      const next = e.target.value
+                      dispatch({ type: 'reassign-maintenance', id: open.id, assigneeId: next })
+                      setOpen({ ...open, assigneeId: next })
+                      toast({
+                        title: `${open.reference} handed on`,
+                        body: `${state.team.find((t) => t.id === next)?.name ?? 'A colleague'} is on it.`,
+                        tone: 'success',
+                      })
+                    }}
+                  >
+                    {assignable.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name} · {roleLabel(t.role)}</option>
+                    ))}
+                  </Select>
+                ) : (assignee?.name ?? '—')}
+              />
               <Detail label="Reported" value={mediumDate(open.reportedOn)} />
               <Detail label="Target date" value={`${mediumDate(open.dueOn)} · ${relativeDay(open.dueOn)}`} />
               <Detail label="Estimate" value={money(open.estimatedCost)} />
@@ -358,6 +394,21 @@ export default function Maintenance() {
             </Field>
             <Field label="Target date" id="job-due">
               <Input id="job-due" type="date" value={draft.dueOn} onChange={(e) => setDraft({ ...draft, dueOn: e.target.value })} />
+            </Field>
+            <Field
+              label="Assigned to"
+              id="job-assignee"
+              hint="Who is seeing it through. It can be handed on from the board."
+            >
+              <Select
+                id="job-assignee"
+                value={draft.assigneeId}
+                onChange={(e) => setDraft({ ...draft, assigneeId: e.target.value })}
+              >
+                {assignable.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name} · {roleLabel(t.role)}</option>
+                ))}
+              </Select>
             </Field>
           </div>
           <Field label="Detail" id="job-desc" hint="Anything the vendor needs to know before attending.">

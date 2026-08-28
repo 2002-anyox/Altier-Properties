@@ -27,8 +27,15 @@ const nightsBetween = (from: string, to: string) =>
   Math.max(1, Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000))
 
 export function BookingFormModal({
-  open, onClose, propertyId, booking,
-}: { open: boolean; onClose: () => void; propertyId?: string; booking?: Booking }) {
+  open, onClose, propertyId, clientId, booking,
+}: {
+  open: boolean
+  onClose: () => void
+  propertyId?: string
+  /** Opened from a client's record, so it is already about them. */
+  clientId?: string
+  booking?: Booking
+}) {
   const { state, dispatch, toast } = useStore()
   const editing = !!booking
 
@@ -47,9 +54,9 @@ export function BookingFormModal({
     if (booking) { setDraft(bookingDraftFrom(booking)); return }
     const id = propertyId ?? lettable[0]?.id ?? ''
     const property = state.properties.find((p) => p.id === id)
-    const base = emptyBookingDraft(id, state.clients[0]?.id ?? '')
+    const base = emptyBookingDraft(id, clientId ?? state.clients[0]?.id ?? '')
     setDraft(property ? termsFor(property, base) : base)
-  }, [open, propertyId, booking, lettable, state.properties, state.clients])
+  }, [open, propertyId, clientId, booking, lettable, state.properties, state.clients])
 
   const set = <K extends keyof BookingDraft>(key: K, value: BookingDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }))

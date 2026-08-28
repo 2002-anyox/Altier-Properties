@@ -117,8 +117,12 @@ export function ClientFormModal({
         {state.properties.length > 0 && (
           <fieldset>
             <legend className="mb-1 text-[12.5px] font-medium text-ink-secondary">Associated properties</legend>
-            <p className="mb-2.5 text-[12px] text-ink-muted">
-              Optional. Creating an agreement links them automatically.
+            <p className="mb-2.5 text-[12px] leading-relaxed text-ink-muted">
+              Optional, and it does not bill anybody. A link here records that this
+              client is connected to a property — enquired, viewed, is next in line.
+              Charging them for it takes an agreement, which links them anyway and
+              takes its rent from the property. Their record offers to open one for
+              anything linked without.
             </p>
             <div className="grid max-h-44 gap-2.5 overflow-y-auto pr-1 sm:grid-cols-2">
               {state.properties.map((p) => (

@@ -440,6 +440,10 @@ export const api = {
     request(`/properties/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   setMaintenanceStatus: (id: string, status: string) =>
     request(`/maintenance/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  reassignMaintenance: (id: string, assigneeId: string) =>
+    request(`/maintenance/${id}/assignee`, {
+      method: 'PATCH', body: JSON.stringify({ assigneeId }),
+    }),
   addMaintenance: (input: Record<string, unknown>) =>
     request('/maintenance', { method: 'POST', body: JSON.stringify(input) }),
   addNote: (clientId: string, text: string) =>

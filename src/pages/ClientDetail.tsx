@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  BadgeCheck, Building2, Download, FileText, Mail, MessageSquare, NotebookPen, Pencil,
-  Phone, Receipt, Send, Star, Trash2, Users,
+  BadgeCheck, Building2, Download, FilePlus2, FileText, Mail, MessageSquare, NotebookPen,
+  Pencil, Phone, Receipt, Send, Star, Trash2, Users,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader.js'
 import {
@@ -12,6 +12,7 @@ import {
 } from '../components/ui'
 import { useStore } from '../lib/store.js'
 import { ClientFormModal } from '../components/forms/ClientFormModal.js'
+import { BookingFormModal } from '../components/forms/BookingFormModal.js'
 import { ConfirmDelete } from '../components/forms/ConfirmDelete.js'
 import { can } from '../lib/rbac.js'
 import { mediumDate, money, relativeDay, shortDate } from '../lib/format.js'
@@ -27,6 +28,8 @@ export default function ClientDetail() {
   const [note, setNote] = useState('')
   const [editing, setEditing] = useState(false)
   const [removing, setRemoving] = useState(false)
+  /* Which property an agreement is being opened on, from the list below. */
+  const [letting, setLetting] = useState<string | null>(null)
 
   const client = state.clients.find((c) => c.id === id)
   const bookings = useMemo(
@@ -47,6 +50,9 @@ export default function ClientDetail() {
   }
 
   const properties = client.propertyIds.map((pid) => state.properties.find((p) => p.id === pid)).filter(Boolean)
+  /* Linked, but with no agreement behind them — so nothing is being
+     charged for them, whatever the asking price beside them says. */
+  const unbilled = properties.filter((p) => !bookings.some((b) => b.propertyId === p!.id))
   const paid = invoices.filter((i) => i.status === 'paid').reduce((a, i) => a + i.paidAmount, 0)
   const outstanding = invoices.reduce((a, i) => a + (i.amount - i.paidAmount), 0)
   const onTime = invoices.filter((i) => i.status === 'paid').length
@@ -140,22 +146,68 @@ export default function ClientDetail() {
         {tab === 'overview' && (
           <div className="grid gap-4 lg:grid-cols-3">
             <Card className="lg:col-span-2">
-              <CardHeader title="Associated properties" subtitle={`${properties.length} properties linked to this client`} />
+              <CardHeader
+                title="Associated properties"
+                subtitle={unbilled.length
+                  ? `${properties.length} linked · ${unbilled.length} with no agreement, so nothing is being charged for ${unbilled.length === 1 ? 'it' : 'them'}`
+                  : `${properties.length} linked, each with an agreement behind it`}
+              />
               {properties.length === 0 ? (
-                <EmptyState icon={<Building2 size={20} />} title="No properties linked" body="This client has no active or historic agreement against a property yet." />
+                <EmptyState
+                  icon={<Building2 size={20} />}
+                  title="No properties linked"
+                  body="Opening an agreement links a property to this client and starts the charges. A link can also be made by hand from Edit, which records an interest without billing for it."
+                />
               ) : (
                 <ul className="mt-3 divide-y divide-[rgb(var(--c-border))]">
-                  {properties.map((p) => (
-                    <li key={p!.id}>
-                      <Link to={`/properties/${p!.id}`} className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-surface-inset/60 sm:px-6">
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[13.5px] font-medium text-ink">{p!.name}</span>
-                          <span className="block truncate text-[12px] text-ink-muted">{p!.address.district} · {money(p!.price)}{p!.mode === 'short_stay' ? '/night' : '/month'}</span>
-                        </span>
+                  {properties.map((p) => {
+                    /* An agreement is what turns a link into money. Without
+                       one this is a note that these two are connected —
+                       worth recording, and worth being plain that it is
+                       not a tenancy, since the rent is right there beside
+                       it and reads like a bill. */
+                    const live = bookings.find((b) => b.propertyId === p!.id
+                      && b.status !== 'completed' && b.status !== 'cancelled')
+                    const past = bookings.find((b) => b.propertyId === p!.id)
+                    return (
+                      <li key={p!.id} className="flex flex-wrap items-center gap-3 px-5 py-3.5 sm:px-6">
+                        <Link to={`/properties/${p!.id}`} className="min-w-0 flex-1">
+                          <span className="block truncate text-[13.5px] font-medium text-ink hover:text-gold">{p!.name}</span>
+                          <span className="block truncate text-[12px] text-ink-muted">
+                            {p!.address.district} · {money(p!.price)}{p!.mode === 'short_stay' ? '/night' : '/month'} asking
+                          </span>
+                        </Link>
+
+                        {live ? (
+                          <span className="text-right">
+                            <span className="tnum block text-[12.5px] font-medium text-ink">
+                              {money(live.rate)}{live.mode === 'short_stay' ? '/night' : '/month'}
+                            </span>
+                            <span className="block text-[11.5px] text-ink-muted">
+                              {live.reference} · {live.arrivedOn ? 'checked in' : 'not yet arrived'}
+                            </span>
+                          </span>
+                        ) : past ? (
+                          <Chip className="bg-surface-inset text-ink-muted">Past agreement</Chip>
+                        ) : (
+                          <>
+                            <Chip className="bg-surface-inset text-ink-muted">Not charged</Chip>
+                            {can(state.role, 'edit:bookings') && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                icon={<FilePlus2 size={13} />}
+                                onClick={() => setLetting(p!.id)}
+                              >
+                                Open agreement
+                              </Button>
+                            )}
+                          </>
+                        )}
                         <StatusChip status={p!.status} />
-                      </Link>
-                    </li>
-                  ))}
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
             </Card>
@@ -314,6 +366,15 @@ export default function ClientDetail() {
         )}
       </motion.div>
       <ClientFormModal open={editing} onClose={() => setEditing(false)} client={client} />
+
+      {/* Opened from a property in the list, so it already knows which
+          unit and which client — and takes its rent from the property. */}
+      <BookingFormModal
+        open={!!letting}
+        onClose={() => setLetting(null)}
+        propertyId={letting ?? undefined}
+        clientId={client.id}
+      />
 
       <ConfirmDelete
         open={removing}
