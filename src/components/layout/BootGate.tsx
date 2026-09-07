@@ -7,6 +7,8 @@ import { useStore } from '../../lib/store.js'
 import { diagnose, type Diagnosis } from '../../lib/api.js'
 import SignIn from '../../pages/SignIn.js'
 import Join from '../../pages/Join.js'
+import Landing from '../../pages/Landing.js'
+import { doorFrom, useHash } from '../../lib/hash.js'
 
 /**
  * Shown when there should be an API and there is not.
@@ -76,18 +78,23 @@ function Unreachable() {
    and this is a single frame; against a database it is a short, calm wait. */
 export function BootGate({ children }: { children: React.ReactNode }) {
   const { state } = useStore()
+  const hash = useHash()
 
   /* A fault is reported, never papered over with sample data. */
   if (state.hydrated && state.source === 'unreachable') return <Unreachable />
 
-  /* An API with nobody signed in is the door, not the dashboard. */
+  /* An API with nobody signed in is the front door, not the dashboard.
+     Which door depends on the address, read here rather than from the
+     router because this is what decides whether a router exists at all. */
   if (state.hydrated && state.source === 'database' && !state.member) {
-    /* Except for somebody arriving on an invitation link, who has no
-       account yet and would find the sign-in form a dead end. Read off
-       the address rather than the router, because this runs above it. */
-    const invitation = /^#\/join\/([A-Za-z0-9_-]+)/.exec(window.location.hash)
-    if (invitation) return <Join token={invitation[1]!} />
-    return <SignIn />
+    const door = doorFrom(hash)
+    /* Somebody arriving on an invitation has no account yet and would
+       find both the landing page and the sign-in form a dead end. */
+    if (typeof door === 'object') return <Join token={door.join} />
+    if (door === 'signin') return <SignIn />
+    /* Everybody else gets the landing page. Pressing "Sign In" there sets
+       the hash, which useHash notices, and this runs again. */
+    return <Landing />
   }
 
   if (state.hydrated) return <>{children}</>

@@ -15,6 +15,7 @@
 
 import { randomBytes, createHash, randomUUID } from 'node:crypto'
 import { and, eq, inArray, sql } from 'drizzle-orm'
+import { PLANS, type Plan } from '../src/lib/plans.js'
 import type { Db } from './db/client.js'
 import * as t from './db/schema.js'
 import {
@@ -25,13 +26,12 @@ import { dayIn } from '../src/lib/dates.js'
 import type { Role } from '../src/lib/types.js'
 
 /** What each plan comes with. Null seats means unlimited, not a big number. */
-export const PLANS = {
-  starter: { label: 'Starter', seats: 3 },
-  professional: { label: 'Professional', seats: 10 },
-  enterprise: { label: 'Enterprise', seats: null },
-} as const satisfies Record<string, { label: string; seats: number | null }>
-
-export type Plan = keyof typeof PLANS
+/* Imported rather than declared here: the landing page sells these
+   numbers and cannot import this module, which pulls in the driver. One
+   definition in src/lib/plans.ts keeps the promise and the enforcement
+   the same figure. Re-exported because everything downstream — the API,
+   the seat checks, the tests — has always read them from here. */
+export { PLANS, type Plan }
 
 /** The roles that do the work, and so take a seat. */
 export const STAFF_ROLES = ['owner', 'manager', 'accountant', 'staff'] as const
