@@ -15,6 +15,11 @@ import { setTimeout as sleep } from 'node:timers/promises'
 
 const PORT = process.env.API_PORT ?? '5199'
 const today = new Date().toISOString().slice(0, 10)
+const plusDays = (from, n) => {
+  const d = new Date(`${from}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
+}
 const plusMonths = (from, n) => {
   const d = new Date(`${from}T00:00:00Z`)
   d.setUTCMonth(d.getUTCMonth() + n)
@@ -237,6 +242,9 @@ try {
   const json = (body) => ({
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
   })
+  const put = (body) => ({
+    method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  })
   const stamp = Date.now().toString(36)
 
   const property = {
@@ -253,6 +261,42 @@ try {
   ok(storedProperty?.amenities?.length === 2,
      `property created with its amenities (${storedProperty?.amenities?.length ?? 'missing'})`)
 
+  /* ---------------------------- the pin ------------------------------ *
+   * map_x and map_y were never coordinates — a hash of the district name
+   * spread over a square. These are the real thing, and the point of
+   * storing them is that they come back unchanged: a pin that drifts is
+   * a plumber at the wrong gate.
+   * ------------------------------------------------------------------- */
+  ok(storedProperty?.address?.lat === null && storedProperty?.address?.lng === null,
+     'a property saved without a pin has none, rather than a guess')
+
+  const pinned = { ...property, address: { ...property.address, lat: 0.335412, lng: 32.590118 } }
+  const withPin = await get(`/properties/${property.id}`, put(pinned)).then((r) => r.json())
+  const located = withPin.properties?.find((p) => p.id === property.id)
+  ok(located?.address?.lat === 0.335412 && located?.address?.lng === 32.590118,
+     `a dropped pin reads back exactly (${located?.address?.lat}, ${located?.address?.lng})`)
+
+  const offEarth = await get(`/properties/${property.id}`, put({
+    ...property, address: { ...property.address, lat: 91, lng: 32 },
+  }))
+  ok(offEarth.status === 400, `a latitude past the pole is refused (got ${offEarth.status})`)
+
+  const halfPin = await get(`/properties/${property.id}`, put({
+    ...property, address: { ...property.address, lat: 0.335, lng: null },
+  }))
+  const afterHalf = await get('/portfolio').then((r) => r.json())
+  ok(halfPin.status === 200
+     && afterHalf.properties.find((p) => p.id === property.id)?.address?.lat === null,
+     'half a pin is stored as no pin at all')
+
+  const notAPlace = await get(`/properties/${property.id}`, put({
+    ...property, address: { ...property.address, lat: 'somewhere', lng: 'over there' },
+  }))
+  ok(notAPlace.status === 400, `words where a coordinate belongs answer 400 (got ${notAPlace.status})`)
+
+  // Put the pin back so the property ends this run as it was found.
+  await get(`/properties/${property.id}`, put(pinned))
+
   const client = {
     id: `c-smoke-${stamp}`, name: 'Smoke Test Tenant', kind: 'tenant',
     email: 'smoke@example.com', phone: '+256 700 000 000', nationality: 'Ugandan',
@@ -261,6 +305,14 @@ try {
   }
   const madeClient = await get('/clients', json(client)).then((r) => r.json())
   ok(!!madeClient.clients?.find((c) => c.id === client.id), 'client created')
+
+  /* Two more, because a client holds one home at a time now: the checks
+     below that need a second and third tenancy need a second and third
+     person to sign them. */
+  const second = { ...client, id: `c-other-${stamp}`, name: 'Smoke Test Second', email: 'second@example.com' }
+  const third = { ...client, id: `c-third-${stamp}`, name: 'Smoke Test Third', email: 'third@example.com' }
+  await get('/clients', json(second))
+  await get('/clients', json(third))
 
   const booking = {
     id: `b-smoke-${stamp}`, reference: `SMOKE-${stamp}`, propertyId: property.id,
@@ -279,6 +331,39 @@ try {
   const storedBooking = madeBooking.bookings?.find((b) => b.id === booking.id)
   ok(storedBooking?.end === null, `open-ended rental kept its null end (${storedBooking?.end})`)
   ok(!!madeBooking.invoices?.find((i) => i.id === charge.id), 'opening charge raised with the agreement')
+
+  /* An agreement sent with no rate and no charges. It used to be stored
+     exactly as written: a unit let at nothing, with nothing billed for
+     it, and no sign on any screen that anything was wrong. The property
+     is what it costs, so the property is what the bill comes from. */
+  const priced = portfolio.properties.find((p) => p.id !== property.id && p.status === 'available')
+  if (priced) {
+    const nights = 4
+    const from = plusDays(today, 30)
+    const to = plusDays(from, nights)
+    const free = {
+      id: `b-free-${stamp}`, reference: `FREE-${stamp}`, propertyId: priced.id,
+      clientId: second.id, mode: priced.mode === 'rental' ? 'long_term' : priced.mode,
+      status: 'upcoming', start: from, end: to,
+      rate: 0, deposit: 0, advanceMonths: 0, paidThrough: null, noticeDays: 0,
+      guests: 2, source: 'direct', checkIn: '15:00', checkOut: '11:00',
+      notes: '', createdAt: today,
+    }
+    const billed = await get('/bookings', json({ booking: free, invoices: [] })).then((r) => r.json())
+    const stored = billed.bookings?.find((b) => b.id === free.id)
+    ok(stored?.rate === priced.price,
+       `an agreement with no rate takes the property's (${stored?.rate} vs ${priced.price})`)
+    ok((stored?.deposit ?? 0) > 0, `and a deposit proportional to it (${stored?.deposit})`)
+
+    const raised = (billed.invoices ?? []).filter((i) => i.bookingId === free.id)
+    ok(raised.length >= 2, `charges are raised rather than none at all (${raised.length})`)
+    const rent = raised.find((i) => i.type !== 'deposit')
+    const expected = free.mode === 'short_stay' ? priced.price * nights : priced.price
+    ok(rent?.amount === expected,
+       `and the amount is the property's price (${rent?.amount} vs ${expected})`)
+
+    await get(`/bookings/${free.id}`, { method: 'DELETE' })
+  }
   ok(madeBooking.properties?.find((p) => p.id === property.id)?.status === 'occupied',
      'the agreement flipped the property to occupied')
 
@@ -287,10 +372,13 @@ try {
   const secondProperty = { ...property, id: `p-rb-${stamp}`, code: `RB-${stamp}`, status: 'available' }
   await get('/properties', json(secondProperty))
   const doomed = await get('/bookings', json({
-    booking: { ...booking, id: `b-rb-${stamp}`, reference: `RB-${stamp}`, propertyId: secondProperty.id },
+    booking: {
+      ...booking, id: `b-rb-${stamp}`, reference: `RB-${stamp}`,
+      propertyId: secondProperty.id, clientId: third.id,
+    },
     invoices: [{
       ...charge, id: `i-rb-${stamp}`, number: `RB-INV-${stamp}`,
-      propertyId: secondProperty.id, bookingId: `b-rb-${stamp}`,
+      clientId: third.id, propertyId: secondProperty.id, bookingId: `b-rb-${stamp}`,
       // earns_to before earns_from — the schema must refuse it.
       earnsFrom: today, earnsTo: '2020-01-01',
     }],
@@ -304,11 +392,93 @@ try {
   const malformed = await get('/properties', json({ id: 'x', name: '' }))
   ok(malformed.status === 400, `a property with no name answers 400 (got ${malformed.status})`)
 
-  /* ------------------------ editing and removal ---------------------- */
-  const put = (body) => ({
-    method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
-  })
+  /* ---------------------- one home at a time ------------------------- *
+   * A client who has not moved out cannot be placed somewhere else. It
+   * is nearly always the wrong name picked off a list, and it would
+   * raise a second set of charges — rent for two homes, from one
+   * mis-click. Refused here, not just greyed out in the form.
+   * ------------------------------------------------------------------- */
+  const spareProperty = { ...property, id: `p-second-${stamp}`, code: `SEC-${stamp}`, status: 'available' }
+  await get('/properties', json(spareProperty))
 
+  const secondHome = {
+    ...booking, id: `b-second-${stamp}`, reference: `SECOND-${stamp}`,
+    propertyId: spareProperty.id, mode: 'long_term', status: 'upcoming',
+    start: plusDays(today, 7), end: plusMonths(plusDays(today, 7), 12),
+  }
+  const twoHomes = await get('/bookings', json({ booking: secondHome, invoices: [] }))
+  ok(twoHomes.status === 409,
+     `a client still in one home is refused a second (got ${twoHomes.status})`)
+  const refusalText = await twoHomes.json().then((b) => b.error ?? '').catch(() => '')
+  ok(refusalText.includes(property.name),
+     `and the refusal names the home they are in (${refusalText.slice(0, 80)})`)
+
+  const afterRefusal = await get('/portfolio').then((r) => r.json())
+  ok(!afterRefusal.bookings.find((b) => b.id === secondHome.id),
+     'the refused agreement stored nothing')
+  ok(afterRefusal.properties.find((p) => p.id === spareProperty.id)?.status === 'available',
+     'and left the other unit free')
+
+  /* The same unit is not a second home — renewing a lease, or a guest
+     extending, is the home they are already in. */
+  const renewal = {
+    ...booking, id: `b-renew-${stamp}`, reference: `RENEW-${stamp}`,
+    mode: 'long_term', status: 'upcoming',
+    start: plusMonths(today, 12), end: plusMonths(today, 24),
+  }
+  const renewed = await get('/bookings', json({ booking: renewal, invoices: [] }))
+  ok(renewed.status === 200, `renewing in the same home is allowed (got ${renewed.status})`)
+  await get(`/bookings/${renewal.id}`, { method: 'DELETE' })
+
+  /* ------------------------- arriving and leaving -------------------- *
+   * The two moments the business turns on, and until now there was no
+   * way to record either — an agreement went from upcoming to running by
+   * the calendar alone, and ending one was the only way to close it.
+   * ------------------------------------------------------------------- */
+  const arrivedOn = plusDays(today, -1)
+  const notYet = await get(`/bookings/${booking.id}/check-out`, json({ on: today }))
+  ok(notYet.status === 409, `you cannot check out somebody who never arrived (got ${notYet.status})`)
+
+  const arrived = await get(`/bookings/${booking.id}/check-in`, json({ on: arrivedOn }))
+  ok(arrived.status === 200, `checking in is accepted (got ${arrived.status})`)
+  const afterArrival = await arrived.json()
+  const running = afterArrival.bookings.find((b) => b.id === booking.id)
+  ok(running?.arrivedOn === arrivedOn,
+     `and the day they actually came is what is stored (${running?.arrivedOn})`)
+  ok(running?.status === 'in_progress', `the agreement is running (${running?.status})`)
+  ok(afterArrival.properties.find((p) => p.id === property.id)?.status === 'occupied',
+     'and the unit is held')
+
+  const alreadyIn = await get(`/bookings/${booking.id}/check-in`, json({ on: today }))
+  ok(alreadyIn.status === 409, `checking in twice is refused (got ${alreadyIn.status})`)
+
+  const backwards = await get(`/bookings/${booking.id}/check-out`, json({ on: plusDays(arrivedOn, -3) }))
+  ok(backwards.status === 409, `leaving before arriving is refused (got ${backwards.status})`)
+
+  const leftOn = today
+  const left = await get(`/bookings/${booking.id}/check-out`, json({ on: leftOn }))
+  ok(left.status === 200, `checking out is accepted (got ${left.status})`)
+  const afterDeparture = await left.json()
+  const departed = afterDeparture.bookings.find((b) => b.id === booking.id)
+  ok(departed?.departedOn === leftOn, `the departure date is stored (${departed?.departedOn})`)
+  ok(departed?.status === 'completed', `the agreement is closed (${departed?.status})`)
+  const freed = afterDeparture.properties.find((p) => p.id === property.id)
+  ok(freed?.status === 'available' && freed?.availableFrom === leftOn,
+     `and the unit is free from the day they went (${freed?.status}, ${freed?.availableFrom})`)
+  ok(typeof afterDeparture.settled?.outstanding === 'number',
+     `check-out says what is still owed (${afterDeparture.settled?.outstanding})`)
+
+  /* And now that they have actually moved out, the home that was refused
+     a moment ago is theirs to take. That is the whole rule: not "one
+     home ever", but "one at a time". */
+  const nowAllowed = await get('/bookings', json({ booking: secondHome, invoices: [] }))
+  ok(nowAllowed.status === 200,
+     `once they have moved out, the next home is allowed (got ${nowAllowed.status})`)
+  const placed = await nowAllowed.json()
+  ok(!!placed.bookings?.find((b) => b.id === secondHome.id), 'and the agreement is on file')
+  await get(`/bookings/${secondHome.id}`, { method: 'DELETE' })
+
+  /* ------------------------ editing and removal ---------------------- */
   const renamed = await get(`/clients/${client.id}`, put({ ...client, name: 'Renamed Tenant', status: 'active' }))
     .then((r) => r.json())
   ok(renamed.clients?.find((c) => c.id === client.id)?.name === 'Renamed Tenant', 'client edit persisted')
@@ -367,6 +537,73 @@ try {
 
   const removed = await get(`/team/${member.id}`, { method: 'DELETE' })
   ok(removed.status === 200, `an unencumbered team member is removed (got ${removed.status})`)
+
+  /* --------------------------- who does the job ---------------------- *
+   * A new job used to be assigned to a seeded identifier that does not
+   * exist in a real workspace. It goes to whoever logged it unless
+   * somebody is named, and it can be handed on afterwards.
+   * ------------------------------------------------------------------- */
+  const logged = await get('/maintenance', json({
+    propertyId: portfolio.properties[0].id,
+    title: `Smoke job ${stamp}`,
+    description: 'Raised by the smoke test.',
+    priority: 'medium',
+    vendor: 'Test Vendor',
+    dueOn: plusDays(today, 7),
+    estimatedCost: 450_000,
+  })).then((r) => r.json())
+  const job = logged.maintenance.find((m) => m.title === `Smoke job ${stamp}`)
+  ok(!!job, 'a maintenance job can be raised')
+  ok(logged.team.some((t) => t.id === job?.assigneeId),
+     `and lands with somebody who exists (${job?.assigneeId})`)
+
+  ok(job?.estimatedCost === 450_000,
+     `carrying the estimate it was given (${job?.estimatedCost})`)
+
+  /* Completing used to copy the estimate into the actual cost, so the
+     spend figure was a sum of guesses. It is asked for now, and absent
+     means absent. */
+  const closedBlind = await get(`/maintenance/${job.id}/status`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ status: 'completed' }),
+  }).then((r) => r.json())
+  const blind = closedBlind.maintenance.find((m) => m.id === job.id)
+  ok(blind?.actualCost === null,
+     `closing without a figure leaves it uninvoiced rather than guessing (${blind?.actualCost})`)
+
+  const closedWithCost = await get(`/maintenance/${job.id}/status`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ status: 'completed', actualCost: 512_000 }),
+  }).then((r) => r.json())
+  const invoiced = closedWithCost.maintenance.find((m) => m.id === job.id)
+  ok(invoiced?.actualCost === 512_000, `and the figure given is what is stored (${invoiced?.actualCost})`)
+  ok(invoiced?.timeline?.some((e) => e.label.includes('512,000')),
+     'with the amount on its timeline')
+
+  await get(`/maintenance/${job.id}/status`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ status: 'in_progress' }),
+  })
+
+  const other = logged.team.find((t) => t.id !== job?.assigneeId && t.role !== 'tenant')
+  if (job && other) {
+    const handed = await get(`/maintenance/${job.id}/assignee`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ assigneeId: other.id }),
+    })
+    ok(handed.status === 200, `and be handed to a colleague (got ${handed.status})`)
+    const after = (await handed.json()).maintenance.find((m) => m.id === job.id)
+    ok(after?.assigneeId === other.id, `who now has it (${after?.assigneeId})`)
+    ok(after?.timeline?.some((e) => e.label.includes(other.name)),
+       'with the handover on its timeline')
+
+    const stranger = await get(`/maintenance/${job.id}/assignee`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ assigneeId: 'om-somebody-elses-staff' }),
+    })
+    ok(stranger.status === 404,
+       `but not to somebody outside this workspace (got ${stranger.status})`)
+  }
 
   /* ------------------------- seats and invitations ------------------- *
    * The subscription decides how many people can work here, and this is
@@ -558,6 +795,72 @@ try {
 
   const payAttempt = await get('/invoices/i-01/payment', { method: 'POST' })
   ok(payAttempt.status === 403, `staff cannot record a payment (got ${payAttempt.status})`)
+
+  /* ------------------------- the matrix is real ---------------------- *
+   * It used to be a constant compiled into the app, drawn as ticks
+   * nobody could press. The point of making them pressable is that the
+   * server changes its answer — so that is what this asserts, from both
+   * sides, with the same request either way.
+   * ------------------------------------------------------------------- */
+  const staffCookie = cookie
+  cookie = ownerCookie
+
+  await get('/permissions', put({ role: 'staff', permission: 'view:payments', allowed: true }))
+  const granted = await get('/permissions', put({
+    role: 'staff', permission: 'edit:payments', allowed: true,
+  }))
+  ok(granted.status === 200, `an owner can grant a permission (got ${granted.status})`)
+  const grantedMatrix = (await granted.json()).permissions
+  ok(grantedMatrix?.staff?.includes('edit:payments'),
+     'and the portfolio comes back carrying the change')
+
+  /* The whole point: the same account, the same request, a different
+     answer — and not merely permitted but carried out. */
+  cookie = staffCookie
+  const withCharges = await get('/portfolio').then((r) => r.json())
+  ok(withCharges.invoices.length > 0,
+     `staff now receive the charges they were withheld (${withCharges.invoices.length})`)
+
+  const payable = withCharges.invoices.find((i) => i.paidAmount < i.amount)
+  if (payable) {
+    const paid = await get(`/invoices/${payable.id}/payment`, { method: 'POST' })
+    ok(paid.status === 200, `and the payment staff were refused now goes through (got ${paid.status})`)
+    const settled = (await paid.json()).invoices.find((i) => i.id === payable.id)
+    ok(settled?.status === 'paid', `the charge is settled (${settled?.status})`)
+  }
+
+  cookie = ownerCookie
+  const revoked = await get('/permissions', put({
+    role: 'manager', permission: 'edit:bookings', allowed: false,
+  }))
+  ok(revoked.status === 200, `and take one away (got ${revoked.status})`)
+  ok(!(await revoked.json()).permissions?.manager?.includes('edit:bookings'),
+     'which the matrix reflects')
+
+  const suicide = await get('/permissions', put({
+    role: 'owner', permission: 'manage:team', allowed: false,
+  }))
+  ok(suicide.status === 400,
+     `an owner cannot take team access from owners (got ${suicide.status})`)
+
+  const nonsense = await get('/permissions', put({
+    role: 'staff', permission: 'edit:everything', allowed: true,
+  }))
+  ok(nonsense.status === 400, `nor invent a permission (got ${nonsense.status})`)
+
+  const restored = await get('/permissions', { method: 'DELETE' })
+  ok(restored.status === 200, `resetting puts the defaults back (got ${restored.status})`)
+  const defaults = (await restored.json()).permissions
+  ok(!defaults?.staff?.includes('edit:payments') && defaults?.manager?.includes('edit:bookings'),
+     'both roles reach what they started with')
+
+  cookie = staffCookie
+  const withheldAgain = await get('/portfolio').then((r) => r.json())
+  ok(withheldAgain.invoices.length === 0,
+     `and staff have the charges withheld again (${withheldAgain.invoices.length})`)
+  const refusedAgain = await get('/invoices/i-01/payment', { method: 'POST' })
+  ok(refusedAgain.status === 403,
+     `and the payment is refused again (got ${refusedAgain.status})`)
   const teamAttempt = await get('/team', jsonInit({
     id: 'tm-evil', name: 'Mallory', role: 'owner', title: 'x',
     email: 'mallory@example.com', phone: 'x', since: today,

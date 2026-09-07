@@ -12,7 +12,9 @@ import { ReminderModal } from './Notifications.js'
 import { SsoButtons, useSsoProviders } from '../components/auth/SsoButtons.js'
 import { currentMember, useStore } from '../lib/store.js'
 import { auth } from '../lib/api.js'
-import { ROLES, can, roleLabel, type Permission } from '../lib/rbac.js'
+import {
+  DEFAULT_PERMISSIONS, STAFF_ROLE_OPTIONS, can, isLocked, roleLabel, type Permission,
+} from '../lib/rbac.js'
 import { mediumDate, money, num } from '../lib/format.js'
 import { BASE_CURRENCY, CURRENCIES, REGIONS, currencyDef, regionDef } from '../lib/money.js'
 import { LANGUAGES, type Language } from '../lib/strings.js'
@@ -45,6 +47,17 @@ export default function Settings() {
   const [tuning, setTuning] = useState(false)
   const me = currentMember(state)
   const live = state.source === 'database'
+  /* Only an owner rewrites the matrix; everybody else reads it. The
+     server refuses the write either way — this decides what is drawn. */
+  const editable = can(state.role, 'manage:team')
+  /* Whether this workspace has departed from the product's defaults, which
+     is the only time offering to put them back means anything. */
+  const changed = !!state.permissions && STAFF_ROLE_OPTIONS.some((r) => {
+    const mine = state.permissions?.[r.id as Role]
+    if (!mine) return false
+    const base = DEFAULT_PERMISSIONS[r.id as Role] ?? []
+    return mine.length !== base.length || mine.some((p) => !base.includes(p))
+  })
   const [pw, setPw] = useState({ current: '', next: '' })
   const [pwError, setPwError] = useState<string | null>(null)
   const [pwBusy, setPwBusy] = useState(false)
@@ -382,41 +395,43 @@ export default function Settings() {
             <Card className="card-pad">
               <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink"><ShieldCheck size={16} className="text-gold" /> Role-based access</h3>
               <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-ink-secondary">
-                {state.member
-                  ? 'Your role comes from your account. The server enforces the same matrix it draws below, so a permission you do not hold is refused there and not simply hidden here.'
-                  : 'Access is enforced across navigation, pages and actions. With no database behind it there is nobody to be signed in as, so you can try each role from the avatar menu.'}
+                Your role comes from your account. The server enforces the same matrix it
+                draws below, so a permission you do not hold is refused there and not
+                simply hidden here — and the database narrows what a query returns on top
+                of that.
               </p>
-              {state.member ? (
-                <p className="mt-4 inline-flex items-center gap-2 rounded-xl border border-line bg-surface-inset/60 px-3.5 py-2.5 text-[13px] text-ink-secondary">
-                  Signed in as <span className="font-medium text-ink">{state.member.name}</span>
-                  <Chip className="bg-gold-soft text-gold-ink">{roleLabel(state.role)}</Chip>
-                </p>
-              ) : (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {ROLES.map((r) => (
-                    <button
-                      key={r.id}
-                      onClick={() => { dispatch({ type: 'set-role', role: r.id }); toast({ title: `Now viewing as ${r.label}`, body: r.blurb }) }}
-                      className={cx(
-                        'rounded-xl border px-3.5 py-2 text-[13px] font-medium transition-colors',
-                        state.role === r.id ? 'border-gold bg-gold-soft text-gold-ink' : 'border-line text-ink-secondary hover:border-line-strong hover:text-ink',
-                      )}
-                    >
-                      {r.label}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <p className="mt-4 inline-flex items-center gap-2 rounded-xl border border-line bg-surface-inset/60 px-3.5 py-2.5 text-[13px] text-ink-secondary">
+                Signed in as <span className="font-medium text-ink">{state.member?.name}</span>
+                <Chip className="bg-gold-soft text-gold-ink">{roleLabel(state.role)}</Chip>
+              </p>
             </Card>
 
             <Card className="overflow-hidden">
-              <CardHeader title="Permission matrix" subtitle="What each role can see and do" />
+              <CardHeader
+                title="Permission matrix"
+                subtitle={editable
+                  ? 'What each role can see and do here. Press a box to change it.'
+                  : 'What each role can see and do here.'}
+                action={editable && changed && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={<RotateCcw size={13} />}
+                    onClick={() => {
+                      dispatch({ type: 'reset-permissions' })
+                      toast({ title: 'Back to the defaults', body: 'Every role reaches what it started with.', tone: 'default' })
+                    }}
+                  >
+                    Reset all
+                  </Button>
+                )}
+              />
               <div className="scroll-x mt-3">
-                <table className="w-full min-w-[640px] text-left text-[13px]">
+                <table className="w-full min-w-[680px] text-left text-[13px]">
                   <thead className="text-ink-muted">
                     <tr className="border-y border-line bg-surface-inset/50">
                       <th scope="col" className="px-5 py-2.5 font-medium sm:px-6">Capability</th>
-                      {ROLES.map((r) => (
+                      {STAFF_ROLE_OPTIONS.map((r) => (
                         <th key={r.id} scope="col" className="px-4 py-2.5 text-center font-medium">{r.label}</th>
                       ))}
                     </tr>
@@ -425,26 +440,29 @@ export default function Settings() {
                     {PERMISSION_ROWS.map((row) => (
                       <tr key={row.permission} className="transition-colors hover:bg-surface-inset/60">
                         <td className="px-5 py-2.5 text-ink-secondary sm:px-6">{row.label}</td>
-                        {ROLES.map((r) => {
-                          const allowed = can(r.id as Role, row.permission)
-                          return (
-                            <td key={r.id} className="px-4 py-2.5 text-center">
-                              {allowed ? (
-                                <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-[rgb(var(--c-status-good)/0.14)] text-[rgb(var(--c-status-good))]">
-                                  <Check size={12} strokeWidth={3} />
-                                  <span className="sr-only">Allowed</span>
-                                </span>
-                              ) : (
-                                <span className="inline-block h-5 w-5 rounded-md bg-surface-inset" aria-label="Not allowed" role="img" />
-                              )}
-                            </td>
-                          )
-                        })}
+                        {STAFF_ROLE_OPTIONS.map((r) => (
+                          <td key={r.id} className="px-4 py-2.5 text-center">
+                            <PermissionBox
+                              role={r.id as Role}
+                              label={r.label}
+                              capability={row.label}
+                              permission={row.permission}
+                              editable={editable}
+                            />
+                          </td>
+                        ))}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+              <p className="border-t border-line px-5 py-3 text-[12px] leading-relaxed text-ink-muted sm:px-6">
+                {editable
+                  ? 'The server holds people to this too, not only the interface — a role that '
+                    + 'loses a permission here is refused it there as well. An owner keeps team and '
+                    + 'settings access, which is the door back to this screen.'
+                  : 'Only an owner can change these.'}
+              </p>
             </Card>
           </div>
         )}
@@ -566,5 +584,75 @@ export default function Settings() {
 
       <ReminderModal open={tuning} onClose={() => setTuning(false)} />
     </>
+  )
+}
+
+
+/**
+ * One cell of the matrix.
+ *
+ * A real control, not a tick: it was drawn as a coloured square for long
+ * enough that people reasonably tried to press it. Locked cells stay
+ * fixed and say why — an owner who could take team access away from the
+ * owner role would shut the only door back to this screen.
+ */
+function PermissionBox({
+  role, label, capability, permission, editable,
+}: {
+  role: Role
+  label: string
+  capability: string
+  permission: Permission
+  editable: boolean
+}) {
+  const { dispatch, toast } = useStore()
+  const allowed = can(role, permission)
+  const locked = isLocked(role, permission)
+
+  const description = `${capability} for ${label}`
+
+  if (!editable || locked) {
+    return (
+      <span
+        role="img"
+        aria-label={`${description}: ${allowed ? 'allowed' : 'not allowed'}${locked ? ', fixed' : ''}`}
+        title={locked ? 'An owner always keeps this — it is the way back to this screen.' : undefined}
+        className={cx(
+          'inline-flex h-5 w-5 items-center justify-center rounded-md',
+          allowed
+            ? 'bg-[rgb(var(--c-status-good)/0.14)] text-[rgb(var(--c-status-good))]'
+            : 'bg-surface-inset',
+          locked && 'ring-1 ring-gold/40',
+        )}
+      >
+        {allowed && <Check size={12} strokeWidth={3} />}
+      </span>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={allowed}
+      aria-label={description}
+      onClick={() => {
+        dispatch({ type: 'set-permission', role, permission, allowed: !allowed })
+        toast({
+          title: allowed ? `${label} loses ${capability.toLowerCase()}` : `${label} gains ${capability.toLowerCase()}`,
+          body: 'Applied here and enforced on the server.',
+          tone: 'default',
+        })
+      }}
+      className={cx(
+        'inline-flex h-5 w-5 items-center justify-center rounded-md transition-colors',
+        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold',
+        allowed
+          ? 'bg-[rgb(var(--c-status-good)/0.14)] text-[rgb(var(--c-status-good))] hover:bg-[rgb(var(--c-status-good)/0.24)]'
+          : 'bg-surface-inset hover:bg-line',
+      )}
+    >
+      {allowed && <Check size={12} strokeWidth={3} />}
+    </button>
   )
 }

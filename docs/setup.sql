@@ -1064,6 +1064,139 @@ CREATE POLICY "member_properties_isolation" ON "member_properties" FOR ALL TO al
     AND EXISTS (SELECT 1 FROM properties q WHERE q.id = member_properties.property_id AND q.organization_id = altier_org())));
 
 -- ---------------------------------------------------------------
+-- migration: 0006_arrivals
+-- ---------------------------------------------------------------
+-- ---------------------------------------------------------------
+-- Arrival and departure
+--
+-- check_in and check_out are times of day — 15:00, 11:00 — agreed when
+-- the agreement is drawn up. They record an expectation, and there was
+-- nothing anywhere recording that it had been met: no way to say a guest
+-- had arrived, and no way to say they had gone.
+--
+-- These two are that record. Null until each happens, and deliberately
+-- separate from starts_on and ends_on, which are what was agreed. A guest
+-- who arrives a day late or leaves a week early does not get the
+-- agreement rewritten around them.
+-- ---------------------------------------------------------------
+ALTER TABLE "bookings" ADD COLUMN IF NOT EXISTS "arrived_on" date;
+ALTER TABLE "bookings" ADD COLUMN IF NOT EXISTS "departed_on" date;
+
+-- A departure cannot precede an arrival, and neither can be recorded
+-- against an agreement that was cancelled.
+ALTER TABLE "bookings" DROP CONSTRAINT IF EXISTS "bookings_departure_after_arrival";
+ALTER TABLE "bookings" ADD CONSTRAINT "bookings_departure_after_arrival"
+  CHECK (departed_on IS NULL OR (arrived_on IS NOT NULL AND departed_on >= arrived_on));
+
+-- Agreements already running were arrived at when they began; ones already
+-- finished were left when they ended. Anything else would show every past
+-- stay as a guest who never turned up.
+UPDATE "bookings" SET arrived_on = starts_on
+  WHERE arrived_on IS NULL AND status IN ('in_progress', 'completed');
+UPDATE "bookings" SET departed_on = coalesce(ends_on, starts_on)
+  WHERE departed_on IS NULL AND status = 'completed'
+    AND coalesce(ends_on, starts_on) >= starts_on;
+
+-- ---------------------------------------------------------------
+-- migration: 0007_permissions
+-- ---------------------------------------------------------------
+-- ---------------------------------------------------------------
+-- What each role reaches, per workspace
+--
+-- The matrix was a constant compiled into the app, and Settings drew it
+-- as ticks nobody could press. Every customer got the same answer to a
+-- question that is theirs: whether their accountant may edit a tenancy,
+-- whether their managers may see the books.
+--
+-- A row here is a deliberate departure from the built-in default. No
+-- rows means the defaults stand, which is what every workspace starts
+-- with and most will keep — so this table is empty until somebody
+-- actually changes something, and reading it is cheap.
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS "role_permissions" (
+	"organization_id" text NOT NULL,
+	"role" "role" NOT NULL,
+	"permission" text NOT NULL,
+	"allowed" boolean NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "role_permissions_pk" PRIMARY KEY("organization_id","role","permission")
+);
+
+ALTER TABLE "role_permissions" ADD CONSTRAINT "role_permissions_organization_id_fk"
+  FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON "role_permissions" TO altier_app;
+
+ALTER TABLE "role_permissions" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "role_permissions" FORCE ROW LEVEL SECURITY;
+
+-- Everybody in the workspace may read it — the interface has to know what
+-- to draw, and a role learning what it may do is not a disclosure. Only
+-- an owner writes it, which is enforced in the API and again here.
+DROP POLICY IF EXISTS "role_permissions_isolation" ON "role_permissions";
+CREATE POLICY "role_permissions_isolation" ON "role_permissions" FOR ALL TO altier_app
+  USING (altier_is_super_admin() OR (organization_id = altier_org() AND NOT altier_is_tenant()))
+  WITH CHECK (altier_is_super_admin() OR (organization_id = altier_org() AND altier_role() = 'owner'));
+
+-- ---------------------------------------------------------------
+-- migration: 0008_timezone
+-- ---------------------------------------------------------------
+-- ---------------------------------------------------------------
+-- Where the workspace is
+--
+-- Dates stamped by the server were UTC. A payment recorded at one in the
+-- morning in Kampala was stored as the previous day, because UTC had not
+-- reached midnight yet — and the screen, which reads the browser's own
+-- calendar, said otherwise. Both were confident and they disagreed.
+--
+-- A calendar day is a fact about a place. This records which place, so
+-- "today" means the same thing on the screen and in the ledger. Uganda is
+-- the default because that is who this is built for; a workspace
+-- elsewhere sets its own.
+-- ---------------------------------------------------------------
+ALTER TABLE "organizations"
+  ADD COLUMN IF NOT EXISTS "timezone" text DEFAULT 'Africa/Kampala' NOT NULL;
+
+-- ---------------------------------------------------------------
+-- migration: 0009_coordinates
+-- ---------------------------------------------------------------
+-- ---------------------------------------------------------------
+-- Where the property actually is
+--
+-- map_x and map_y are not coordinates. They are a hash of the district
+-- name spread over a unit square, which is enough to cluster a schematic
+-- and nothing else: two homes on opposite sides of Kololo land on the
+-- same dot, and no one can be sent to either of them.
+--
+-- These are the real thing — WGS 84, the numbers a phone's map app
+-- understands. Nullable, because a portfolio that has never opened the
+-- map has none, and inventing a location is worse than admitting there
+-- isn't one. The schematic coordinates stay: they still draw the fallback
+-- map for anyone without a Maps key configured.
+-- ---------------------------------------------------------------
+ALTER TABLE "properties"
+  ADD COLUMN IF NOT EXISTS "latitude" double precision;
+ALTER TABLE "properties"
+  ADD COLUMN IF NOT EXISTS "longitude" double precision;
+
+-- A pin is both numbers or neither. Half a coordinate is a point in the
+-- Gulf of Guinea, which is where every mis-set latitude on earth ends up.
+ALTER TABLE "properties"
+  DROP CONSTRAINT IF EXISTS "properties_pin_complete";
+ALTER TABLE "properties"
+  ADD CONSTRAINT "properties_pin_complete"
+  CHECK (("latitude" IS NULL) = ("longitude" IS NULL));
+
+ALTER TABLE "properties"
+  DROP CONSTRAINT IF EXISTS "properties_pin_on_earth";
+ALTER TABLE "properties"
+  ADD CONSTRAINT "properties_pin_on_earth"
+  CHECK (
+    "latitude" IS NULL
+    OR ("latitude" BETWEEN -90 AND 90 AND "longitude" BETWEEN -180 AND 180)
+  );
+
+-- ---------------------------------------------------------------
 -- Record the migrations as applied, so `npm run db:migrate`
 -- against this database does nothing rather than failing.
 -- ---------------------------------------------------------------
@@ -1079,6 +1212,10 @@ INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('7995837
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('087b50bf9df500d0518f6298fc6f8fe7ceadac84f7bc30384fae9cc71112bba1', 1787900000000);
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('a9e9ddc39af86088acabbed935ec0bd771bffcdb34bb47938ce904d0e81b822e', 1787900100000);
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('8639019e53a5a33518ea4a433eadb4765bf739ca9fa939e0b76c5c621141de53', 1787900200000);
+INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('6926432b1238e320f34332a1419792a18746635a7438a5dfd4fd8974012b7c7b', 1787900300000);
+INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('b422ae1153da2056f9ab7b1a8fb3f4afef1720a14872230389a999cb7a7d9f1f', 1787900400000);
+INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('4a7543b3291ee3bfa7775877272555881020cf26d0b9d432aa32c2e15aa3df99', 1787900500000);
+INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('5106d676a52042832405a22a20a729c6854d6ac5a764a402b56dc25c445bf173', 1787900600000);
 
 -- ---------------------------------------------------------------
 -- Reminder settings. One row, always id 1 — the app reads it on

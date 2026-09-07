@@ -17,13 +17,15 @@ import {
 import { promisify } from 'node:util'
 import { and, eq, lt, sql } from 'drizzle-orm'
 import type { NextFunction, Request, Response } from 'express'
-import { can, type Permission } from '../src/lib/rbac.js'
+import { DEFAULT_TIMEZONE } from '../src/lib/defaults.js'
+import type { Permission } from '../src/lib/rbac.js'
 import type { Role } from '../src/lib/types.js'
 import type { Db } from './db/client.js'
 import {
   SsoError, authorizeUrl, exchangeCode, providerFor, verifyIdToken, type Claims,
 } from './oidc.js'
 import * as t from './db/schema.js'
+import { permissionMatrix } from './workspace.js'
 
 const scrypt = promisify(scryptCb) as (
   password: string, salt: Buffer, keylen: number,
@@ -157,7 +159,16 @@ export async function readSession(db: Db, token: string | undefined) {
       )))[0] ?? null
     : null
 
-  return { profile: row.profile, membership }
+  const permissions = membership
+    ? new Set((await permissionMatrix(db, membership.organizationId))[membership.role as Role] ?? [])
+    : new Set<Permission>()
+
+  const timezone = membership
+    ? (await db.select({ zone: t.organizations.timezone }).from(t.organizations)
+        .where(eq(t.organizations.id, membership.organizationId)))[0]?.zone ?? DEFAULT_TIMEZONE
+    : DEFAULT_TIMEZONE
+
+  return { profile: row.profile, membership, permissions, timezone }
 }
 
 export const destroySession = (db: Db, token: string | undefined) =>
@@ -255,6 +266,17 @@ export class Forbidden extends Error {}
 export interface Viewer {
   profile: typeof t.profiles.$inferSelect
   membership: typeof t.organizationMembers.$inferSelect | null
+  /** The workspace's calendar, so a stamped date matches its screen. */
+  timezone: string
+  /**
+   * What this membership's role reaches in this workspace — the product's
+   * defaults with whatever the workspace has changed laid over them.
+   *
+   * Carried on the request rather than read from module state, because
+   * one server process answers for every customer and a matrix cached
+   * anywhere shared would be the wrong one for whoever asked next.
+   */
+  permissions: Set<Permission>
 }
 
 export interface Authed extends Request {
@@ -306,8 +328,12 @@ export function requireMembership(req: Authed) {
 export const requirePermission = (permission: Permission) =>
   (req: Authed, _res: Response, next: NextFunction) => {
     try {
-      const membership = requireMembership(req)
-      if (!can(membership.role as Role, permission)) {
+      const viewer = requireViewer(req)
+      requireMembership(req)
+      /* The workspace's own matrix, not the one compiled in. An owner who
+         takes payments away from their accountant has taken them away
+         here too, which is the only place it counts. */
+      if (!viewer.permissions.has(permission)) {
         throw new Forbidden(`Your role does not allow this (${permission}).`)
       }
       next()

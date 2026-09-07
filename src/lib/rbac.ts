@@ -31,7 +31,7 @@ export type Permission =
   | 'manage:team'
   | 'manage:settings'
 
-const MATRIX: Record<Role, Permission[]> = {
+const DEFAULTS: Record<Role, Permission[]> = {
   owner: [
     'view:dashboard', 'view:properties', 'edit:properties', 'view:calendar', 'view:bookings',
     'edit:bookings', 'view:clients', 'edit:clients', 'view:payments', 'edit:payments',
@@ -64,6 +64,63 @@ const MATRIX: Record<Role, Permission[]> = {
   ],
 }
 
-export const can = (role: Role, permission: Permission) => MATRIX[role].includes(permission)
+/** Every permission there is, in the order Settings lists them. */
+export const ALL_PERMISSIONS = [...new Set(Object.values(DEFAULTS).flat())] as Permission[]
+
+/**
+ * What each role reaches here, as opposed to by default.
+ *
+ * The defaults above are the product's opinion; a workspace can disagree,
+ * and this holds whatever it has decided. Held as module state and
+ * replaced wholesale, the same way the currency presentation is, because
+ * `can()` is called from render paths all over the app and threading a
+ * matrix through every one of them would be a worse trade than this.
+ *
+ * The browser holds one workspace at a time, so there is nothing here to
+ * confuse. The server does not use this — it reads the matrix per
+ * request, because one process serves every customer.
+ */
+let matrix: Record<Role, Set<Permission>> = asSets(DEFAULTS)
+
+function asSets(source: Record<Role, Permission[]>): Record<Role, Set<Permission>> {
+  return Object.fromEntries(
+    Object.entries(source).map(([role, list]) => [role, new Set(list)]),
+  ) as Record<Role, Set<Permission>>
+}
+
+/** The defaults, for a workspace that has never changed anything. */
+export const DEFAULT_PERMISSIONS = DEFAULTS
+
+/** Applies a workspace's matrix. Anything absent falls back to default. */
+export function setPermissions(next: Partial<Record<Role, Permission[]>> | null | undefined) {
+  matrix = asSets(DEFAULTS)
+  if (!next) return
+  for (const [role, list] of Object.entries(next)) {
+    if (list) matrix[role as Role] = new Set(list)
+  }
+}
+
+export const can = (role: Role, permission: Permission) =>
+  matrix[role]?.has(permission) ?? false
+
+/** What one role reaches, for drawing the matrix. */
+export const permissionsFor = (role: Role): Permission[] =>
+  ALL_PERMISSIONS.filter((p) => matrix[role]?.has(p))
+
+/**
+ * Permissions an owner cannot give away.
+ *
+ * Removing team management from the owner role locks every owner out of
+ * the screen that would put it back — a door that shuts from the inside
+ * with the key on the outside. Refused in the interface and again on the
+ * server, because the interface is not where refusals belong.
+ */
+export const LOCKED: Array<{ role: Role; permission: Permission }> = [
+  { role: 'owner', permission: 'manage:team' },
+  { role: 'owner', permission: 'manage:settings' },
+]
+
+export const isLocked = (role: Role, permission: Permission) =>
+  LOCKED.some((l) => l.role === role && l.permission === permission)
 
 export const roleLabel = (role: Role) => ROLES.find((r) => r.id === role)?.label ?? role

@@ -1,3 +1,7 @@
+/* Type-only, so it is erased at compile time — rbac.ts imports Role
+   back from here, and a cycle of types is not a cycle at runtime. */
+import type { Permission } from './rbac.js'
+
 /* ============================================================
    Altier Properties — domain model
    ============================================================ */
@@ -49,6 +53,14 @@ export interface Address {
   /** Normalised 0–1 coords used by the schematic portfolio map. */
   x: number
   y: number
+  /**
+   * Where the home actually is, in WGS 84 — a real pin on a real map.
+   *
+   * Null until somebody drops one. Both or neither: half a coordinate
+   * is a point in the ocean off Ghana, and the schema refuses it.
+   */
+  lat: number | null
+  lng: number | null
 }
 
 export interface OccupancySpell {
@@ -157,8 +169,19 @@ export interface Booking {
   noticeDays: number
   guests: number
   source: BookingSource
+  /** The times of day arrival and departure are expected. */
   checkIn: string
   checkOut: string
+  /**
+   * When they actually arrived and actually left, or null.
+   *
+   * Separate from `start` and `end`, which are what was agreed. A guest
+   * who arrives a day late or leaves a week early should not have the
+   * agreement rewritten around them — the dates stand, and these say what
+   * happened against them.
+   */
+  arrivedOn: string | null
+  departedOn: string | null
   notes: string
   createdAt: string
 }
@@ -307,4 +330,11 @@ export interface Portfolio {
   maintenance: MaintenanceRequest[]
   team: TeamMember[]
   reminders: ReminderSettings
+  /**
+   * What each role reaches in this workspace — the product's defaults
+   * with whatever the workspace has changed laid over them. Carried here
+   * because every screen that gates on a permission already holds the
+   * portfolio, and a second fetch would be a second thing to go stale.
+   */
+  permissions?: Partial<Record<Role, Permission[]>>
 }

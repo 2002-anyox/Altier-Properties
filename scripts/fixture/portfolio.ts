@@ -137,6 +137,43 @@ const CITIES: Record<string, string> = {
   Namanve: 'Mukono',
 }
 
+/* Roughly where each neighbourhood is, so the map view has real pins in
+   a seeded database rather than an empty canvas. Approximate to a few
+   hundred metres — enough to put a home in the right suburb, and openly
+   not a survey. Each unit is nudged off the centre by its own schematic
+   coordinates so a block of them does not stack into one dot. */
+const DISTRICT_PINS: Record<string, [number, number]> = {
+  Kololo: [0.3350, 32.5900],
+  Nakasero: [0.3200, 32.5800],
+  Central: [0.3150, 32.5820],
+  'Old Kampala': [0.3130, 32.5650],
+  Bugolobi: [0.3160, 32.6180],
+  Muyenga: [0.2870, 32.6100],
+  Ntinda: [0.3540, 32.6150],
+  Naguru: [0.3350, 32.6080],
+  Bukoto: [0.3480, 32.6000],
+  Mbuya: [0.3200, 32.6280],
+  Nsambya: [0.2960, 32.5910],
+  Kansanga: [0.2830, 32.6070],
+  Munyonyo: [0.2600, 32.6220],
+  Entebbe: [0.0520, 32.4630],
+  Namanve: [0.3480, 32.7200],
+  Najjera: [0.3760, 32.6320],
+  Kyanja: [0.3720, 32.6060],
+  Lubowa: [0.2450, 32.5580],
+  Kira: [0.4000, 32.6480],
+}
+
+/** The pin for a unit: its district's centre, nudged so they do not stack. */
+const pinFor = (district: string, x: number, y: number) => {
+  const centre = DISTRICT_PINS[district]
+  if (!centre) return { lat: null, lng: null }
+  return {
+    lat: Number((centre[0] + (y - 0.5) * 0.012).toFixed(6)),
+    lng: Number((centre[1] + (x - 0.5) * 0.012).toFixed(6)),
+  }
+}
+
 const ROADS: Record<string, string[]> = {
   Kololo: ['Acacia Avenue', 'Lower Kololo Terrace', 'Prince Charles Drive', 'John Babiiha Avenue', 'Wampewo Avenue'],
   Nakasero: ['Nakasero Road', 'Kyadondo Road', 'Nakasero Hill Road', 'Kitante Road'],
@@ -214,6 +251,7 @@ export const PROPERTIES: Property[] = SEEDS.map((s, i) => {
       country: 'Uganda',
       x: s.x,
       y: s.y,
+      ...pinFor(s.district, s.x, s.y),
     },
     bedrooms: s.beds,
     bathrooms: s.baths,
@@ -311,10 +349,27 @@ export const CLIENTS: Client[] = (() => {
 })()
 
 /* ----------------------------- bookings --------------------------- */
+
+/**
+ * When a stay was arrived at and left, read off what it already says.
+ *
+ * A running agreement was arrived at when it began; a finished one was
+ * left when it ended; one not yet started has neither, which is what
+ * "upcoming" means. Applied to the whole list at the end rather than
+ * written into each shape, so there is one rule instead of five.
+ */
+const withArrivals = (bookings: Array<Omit<Booking, 'arrivedOn' | 'departedOn'>>): Booking[] => bookings.map((b) => ({
+  ...b,
+  arrivedOn: b.status === 'in_progress' || b.status === 'completed' ? b.start : null,
+  departedOn: b.status === 'completed' ? (b.end ?? b.start) : null,
+}))
+
 const SOURCES: BookingSource[] = ['direct', 'airbnb', 'booking_com', 'agency', 'corporate']
 
 export const BOOKINGS: Booking[] = (() => {
-  const out: Booking[] = []
+  /* Built without arrivals, which withArrivals fills in from the status
+     once every shape has been pushed. */
+  const out: Array<Omit<Booking, 'arrivedOn' | 'departedOn'>> = []
   let n = 0
   const activeClients = CLIENTS.filter((c) => c.status !== 'past')
   const addMonths = (from: string, months: number) => {
@@ -458,7 +513,7 @@ export const BOOKINGS: Booking[] = (() => {
   // One cancellation makes the pipeline believable — never a live or past stay
   const cancellable = out.findIndex((b) => b.status === 'upcoming' && b.mode === 'short_stay')
   if (cancellable >= 0) out[cancellable] = { ...out[cancellable], status: 'cancelled', notes: 'Guest cancelled — within the free-cancellation window.' }
-  return out
+  return withArrivals(out)
 })()
 
 /* ---------------------------- invoices ---------------------------- */

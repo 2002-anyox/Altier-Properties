@@ -3,9 +3,11 @@ import { TODAY, dayOffset, iso } from './dates.js'
 import { buildNotifications } from './notify.js'
 import {
   api, auth, emptyPortfolio, isSignedOut, loadPortfolio,
-  probeSession, workspace, type DataSource, type Identity, type Membership, type SessionMember,
+  permissions as permissionsApi, probeSession, workspace,
+  type DataSource, type Identity, type Membership, type SessionMember,
 } from './api.js'
 import { statusForBooking } from './create.js'
+import { DEFAULT_PERMISSIONS, setPermissions, type Permission } from './rbac.js'
 import { REGIONS, currencyDef, setPresentation } from './money.js'
 import { setLanguage, type Language } from './strings.js'
 import { takeSsoError } from './sso.js'
@@ -52,6 +54,8 @@ interface State {
    */
   workspace: Membership | null
   workspaces: Membership[]
+  /** What each role reaches here, as the server last reported it. */
+  permissions: Partial<Record<Role, Permission[]>> | null
 }
 
 type Action =
@@ -63,7 +67,13 @@ type Action =
   | { type: 'record-payment'; invoiceId: string }
   | { type: 'send-reminder'; invoiceId: string }
   | { type: 'set-property-status'; id: string; status: PropertyStatus }
-  | { type: 'set-maintenance-status'; id: string; status: MaintenanceStatus }
+  | {
+      type: 'set-maintenance-status'
+      id: string
+      status: MaintenanceStatus
+      /** Undefined leaves it, null clears it, a number records it. */
+      actualCost?: number | null
+    }
   | { type: 'add-maintenance'; request: MaintenanceRequest }
   | { type: 'add-property'; property: Property }
   | { type: 'update-property'; property: Property }
@@ -72,6 +82,11 @@ type Action =
   | { type: 'update-client'; client: Client }
   | { type: 'update-booking'; booking: Booking }
   | { type: 'end-booking'; booking: Booking }
+  | { type: 'check-in'; id: string; on: string }
+  | { type: 'check-out'; id: string; on: string }
+  | { type: 'reassign-maintenance'; id: string; assigneeId: string }
+  | { type: 'set-permission'; role: Role; permission: Permission; allowed: boolean }
+  | { type: 'reset-permissions'; role?: Role }
   | { type: 'delete-property'; id: string }
   | { type: 'delete-client'; id: string }
   | { type: 'delete-booking'; id: string }
@@ -98,7 +113,12 @@ type Action =
 const notificationsFor = (p: Portfolio) =>
   buildNotifications(p.properties, p.invoices, p.bookings, p.maintenance, p.clients, p.reminders)
 
-const stateFrom = (p: Portfolio, source: DataSource, hydrated: boolean): State => ({
+const stateFrom = (p: Portfolio, source: DataSource, hydrated: boolean): State => {
+  /* The workspace's own matrix, before anything reads a permission off
+     it. can() is called during the render this state feeds, so applying
+     it any later would draw one frame against the wrong rules. */
+  setPermissions(p.permissions)
+  return {
   properties: p.properties,
   clients: p.clients,
   bookings: p.bookings,
@@ -120,7 +140,9 @@ const stateFrom = (p: Portfolio, source: DataSource, hydrated: boolean): State =
   identities: [],
   workspace: null,
   workspaces: [],
-})
+  permissions: p.permissions ?? null,
+  }
+}
 
 /* Nothing, until the probe says what there is. An app that starts with
    records already in it has to unlearn them, and for one frame shows
@@ -225,7 +247,9 @@ function reducer(state: State, action: Action): State {
                 ...m,
                 status: action.status,
                 completedOn: action.status === 'completed' ? iso(TODAY) : null,
-                actualCost: action.status === 'completed' ? (m.actualCost ?? m.estimatedCost) : m.actualCost,
+                /* Not the estimate. A guess in the column the spend
+                   figure sums is worse than an honest blank. */
+                actualCost: action.actualCost === undefined ? m.actualCost : action.actualCost,
                 timeline: [...m.timeline, { at: iso(TODAY), label: `Status changed to ${action.status.replace(/_/g, ' ')}`, by: 'You' }],
               }
             : m,
@@ -263,6 +287,56 @@ function reducer(state: State, action: Action): State {
             ? { ...p, status: 'available' as const, availableFrom: action.booking.end }
             : p),
       }
+    /* Arriving holds the unit; leaving frees it from the day they went.
+       Applied here as well as on the server so the board moves under the
+       press rather than after the round trip. */
+    case 'check-in':
+      return {
+        ...state,
+        bookings: state.bookings.map((b) =>
+          (b.id === action.id ? { ...b, arrivedOn: action.on, status: 'in_progress' as const } : b)),
+        properties: state.properties.map((p) =>
+          (p.id === state.bookings.find((b) => b.id === action.id)?.propertyId
+            ? { ...p, status: 'occupied' as const, availableFrom: null }
+            : p)),
+      }
+    case 'check-out':
+      return {
+        ...state,
+        bookings: state.bookings.map((b) =>
+          (b.id === action.id
+            ? { ...b, departedOn: action.on, status: 'completed' as const }
+            : b)),
+        properties: state.properties.map((p) =>
+          (p.id === state.bookings.find((b) => b.id === action.id)?.propertyId
+            ? { ...p, status: 'available' as const, availableFrom: action.on }
+            : p)),
+      }
+    case 'reassign-maintenance':
+      return {
+        ...state,
+        maintenance: state.maintenance.map((m) =>
+          (m.id === action.id ? { ...m, assigneeId: action.assigneeId } : m)),
+      }
+    /* Applied here as well as on the server, so a tick moves under the
+       press rather than after the round trip. The server's answer
+       replaces this a moment later either way. */
+    case 'set-permission': {
+      const current = state.permissions ?? {}
+      const list = new Set(current[action.role] ?? DEFAULT_PERMISSIONS[action.role] ?? [])
+      if (action.allowed) list.add(action.permission)
+      else list.delete(action.permission)
+      const next = { ...current, [action.role]: [...list] }
+      setPermissions(next)
+      return { ...state, permissions: next }
+    }
+    case 'reset-permissions': {
+      const next = action.role
+        ? { ...(state.permissions ?? {}), [action.role]: [...(DEFAULT_PERMISSIONS[action.role] ?? [])] }
+        : null
+      setPermissions(next)
+      return { ...state, permissions: next }
+    }
     /* Removing a property takes its whole record with it — the database
        cascades, and the screen has to agree or it will look like the
        charges survived. */
@@ -453,6 +527,18 @@ interface Ctx {
    */
   ssoError: string | null
   clearSsoError: () => void
+  /**
+   * Whether a change is currently being written through, and when the
+   * last one landed.
+   *
+   * Every click already goes to the server and comes back with the whole
+   * portfolio — that is how the screen and the database stay in step. It
+   * just used to happen silently, so there was no way to tell a saved
+   * change from one the browser had drawn and dropped. This is that
+   * difference, shown.
+   */
+  saving: boolean
+  savedAt: number | null
 }
 
 const StoreContext = createContext<Ctx | null>(null)
@@ -513,6 +599,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>(readStoredTheme)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [paletteOpen, setPaletteOpen] = useState(false)
+  /* How many writes are in the air, and when the last one landed. */
+  const [inFlight, setInFlight] = useState(0)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -664,7 +753,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       case 'record-payment': return () => api.recordPayment(action.invoiceId)
       case 'send-reminder': return () => api.sendReminder(action.invoiceId)
       case 'set-property-status': return () => api.setPropertyStatus(action.id, action.status)
-      case 'set-maintenance-status': return () => api.setMaintenanceStatus(action.id, action.status)
+      case 'set-maintenance-status':
+        return () => api.setMaintenanceStatus(action.id, action.status, action.actualCost)
       case 'add-note': return () => api.addNote(action.clientId, action.text)
       case 'update-reminders': return () => api.updateReminders(action.reminders as Record<string, unknown>)
       case 'add-maintenance': {
@@ -672,12 +762,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return () => api.addMaintenance({
           propertyId: r.propertyId, title: r.title, description: r.description,
           priority: r.priority, vendor: r.vendor, dueOn: r.dueOn,
+          assigneeId: r.assigneeId || undefined,
         })
       }
       case 'add-property': return () => api.addProperty(action.property)
       case 'update-client': return () => api.updateClient(action.client)
       case 'update-booking': return () => api.updateBooking(action.booking)
       case 'end-booking': return () => api.updateBooking(action.booking)
+      case 'check-in': return () => api.checkIn(action.id, action.on)
+      case 'check-out': return () => api.checkOut(action.id, action.on)
+      case 'reassign-maintenance':
+        return () => api.reassignMaintenance(action.id, action.assigneeId)
+      case 'set-permission':
+        return () => permissionsApi.set(action.role, action.permission, action.allowed)
+      case 'reset-permissions': return () => permissionsApi.reset(action.role)
       case 'delete-property': return () => api.deleteProperty(action.id)
       case 'delete-client': return () => api.deleteClient(action.id)
       case 'delete-booking': return () => api.deleteBooking(action.id)
@@ -705,9 +803,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (!live) return
     const call = requestFor(action)
     if (!call) return
+    /* Counted rather than a flag: two clicks in quick succession are two
+       writes in flight, and the first to answer must not report the
+       second one finished. */
+    setInFlight((n) => n + 1)
+    const settle = () => setInFlight((n) => Math.max(0, n - 1))
     call().then(
-      (portfolio) => dispatch({ type: 'sync', portfolio }),
+      (portfolio) => { settle(); setSavedAt(Date.now()); dispatch({ type: 'sync', portfolio }) },
       (error: Error) => {
+        settle()
         /* A session that ended mid-edit is not a failed save to apologise
            for; it is a sign-in to ask for. Anything else is worth saying. */
         if (isSignedOut(error)) {
@@ -741,9 +845,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       refreshAccount,
       ssoError,
       clearSsoError,
+      saving: inFlight > 0,
+      savedAt,
     }),
     [state, theme, toasts, toast, dismissToast, paletteOpen, dispatchWithSync, signIn, signOut,
-     switchWorkspace, createOwner, refreshAccount, ssoError, clearSsoError],
+     switchWorkspace, createOwner, refreshAccount, ssoError, clearSsoError, inFlight, savedAt],
   )
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

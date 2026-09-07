@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import clsx from 'clsx'
 import { Check, ChevronDown, Search, X } from 'lucide-react'
 import { drawerVariants, popVariants, spring, swift } from '../../lib/motion.js'
+import { acceptable, clampNumber, commitNumber, readNumber } from '../../lib/numeric.js'
 import { t } from '../../lib/strings.js'
 import type { InvoiceStatus, MaintenancePriority, MaintenanceStatus, PropertyStatus } from '../../lib/types.js'
 
@@ -180,6 +181,117 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
   ({ className, ...rest }, ref) => <input ref={ref} className={cx(CONTROL, className)} {...rest} />,
 )
 Input.displayName = 'Input'
+
+/**
+ * A number field you can actually empty.
+ *
+ * A plain `<input type="number">` bound to a number has a trap in it: the
+ * moment the box is cleared, `Number('')` is 0, a `Math.max` floor snaps
+ * it back to the minimum, and the digit reappears under the cursor. The
+ * only way left to change a 3 into a 12 is to type in front of it.
+ *
+ * So the text being typed lives here, as text, and is only turned back
+ * into a number for the caller. It is squared up against the bounds when
+ * the field is left, not on every keystroke — which is what lets somebody
+ * clear it, think, and type something else.
+ */
+export function NumberInput({
+  value, onChange, min, max, step = 1, stepper, suffix, className, id, ...rest
+}: Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'min' | 'max' | 'step' | 'type'> & {
+  value: number
+  onChange: (value: number) => void
+  min?: number
+  max?: number
+  step?: number
+  /** Adds − / + buttons. Worth it for small counts on a phone. */
+  stepper?: boolean
+  /** A unit shown inside the field, e.g. "months".  */
+  suffix?: string
+}) {
+  const [text, setText] = useState(() => String(value))
+  const [editing, setEditing] = useState(false)
+
+  /* While somebody is typing, what they have typed is the truth. Once they
+     leave, the record is — including a correction the caller made. */
+  useEffect(() => { if (!editing) setText(String(value)) }, [value, editing])
+
+  const bounds = { min, max }
+
+  const commit = () => {
+    setEditing(false)
+    const next = commitNumber(text, bounds)
+    setText(String(next))
+    if (next !== value) onChange(next)
+  }
+
+  const nudge = (by: number) => {
+    const next = clampNumber((readNumber(text) ?? min ?? 0) + by, bounds)
+    setText(String(next))
+    onChange(next)
+  }
+
+  return (
+    <div className="relative flex items-stretch">
+      {stepper && (
+        <button
+          type="button"
+          aria-label="Decrease"
+          onClick={() => nudge(-step)}
+          disabled={min !== undefined && value <= min}
+          className="h-10 w-10 shrink-0 rounded-l-xl border border-r-0 border-line text-ink-secondary transition-colors hover:bg-surface-inset hover:text-ink disabled:opacity-40"
+        >
+          −
+        </button>
+      )}
+      <input
+        id={id}
+        type="text"
+        inputMode="decimal"
+        value={text}
+        onFocus={(e) => { setEditing(true); e.currentTarget.select() }}
+        onChange={(e) => {
+          const raw = e.target.value
+          if (!acceptable(raw)) return
+          setText(raw)
+          /* Reported unclamped so a half-typed "1" on the way to "12" is not
+             pulled up to the floor under the cursor. commit() squares it up. */
+          const parsed = readNumber(raw)
+          if (parsed !== null) onChange(parsed)
+        }}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { commit(); return }
+          if (e.key === 'ArrowUp') { e.preventDefault(); nudge(step) }
+          if (e.key === 'ArrowDown') { e.preventDefault(); nudge(-step) }
+        }}
+        className={cx(
+          CONTROL,
+          'tnum',
+          stepper && 'rounded-none text-center',
+          suffix && 'pr-16',
+          className,
+        )}
+        {...rest}
+      />
+      {suffix && !stepper && (
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-ink-muted">
+          {suffix}
+        </span>
+      )}
+      {stepper && (
+        <button
+          type="button"
+          aria-label="Increase"
+          onClick={() => nudge(step)}
+          disabled={max !== undefined && value >= max}
+          className="h-10 w-10 shrink-0 rounded-r-xl border border-l-0 border-line text-ink-secondary transition-colors hover:bg-surface-inset hover:text-ink disabled:opacity-40"
+        >
+          +
+        </button>
+      )}
+    </div>
+  )
+}
 
 export function Textarea({ className, ...rest }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea className={cx(CONTROL, 'h-auto min-h-[88px] py-2.5 leading-relaxed', className)} {...rest} />

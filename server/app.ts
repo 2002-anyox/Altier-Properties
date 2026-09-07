@@ -23,26 +23,30 @@ import { missingMigrations } from './db/applied.js'
 import { classify, explain, rootCause } from './db/fault.js'
 import {
   Conflict, NotFound, addBooking, addClient, addMaintenance, addMember, addNote,
-  addProperty, deleteBooking, deleteClient, deleteMember, deleteProperty,
+  addProperty, checkIn, checkOut, deleteBooking, deleteClient, deleteMember, deleteProperty,
   grantPortalAccess, recordPayment, revokePortalAccess, sendReminder,
-  setMaintenanceStatus, setPropertyStatus, updateBooking, updateClient, updateMember,
+  reassignMaintenance, setMaintenanceStatus, setPropertyStatus, updateBooking, updateClient,
+  updateMember,
   updateProperty, updateReminders, type Workspace,
 } from './mutations.js'
 import type { Booking, Client, Invoice, Property, TeamMember } from '../src/lib/types.js'
-import { can } from '../src/lib/rbac.js'
+import { ALL_PERMISSIONS, type Permission } from '../src/lib/rbac.js'
 import {
-  Forbidden, LastWayIn, NotLinked, OAUTH_COOKIE, MIN_PASSWORD, SESSION_COOKIE, Unauthorized,
+  Forbidden, LastWayIn, NotLinked, OAUTH_COOKIE, MIN_PASSWORD,
+  SESSION_COOKIE, Unauthorized,
   attachViewer, beginOauth, clearFailures, clearOauthCookie, clearSessionCookie,
   completeOauth, createSession, destroyAllSessions, destroySession, equaliseTiming, findByEmail,
   hashPassword, identitiesFor, lockedFor, noAccountsYet, profileForIdentity, recordFailure,
   rejectPassword, requireMembership, requirePermission, requireViewer, setOauthCookie,
   setPassword, setSessionCookie, unlinkIdentity, verifyPassword, type Authed, type Viewer,
 } from './auth.js'
+import { DEFAULT_TIMEZONE } from '../src/lib/defaults.js'
 import { scoped } from './scope.js'
 import {
   BadInvitation, NoSubscription, SeatLimit, createWorkspace, defaultOrganization,
-  acceptInvitation, invitationByToken, inviteMember, membershipsFor, openInvitations,
-  revokeInvitation, seatUsage,
+  BadPermission, acceptInvitation, invitationByToken, inviteMember, membershipsFor,
+  openInvitations, permissionMatrix, resetPermissions, revokeInvitation, seatUsage,
+  setRolePermission,
 } from './workspace.js'
 import { SsoError, configuredProviders } from './oidc.js'
 
@@ -117,6 +121,7 @@ export function createApp(db: Db, driver: string) {
       organizationId: membership.organizationId,
       memberId: membership.id,
       name: viewer.profile.name,
+      timezone: viewer.timezone,
     }
     return scoped(
       db,
@@ -134,8 +139,14 @@ export function createApp(db: Db, driver: string) {
     readPortfolio(tx, w.organizationId).then((portfolio) => res.json(visibleTo(portfolio, req)))
 
   const visibleTo = (portfolio: Awaited<ReturnType<typeof readPortfolio>>, req: Authed) => {
-    const role = req.viewer?.membership?.role
-    if (role && !can(role, 'view:payments')) return { ...portfolio, invoices: [] }
+    /* This workspace's matrix, carried on the request — not the defaults
+       compiled into the app. One process answers for every customer, so
+       a module-level can() here would give an owner who granted their
+       staff the books the same answer as one who did not. */
+    const viewer = req.viewer
+    if (viewer?.membership && !viewer.permissions.has('view:payments')) {
+      return { ...portfolio, invoices: [] }
+    }
     return portfolio
   }
 
@@ -300,7 +311,14 @@ export function createApp(db: Db, driver: string) {
           eq(organizationMembers.status, 'active'),
         )))[0] ?? null
       : null
-    return { profile, membership }
+    const permissions = membership
+      ? new Set((await permissionMatrix(db, membership.organizationId))[membership.role] ?? [])
+      : new Set<Permission>()
+    const timezone = membership
+      ? (await db.select({ zone: organizations.timezone }).from(organizations)
+          .where(eq(organizations.id, membership.organizationId)))[0]?.zone ?? DEFAULT_TIMEZONE
+      : DEFAULT_TIMEZONE
+    return { profile, membership, permissions, timezone }
   }
 
   app.post('/api/auth/login', route(async (req, res) => {
@@ -657,7 +675,25 @@ export function createApp(db: Db, driver: string) {
 
   app.patch('/api/maintenance/:id/status', requirePermission('edit:maintenance'),
     inWorkspace(async (tx, w, req, res) => {
-      await setMaintenanceStatus(tx, w, param(req, 'id'), req.body?.status)
+      /* undefined leaves the cost as it was; null clears it; a number
+         records it. The three are different answers and the route keeps
+         them apart rather than collapsing them into a falsy check. */
+      const raw = req.body?.actualCost
+      const actualCost = raw === undefined ? undefined
+        : raw === null || raw === '' ? null
+        : Number(raw)
+      if (typeof actualCost === 'number' && !Number.isFinite(actualCost)) {
+        throw new BadRequest('That is not an amount.')
+      }
+      await setMaintenanceStatus(tx, w, param(req, 'id'), req.body?.status, actualCost)
+      return withPortfolio(tx, w, res, req)
+    }))
+
+  app.patch('/api/maintenance/:id/assignee', requirePermission('edit:maintenance'),
+    inWorkspace(async (tx, w, req, res) => {
+      const assigneeId = String(req.body?.assigneeId ?? '').trim()
+      if (!assigneeId) throw new BadRequest('Say who is taking it on.')
+      await reassignMaintenance(tx, w, param(req, 'id'), assigneeId)
       return withPortfolio(tx, w, res, req)
     }))
 
@@ -684,6 +720,31 @@ export function createApp(db: Db, driver: string) {
 
   class BadRequest extends Error {}
 
+  /**
+   * A pin is two numbers on the planet, or nothing at all.
+   *
+   * The database refuses a half-set pair and anything off the globe, but
+   * a string where a number belongs would reach the driver as a type
+   * error and come back as a 500 — which reads as "the server broke"
+   * rather than "that is not a coordinate". Both are normalised to null
+   * here so the map can be left unset without ceremony.
+   */
+  function requirePin(body: Property) {
+    const { lat, lng } = body.address as { lat?: unknown; lng?: unknown }
+    if (lat === undefined || lat === null || lng === undefined || lng === null) {
+      body.address.lat = null
+      body.address.lng = null
+      return
+    }
+    if (typeof lat !== 'number' || typeof lng !== 'number'
+        || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+      throw new BadRequest('That is not a location.')
+    }
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      throw new BadRequest('That location is not on the map.')
+    }
+  }
+
   /** Throws unless `value` is an object carrying every named string field. */
   function requireShape(value: unknown, fields: string[], what: string) {
     const record = value as Record<string, unknown> | null
@@ -702,6 +763,7 @@ export function createApp(db: Db, driver: string) {
       const body = req.body as Property
       requireShape(body, ['id', 'code', 'name', 'type', 'mode', 'status', 'managerId'], 'property')
       if (!body.address?.line1) throw new BadRequest('A property needs an address.')
+      requirePin(body)
       await addProperty(tx, w, body)
       return withPortfolio(tx, w, res, req)
     }))
@@ -711,6 +773,7 @@ export function createApp(db: Db, driver: string) {
       const body = req.body as Property
       requireShape(body, ['name', 'type', 'mode', 'status', 'managerId'], 'property')
       if (!body.address?.line1) throw new BadRequest('A property needs an address.')
+      requirePin(body)
       await updateProperty(tx, w, param(req, 'id'), body)
       return withPortfolio(tx, w, res, req)
     }))
@@ -740,6 +803,28 @@ export function createApp(db: Db, driver: string) {
       requireShape(body, ['name', 'kind', 'status'], 'client')
       await updateClient(tx, w, param(req, 'id'), body)
       return withPortfolio(tx, w, res, req)
+    }))
+
+  /* Arriving and leaving. Separate from editing the agreement, because
+     they are things that happen rather than terms that change — and the
+     date is accepted rather than assumed, so a departure noticed on
+     Monday can still be recorded as the Friday it actually was. */
+  app.post('/api/bookings/:id/check-in', requirePermission('edit:bookings'),
+    inWorkspace(async (tx, w, req, res) => {
+      const on = String(req.body?.on ?? '').trim() || undefined
+      if (on && !/^\d{4}-\d{2}-\d{2}$/.test(on)) throw new BadRequest('That is not a date.')
+      await checkIn(tx, w, param(req, 'id'), on)
+      return withPortfolio(tx, w, res, req)
+    }))
+
+  app.post('/api/bookings/:id/check-out', requirePermission('edit:bookings'),
+    inWorkspace(async (tx, w, req, res) => {
+      const on = String(req.body?.on ?? '').trim() || undefined
+      if (on && !/^\d{4}-\d{2}-\d{2}$/.test(on)) throw new BadRequest('That is not a date.')
+      const settled = await checkOut(tx, w, param(req, 'id'), on)
+      const portfolio = await readPortfolio(tx, w.organizationId)
+      res.json({ ...visibleTo(portfolio, req), settled })
+      return undefined
     }))
 
   app.put('/api/bookings/:id', requirePermission('edit:bookings'),
@@ -864,6 +949,35 @@ export function createApp(db: Db, driver: string) {
       })
     }))
 
+  /* --------------------------- permissions --------------------------- *
+   * What each role reaches, which used to be a constant compiled into the
+   * app and drawn in Settings as ticks nobody could press. It is the
+   * customer's question — whether their accountant may edit a tenancy,
+   * whether a manager sees the books — so they answer it.
+   * ------------------------------------------------------------------- */
+
+  app.get('/api/permissions', requirePermission('manage:settings'),
+    inWorkspace(async (tx, w, _req, res) => {
+      res.json({ permissions: await permissionMatrix(tx, w.organizationId), all: ALL_PERMISSIONS })
+    }))
+
+  app.put('/api/permissions', requirePermission('manage:team'),
+    inWorkspace(async (tx, w, req, res) => {
+      const role = String(req.body?.role ?? '') as TeamMember['role']
+      const permission = String(req.body?.permission ?? '') as Permission
+      const allowed = req.body?.allowed === true
+      if (!role || !permission) throw new BadRequest('A role and a permission are required.')
+      await setRolePermission(tx, w.organizationId, role, permission, allowed)
+      return withPortfolio(tx, w, res, req)
+    }))
+
+  app.delete('/api/permissions', requirePermission('manage:team'),
+    inWorkspace(async (tx, w, req, res) => {
+      const role = String(req.query?.role ?? '') as TeamMember['role']
+      await resetPermissions(tx, w.organizationId, role || undefined)
+      return withPortfolio(tx, w, res, req)
+    }))
+
   /* ------------------------ tenants and guests ----------------------- *
    * Portal access is granted from the tenant's own record rather than
    * from the staff list, because it is a different kind of thing: it
@@ -986,6 +1100,10 @@ export function createApp(db: Db, driver: string) {
     }
     // A refusal the caller can act on: the request was well formed, the
     // state of the portfolio is what stands in the way.
+    if (err instanceof BadPermission) {
+      res.status(400).json({ error: err.message })
+      return
+    }
     if (err instanceof Conflict || err instanceof BadInvitation) {
       res.status(409).json({ error: err.message })
       return

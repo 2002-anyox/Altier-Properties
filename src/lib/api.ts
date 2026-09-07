@@ -313,6 +313,17 @@ export interface PortalLogin {
   since: string
 }
 
+export const permissions = {
+  /** Changing one cell. Answers with the refreshed portfolio, matrix and all. */
+  set: (role: Role, permission: string, allowed: boolean) =>
+    request('/permissions', {
+      method: 'PUT', body: JSON.stringify({ role, permission, allowed }),
+    }),
+  /** Back to the product's defaults, for one role or for all of them. */
+  reset: (role?: Role) =>
+    request(`/permissions${role ? `?role=${encodeURIComponent(role)}` : ''}`, { method: 'DELETE' }),
+}
+
 export const workspace = {
   read: () => send('/workspace') as Promise<WorkspaceView>,
   invite: (input: { email: string; role: Role; title?: string; propertyIds?: string[] }) =>
@@ -400,6 +411,15 @@ export const api = {
     request(`/properties/${property.id}`, { method: 'PUT', body: JSON.stringify(property) }),
   addClient: (client: Client) =>
     request('/clients', { method: 'POST', body: JSON.stringify(client) }),
+  /* Arrival and departure. Check-out answers with what is still owed
+     alongside the portfolio, because that is the question somebody asks
+     at exactly that moment. */
+  checkIn: (id: string, on?: string) =>
+    request(`/bookings/${id}/check-in`, { method: 'POST', body: JSON.stringify({ on }) }),
+  checkOut: (id: string, on?: string) =>
+    send(`/bookings/${id}/check-out`, {
+      method: 'POST', body: JSON.stringify({ on }),
+    }) as Promise<Portfolio & { settled: { outstanding: number; deposit: number } }>,
   addBooking: (booking: Booking, invoices: Invoice[]) =>
     request('/bookings', { method: 'POST', body: JSON.stringify({ booking, invoices }) }),
   updateClient: (client: Client) =>
@@ -418,8 +438,15 @@ export const api = {
   sendReminder: (invoiceId: string) => request(`/invoices/${invoiceId}/reminder`, { method: 'POST' }),
   setPropertyStatus: (id: string, status: string) =>
     request(`/properties/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
-  setMaintenanceStatus: (id: string, status: string) =>
-    request(`/maintenance/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  setMaintenanceStatus: (id: string, status: string, actualCost?: number | null) =>
+    request(`/maintenance/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify(actualCost === undefined ? { status } : { status, actualCost }),
+    }),
+  reassignMaintenance: (id: string, assigneeId: string) =>
+    request(`/maintenance/${id}/assignee`, {
+      method: 'PATCH', body: JSON.stringify({ assigneeId }),
+    }),
   addMaintenance: (input: Record<string, unknown>) =>
     request('/maintenance', { method: 'POST', body: JSON.stringify(input) }),
   addNote: (clientId: string, text: string) =>

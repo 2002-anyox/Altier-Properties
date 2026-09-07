@@ -5,6 +5,8 @@ import {
   Bath, BedDouble, Building2, LayoutGrid, List, MapPin, Maximize2, Plus, Search, SlidersHorizontal, Star, X,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader.js'
+import { PortfolioMap } from '../components/PropertyMap.js'
+import { mapsConfigured } from '../lib/maps.js'
 import { PropertyImage } from '../components/PropertyImage.js'
 import {
   Button, Card, Chip, EmptyState, PROPERTY_STATUS_META, SearchInput, SegmentedControl, Select,
@@ -359,6 +361,17 @@ function MapView({ properties }: { properties: Property[] }) {
   return (
     <div className="grid gap-4 lg:grid-cols-3">
       <Card className="relative overflow-hidden lg:col-span-2">
+        {/* A real map when there is a key for one. The schematic below is
+            what a build without a key falls back to: it clusters units by
+            district, which is all it ever claimed to do. */}
+        {mapsConfigured() ? (
+          <PortfolioMap
+            properties={properties}
+            selectedId={active?.id ?? null}
+            onSelect={(id) => setActive(properties.find((p) => p.id === id) ?? null)}
+            className="aspect-[4/3] w-full rounded-none border-0 sm:aspect-[16/10]"
+          />
+        ) : (
         <div className="relative aspect-[4/3] w-full bg-surface-inset sm:aspect-[16/10]">
           {/* Schematic district plan — no tiles, no network, still spatially useful */}
           <svg viewBox="0 0 100 70" className="absolute inset-0 h-full w-full" aria-label="Schematic map of the portfolio">
@@ -389,6 +402,7 @@ function MapView({ properties }: { properties: Property[] }) {
             )
           })}
         </div>
+        )}
         <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-line px-5 py-3">
           {(Object.keys(PROPERTY_STATUS_META) as Array<keyof typeof PROPERTY_STATUS_META>).map((k) => (
             <span key={k} className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-secondary">

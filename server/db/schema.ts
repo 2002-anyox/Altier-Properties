@@ -15,8 +15,8 @@
  * ------------------------------------------------------------------ */
 
 import {
-  bigint, boolean, check, date, index, integer, jsonb, pgEnum, pgTable,
-  primaryKey, real, text, time, timestamp, uniqueIndex,
+  bigint, boolean, check, date, doublePrecision, index, integer, jsonb, pgEnum,
+  pgTable, primaryKey, real, text, time, timestamp, uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 
@@ -93,6 +93,11 @@ export const organizations = pgTable('organizations', {
   country: text('country').notNull().default('Uganda'),
   currency: text('currency').notNull().default('UGX'),
   locale: text('locale').notNull().default('en-UG'),
+  /* Which calendar the server stamps dates against. A day is a fact about
+     a place: without this, a payment taken at one in the morning in
+     Kampala was stored as the day before, because UTC had not got there
+     yet. */
+  timezone: text('timezone').notNull().default('Africa/Kampala'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
@@ -331,6 +336,11 @@ export const properties = pgTable('properties', {
   /** Normalised 0–1 coordinates for the schematic portfolio map. */
   mapX: real('map_x').notNull(),
   mapY: real('map_y').notNull(),
+  /* Where it actually is, in WGS 84 — the numbers a map app understands.
+     Null together until somebody drops a pin on it; a half-set pair would
+     put the home in the Gulf of Guinea, so the schema refuses one. */
+  latitude: doublePrecision('latitude'),
+  longitude: doublePrecision('longitude'),
 
   bedrooms: integer('bedrooms').notNull(),
   bathrooms: integer('bathrooms').notNull(),
@@ -351,6 +361,8 @@ export const properties = pgTable('properties', {
   index('properties_manager_idx').on(t.managerId),
   check('properties_price_positive', sql`${t.price} >= 0`),
   check('properties_rating_range', sql`${t.rating} >= 0 AND ${t.rating} <= 5`),
+  check('properties_pin_complete', sql`(${t.latitude} IS NULL) = (${t.longitude} IS NULL)`),
+  check('properties_pin_on_earth', sql`${t.latitude} IS NULL OR (${t.latitude} BETWEEN -90 AND 90 AND ${t.longitude} BETWEEN -180 AND 180)`),
 ])
 
 export const propertyAmenities = pgTable('property_amenities', {
@@ -466,8 +478,18 @@ export const bookings = pgTable('bookings', {
   noticeDays: integer('notice_days').notNull().default(0),
   guests: integer('guests').notNull(),
   source: bookingSourceEnum('source').notNull(),
+  /* The times of day arrival and departure are expected, agreed when the
+     agreement is drawn up. Not a record of anything having happened. */
   checkIn: time('check_in').notNull(),
   checkOut: time('check_out').notNull(),
+
+  /* When they actually arrived and actually left. Null until each
+     happens, which is the difference between an expectation and a fact —
+     a guest can arrive a day late or leave a week early, and the ledger
+     should say which. */
+  arrivedOn: date('arrived_on', { mode: 'string' }),
+  departedOn: date('departed_on', { mode: 'string' }),
+
   notes: text('notes').notNull(),
   createdAt: date('created_at', { mode: 'string' }).notNull(),
 }, (t) => [
@@ -577,6 +599,26 @@ export const occupancySpells = pgTable('occupancy_spells', {
   mode: tenancyModeEnum('mode').notNull(),
   revenue: money('revenue').notNull(),
 }, (t) => [index('occupancy_property_idx').on(t.propertyId)])
+
+/**
+ * What each role reaches in one workspace.
+ *
+ * A row is a deliberate departure from the built-in default in
+ * src/lib/rbac.ts, never a copy of it. No rows means the defaults stand,
+ * which is what a new workspace has and what most will keep — so this
+ * table is empty until somebody changes something, and there is exactly
+ * one place a default is written down.
+ */
+export const rolePermissions = pgTable('role_permissions', {
+  organizationId: text('organization_id').notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  role: roleEnum('role').notNull(),
+  permission: text('permission').notNull(),
+  allowed: boolean('allowed').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.organizationId, t.role, t.permission] }),
+])
 
 /* ----------------------------- settings ---------------------------- */
 /** Reminder thresholds are org-wide configuration, held as a single row. */

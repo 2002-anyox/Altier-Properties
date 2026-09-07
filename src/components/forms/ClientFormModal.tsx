@@ -5,6 +5,7 @@ import { useStore } from '../../lib/store.js'
 import {
   clientDraftFrom, editClient, emptyClientDraft, newClient, type ClientDraft,
 } from '../../lib/create.js'
+import { holdsOf } from '../../lib/occupancy.js'
 import type { Client, ClientKind } from '../../lib/types.js'
 
 const KINDS: Array<[ClientKind, string]> = [
@@ -22,8 +23,20 @@ const STATUSES: Array<[Client['status'], string, string]> = [
 
 /** One form for both intake and editing, as with properties. */
 export function ClientFormModal({
-  open, onClose, client,
-}: { open: boolean; onClose: () => void; client?: Client }) {
+  open, onClose, client, onCreated,
+}: {
+  open: boolean
+  onClose: () => void
+  client?: Client
+  /**
+   * Called with the new client once they are on file.
+   *
+   * Somebody adding a client almost always came to place them in a home;
+   * making them find the name again on another screen is a step for
+   * nothing. The page that opens this decides what to do with it.
+   */
+  onCreated?: (client: Client) => void
+}) {
   const { state, dispatch, toast } = useStore()
   const editing = !!client
   const [draft, setDraft] = useState<ClientDraft>(() =>
@@ -38,6 +51,14 @@ export function ClientFormModal({
 
   const nameGiven = draft.name.trim().length > 0
 
+  /* The homes they have not moved out of. Named here rather than inferred
+     from the ticks below, because a tick is a link and this is a tenancy. */
+  const living = client
+    ? holdsOf(state.bookings, client.id)
+        .map((b) => state.properties.find((p) => p.id === b.propertyId)?.name)
+        .filter((name): name is string => !!name)
+    : []
+
   const submit = () => {
     if (!nameGiven) return
     if (client) {
@@ -46,11 +67,10 @@ export function ClientFormModal({
     } else {
       const created = newClient(draft)
       dispatch({ type: 'add-client', client: created })
-      toast({
-        title: 'Client added',
-        body: `${created.name} is on file. Create an agreement to place them in a unit.`,
-        tone: 'success',
-      })
+      toast({ title: 'Client added', body: `${created.name} is on file.`, tone: 'success' })
+      onClose()
+      onCreated?.(created)
+      return
     }
     onClose()
   }
@@ -116,10 +136,19 @@ export function ClientFormModal({
 
         {state.properties.length > 0 && (
           <fieldset>
-            <legend className="mb-1 text-[12.5px] font-medium text-ink-secondary">Associated properties</legend>
-            <p className="mb-2.5 text-[12px] text-ink-muted">
-              Optional. Creating an agreement links them automatically.
+            <legend className="mb-1 text-[12.5px] font-medium text-ink-secondary">Properties they are linked to</legend>
+            <p className="mb-2.5 text-[12px] leading-relaxed text-ink-muted">
+              A link records a connection — enquired, viewed, next in line — and
+              bills nobody. Several are fine. Living somewhere is a different
+              thing: that takes an agreement, which takes its rent from the
+              property, and a client is in one home at a time.
             </p>
+            {living.length > 0 && (
+              <p className="mb-2.5 rounded-xl bg-surface-inset px-3 py-2 text-[12px] text-ink-secondary">
+                Currently in <span className="font-semibold text-ink">{living.join(', ')}</span>.
+                Check them out before placing them anywhere else.
+              </p>
+            )}
             <div className="grid max-h-44 gap-2.5 overflow-y-auto pr-1 sm:grid-cols-2">
               {state.properties.map((p) => (
                 <Checkbox

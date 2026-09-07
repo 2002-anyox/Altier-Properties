@@ -13,6 +13,7 @@
 
 import { TODAY, addDays, iso } from './dates.js'
 import { AMENITY_POOL, COMMERCIAL_AMENITIES } from './defaults.js'
+import { depositFor, timesFor } from './agreement.js'
 import type {
   Booking, BookingSource, Client, ClientKind, Invoice, Property,
   PropertyStatus, PropertyType, Role, TeamMember, TenancyMode,
@@ -53,6 +54,9 @@ export interface PropertyDraft {
   managerId: string
   amenities: string[]
   availableFrom: string | null
+  /** Where the pin was dropped, or null while there isn't one. */
+  lat: number | null
+  lng: number | null
   notes: string
 }
 
@@ -75,6 +79,8 @@ export const emptyPropertyDraft = (managerId: string): PropertyDraft => ({
   managerId,
   amenities: [],
   availableFrom: iso(TODAY),
+  lat: null,
+  lng: null,
   notes: '',
 })
 
@@ -94,6 +100,8 @@ export const propertyDraftFrom = (p: Property): PropertyDraft => ({
   managerId: p.managerId,
   amenities: p.amenities,
   availableFrom: p.availableFrom,
+  lat: p.address.lat,
+  lng: p.address.lng,
   notes: p.notes,
 })
 
@@ -112,6 +120,11 @@ const addressOf = (draft: PropertyDraft) => ({
   city: draft.city.trim() || 'Kampala',
   country: draft.country.trim() || 'Uganda',
   ...coordsFor(draft.district.trim() || draft.city.trim()),
+  /* Both or neither. Half a pin puts the home in the Atlantic, and the
+     schema refuses one anyway — better to drop it here than to be told. */
+  ...(draft.lat !== null && draft.lng !== null
+    ? { lat: draft.lat, lng: draft.lng }
+    : { lat: null, lng: null }),
 })
 
 export function newProperty(draft: PropertyDraft, existing: Property[]): Property {
@@ -233,6 +246,10 @@ export interface BookingDraft {
   noticeDays: number
   guests: number
   source: BookingSource
+  /* The times of day arrival and departure are expected. A stay lives or
+     dies by them; a lease agrees them once and forgets them. */
+  checkIn: string
+  checkOut: string
   notes: string
 }
 
@@ -250,8 +267,32 @@ export const emptyBookingDraft = (propertyId: string, clientId: string): Booking
   noticeDays: 60,
   guests: 2,
   source: 'direct',
+  ...timesFor('long_term'),
   notes: '',
 })
+
+/**
+ * The terms a unit implies, folded onto a draft.
+ *
+ * How it is let, its asking price as the rent, and the deposit that
+ * follows from both. Applied when the form opens and again whenever the
+ * unit underneath the agreement changes — otherwise the rent stays at
+ * the last unit's figure, and a shilling amount from a different home
+ * ends up on somebody's bill with nothing on screen to say so.
+ *
+ * Anything typed by hand afterwards stands; this only moves the numbers
+ * when the unit moves.
+ */
+export function applyPropertyTerms(property: Property, draft: BookingDraft): BookingDraft {
+  return {
+    ...draft,
+    mode: property.mode,
+    rate: property.price,
+    deposit: depositFor(property),
+    advanceMonths: advanceFloor(property.mode) || draft.advanceMonths,
+    ...timesFor(property.mode),
+  }
+}
 
 /** Months of rent an agreement of this shape takes up front. */
 export const advanceFloor = (mode: TenancyMode) => (mode === 'rental' ? 3 : 0)
@@ -281,8 +322,12 @@ export function newBooking(draft: BookingDraft, existing: Booking[]): Booking {
     noticeDays: Math.max(0, Math.round(draft.noticeDays)),
     guests: Math.max(1, Math.round(draft.guests)),
     source: draft.source,
-    checkIn: draft.mode === 'short_stay' ? '15:00' : '12:00',
-    checkOut: draft.mode === 'short_stay' ? '11:00' : '12:00',
+    checkIn: draft.checkIn || timesFor(draft.mode).checkIn,
+    checkOut: draft.checkOut || timesFor(draft.mode).checkOut,
+    /* Nobody has arrived yet, whatever the calendar says. Checking in is
+       a thing somebody does, not a date passing. */
+    arrivedOn: null,
+    departedOn: null,
     notes: draft.notes.trim(),
     createdAt: iso(TODAY),
   }
@@ -409,6 +454,8 @@ export const bookingDraftFrom = (b: Booking): BookingDraft => ({
   noticeDays: b.noticeDays,
   guests: b.guests,
   source: b.source,
+  checkIn: b.checkIn,
+  checkOut: b.checkOut,
   notes: b.notes,
 })
 
@@ -428,6 +475,8 @@ export function editBooking(existing: Booking, draft: BookingDraft): Booking {
     noticeDays: Math.max(0, Math.round(draft.noticeDays)),
     guests: Math.max(1, Math.round(draft.guests)),
     source: draft.source,
+    checkIn: draft.checkIn || existing.checkIn,
+    checkOut: draft.checkOut || existing.checkOut,
     notes: draft.notes.trim(),
   }
 }

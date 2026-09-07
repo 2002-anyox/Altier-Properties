@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Building2 } from 'lucide-react'
 import {
-  Button, Checkbox, Field, Input, Modal, PROPERTY_STATUS_META, Select, Textarea,
+  Button, Checkbox, Field, Input, Modal, NumberInput, PROPERTY_STATUS_META, Select, Textarea,
 } from '../ui'
 import { useStore } from '../../lib/store.js'
 import {
@@ -9,6 +9,7 @@ import {
   type PropertyDraft,
 } from '../../lib/create.js'
 import { BASE_CURRENCY } from '../../lib/money.js'
+import { PinPicker } from '../PropertyMap.js'
 import type { Property, PropertyStatus, PropertyType, TenancyMode } from '../../lib/types.js'
 
 const TYPES: Array<[PropertyType, string]> = [
@@ -133,23 +134,34 @@ export function PropertyFormModal({
           <Field label="Country" id="pf-country">
             <Input id="pf-country" value={draft.country} onChange={(e) => set('country', e.target.value)} />
           </Field>
+
+          {/* A written address gets somebody to the neighbourhood. A pin
+              gets a plumber to the door, which is what the address is for. */}
+          <div className="sm:col-span-2">
+            <p className="mb-1.5 text-[12.5px] font-medium text-ink-secondary">Where it is</p>
+            <PinPicker
+              value={draft.lat !== null && draft.lng !== null ? { lat: draft.lat, lng: draft.lng } : null}
+              address={[draft.line1, draft.district, draft.city, draft.country].filter(Boolean).join(', ')}
+              onChange={(pin) => setDraft((d) => ({ ...d, lat: pin?.lat ?? null, lng: pin?.lng ?? null }))}
+            />
+          </div>
         </fieldset>
 
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Bedrooms" id="pf-beds">
-            <Input id="pf-beds" type="number" min={0} value={draft.bedrooms} onChange={(e) => set('bedrooms', Number(e.target.value))} />
+            <NumberInput id="pf-beds" min={0} max={30} stepper value={draft.bedrooms} onChange={(v) => set('bedrooms', v)} />
           </Field>
           <Field label="Bathrooms" id="pf-baths">
-            <Input id="pf-baths" type="number" min={0} value={draft.bathrooms} onChange={(e) => set('bathrooms', Number(e.target.value))} />
+            <NumberInput id="pf-baths" min={0} max={30} stepper value={draft.bathrooms} onChange={(v) => set('bathrooms', v)} />
           </Field>
           <Field label="Size (m²)" id="pf-size">
-            <Input id="pf-size" type="number" min={0} value={draft.sizeSqm} onChange={(e) => set('sizeSqm', Number(e.target.value))} />
+            <NumberInput id="pf-size" min={0} suffix="m²" value={draft.sizeSqm} onChange={(v) => set('sizeSqm', v)} />
           </Field>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={rateLabel} id="pf-price" hint={`Held in ${BASE_CURRENCY}, shown in your chosen currency.`}>
-            <Input id="pf-price" type="number" min={0} step={1000} value={draft.price} onChange={(e) => set('price', Number(e.target.value))} />
+            <NumberInput id="pf-price" min={0} step={10_000} value={draft.price} onChange={(v) => set('price', v)} />
           </Field>
           <Field label="Assigned manager" id="pf-manager">
             <Select id="pf-manager" value={draft.managerId} onChange={(e) => set('managerId', e.target.value)}>

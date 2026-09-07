@@ -325,7 +325,7 @@ async function main() {
   })
   owner.id = memberId
   const ownerProfile = 'pr-sso-owner'
-  const w: Workspace = { organizationId, memberId, name: owner.name }
+  const w: Workspace = { organizationId, memberId, name: owner.name, timezone: 'Africa/Kampala' }
   await addMember(db, w, colleague)
 
   /** Walks the flow to the point where the provider would answer. */
