@@ -6,6 +6,9 @@ import {
   Receipt, Star, Trash2, TrendingUp, User, Wrench,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader.js'
+import { PortfolioMap } from '../components/PropertyMap.js'
+import { mapsConfigured } from '../lib/maps.js'
+import { pinOf } from '../lib/geo.js'
 import { PropertyImage } from '../components/PropertyImage.js'
 import { ChartFrame, ColumnChart, VIZ } from '../components/charts'
 import {
@@ -300,6 +303,21 @@ export default function PropertyDetail() {
                 ))}
               </dl>
             </Card>
+
+            {/* Where it actually is. Only when somebody has pinned it — an
+                empty map centred on Kampala says nothing true. */}
+            {mapsConfigured() && pinOf(property.address) && (
+              <Card className="overflow-hidden lg:col-span-3">
+                <CardHeader
+                  title="Location"
+                  subtitle={`${property.address.line1}, ${property.address.district}, ${property.address.city}`}
+                />
+                <PortfolioMap
+                  properties={[property]}
+                  className="mt-4 h-64 rounded-none border-0 border-t"
+                />
+              </Card>
+            )}
           </div>
         )}
 

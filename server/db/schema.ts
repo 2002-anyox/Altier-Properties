@@ -15,8 +15,8 @@
  * ------------------------------------------------------------------ */
 
 import {
-  bigint, boolean, check, date, index, integer, jsonb, pgEnum, pgTable,
-  primaryKey, real, text, time, timestamp, uniqueIndex,
+  bigint, boolean, check, date, doublePrecision, index, integer, jsonb, pgEnum,
+  pgTable, primaryKey, real, text, time, timestamp, uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 
@@ -336,6 +336,11 @@ export const properties = pgTable('properties', {
   /** Normalised 0–1 coordinates for the schematic portfolio map. */
   mapX: real('map_x').notNull(),
   mapY: real('map_y').notNull(),
+  /* Where it actually is, in WGS 84 — the numbers a map app understands.
+     Null together until somebody drops a pin on it; a half-set pair would
+     put the home in the Gulf of Guinea, so the schema refuses one. */
+  latitude: doublePrecision('latitude'),
+  longitude: doublePrecision('longitude'),
 
   bedrooms: integer('bedrooms').notNull(),
   bathrooms: integer('bathrooms').notNull(),
@@ -356,6 +361,8 @@ export const properties = pgTable('properties', {
   index('properties_manager_idx').on(t.managerId),
   check('properties_price_positive', sql`${t.price} >= 0`),
   check('properties_rating_range', sql`${t.rating} >= 0 AND ${t.rating} <= 5`),
+  check('properties_pin_complete', sql`(${t.latitude} IS NULL) = (${t.longitude} IS NULL)`),
+  check('properties_pin_on_earth', sql`${t.latitude} IS NULL OR (${t.latitude} BETWEEN -90 AND 90 AND ${t.longitude} BETWEEN -180 AND 180)`),
 ])
 
 export const propertyAmenities = pgTable('property_amenities', {

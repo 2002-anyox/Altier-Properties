@@ -1,19 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CalendarPlus } from 'lucide-react'
-import { Button, EmptyState, Field, Input, Modal, Select, Textarea } from '../ui'
+import { AlertTriangle, CalendarPlus } from 'lucide-react'
+import { Button, EmptyState, Field, Input, Modal, NumberInput, Select, Textarea } from '../ui'
 import { useStore } from '../../lib/store.js'
 import {
-  advanceFloor, bookingDraftFrom, editBooking, emptyBookingDraft, newBooking,
-  openingCharges, type BookingDraft,
+  advanceFloor, applyPropertyTerms, bookingDraftFrom, editBooking, emptyBookingDraft,
+  newBooking, openingCharges, type BookingDraft,
 } from '../../lib/create.js'
+import { MODE_LABEL, fieldsFor, modeSummary } from '../../lib/agreement.js'
+import { holdBlocking, holdsOf, whyBlocked } from '../../lib/occupancy.js'
 import { money } from '../../lib/format.js'
-import type { Booking, BookingSource, Property, TenancyMode } from '../../lib/types.js'
+import type { Booking, BookingSource, Client, Property, TenancyMode } from '../../lib/types.js'
 
-const MODES: Array<[TenancyMode, string]> = [
-  ['long_term', 'Fixed-term lease'],
-  ['rental', 'Open-ended rental'],
-  ['short_stay', 'Short stay'],
-]
+const MODES: TenancyMode[] = ['long_term', 'rental', 'short_stay']
 
 const SOURCES: Array<[BookingSource, string]> = [
   ['direct', 'Direct'],
@@ -47,39 +45,75 @@ export function BookingFormModal({
   const [draft, setDraft] = useState<BookingDraft>(() =>
     emptyBookingDraft(propertyId ?? lettable[0]?.id ?? '', state.clients[0]?.id ?? ''))
 
-  /* Opening the form should reflect the unit it was opened from, and pick
-     up that unit's own letting mode and rent rather than a stale default. */
+  /* Opening the form should reflect whatever it was opened from — a unit,
+     a client, or neither — and pick up that unit's own letting mode and
+     rent rather than a stale default. */
   useEffect(() => {
     if (!open) return
     if (booking) { setDraft(bookingDraftFrom(booking)); return }
-    const id = propertyId ?? lettable[0]?.id ?? ''
+    const client = state.clients.find((c) => c.id === clientId) ?? state.clients[0]
+    const id = propertyId ?? homeOf(client, state.properties, state.bookings)?.id ?? lettable[0]?.id ?? ''
     const property = state.properties.find((p) => p.id === id)
-    const base = emptyBookingDraft(id, clientId ?? state.clients[0]?.id ?? '')
-    setDraft(property ? termsFor(property, base) : base)
-  }, [open, propertyId, clientId, booking, lettable, state.properties, state.clients])
+    const base = emptyBookingDraft(id, client?.id ?? '')
+    setDraft(property ? applyPropertyTerms(property, base) : base)
+  }, [open, propertyId, clientId, booking, lettable, state.properties, state.clients, state.bookings])
 
   const set = <K extends keyof BookingDraft>(key: K, value: BookingDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }))
 
-  /**
-   * Choosing a different unit re-prices the agreement.
-   *
-   * It used to change only which property the agreement named, so the rent
-   * and deposit stayed at the last unit's figures — a shilling amount from
-   * a different home, on somebody's bill, with nothing on screen to say so.
-   * Anything typed by hand afterwards still stands; this only moves the
-   * numbers when the unit underneath them moves.
-   */
+  /** Choosing a different unit re-prices the agreement — see applyPropertyTerms. */
   const chooseProperty = (id: string) => {
     const property = state.properties.find((p) => p.id === id)
-    setDraft((d) => (property ? termsFor(property, { ...d, propertyId: id }) : { ...d, propertyId: id }))
+    setDraft((d) => (property ? applyPropertyTerms(property, { ...d, propertyId: id }) : { ...d, propertyId: id }))
+  }
+
+  /**
+   * Choosing a client moves the agreement to the home they belong to.
+   *
+   * Somebody is placed in a unit long before an agreement is drawn up —
+   * they enquired about flat 4B, they were shown flat 4B, the record says
+   * flat 4B. Making the person picking the name then find the same flat a
+   * second time in a list of thirty is how the wrong one gets picked, and
+   * the wrong one carries the wrong rent. So the home follows the client,
+   * with its rent and deposit, and can still be changed by hand.
+   */
+  const chooseClient = (id: string) => {
+    const client = state.clients.find((c) => c.id === id)
+    const home = homeOf(client, state.properties, state.bookings)
+    setDraft((d) => {
+      const next = { ...d, clientId: id }
+      return home && home.id !== d.propertyId ? applyPropertyTerms(home, { ...next, propertyId: home.id }) : next
+    })
   }
 
   const chosen = state.properties.find((p) => p.id === draft.propertyId)
+  const client = state.clients.find((c) => c.id === draft.clientId)
+  const shape = fieldsFor(draft.mode)
   const rental = draft.mode === 'rental'
   const shortStay = draft.mode === 'short_stay'
   const floor = advanceFloor(draft.mode)
-  const ready = !!draft.propertyId && !!draft.clientId && (rental || !!draft.end)
+
+  /* Somebody who has not moved out of their last home cannot be placed in
+     another one. Found here before the click and refused again on the
+     server, so the reason is the same either way. */
+  const blocking = useMemo(
+    () => (editing ? null : holdBlocking(state.bookings, draft.clientId, draft.propertyId)),
+    [editing, state.bookings, draft.clientId, draft.propertyId],
+  )
+  const blockedBy = blocking && state.properties.find((p) => p.id === blocking.propertyId)
+
+  /** Why the button is off, in the words that would fix it. */
+  const problem = useMemo(() => {
+    if (!draft.clientId) return 'Choose who the agreement is with.'
+    if (!draft.propertyId) return 'Choose the home it is for.'
+    if (shape.end && !draft.end) return `Give it ${shortStay ? 'a departure date' : 'an end date'}.`
+    if (shape.end && draft.end && draft.end <= draft.start) {
+      return shortStay ? 'They cannot leave before they arrive.' : 'The term has to end after it starts.'
+    }
+    if (draft.rate <= 0) return `Set the ${shape.rateLabel.toLowerCase()} — an agreement at nothing bills nothing.`
+    if (blocking && blockedBy && client) return whyBlocked(client.name, blockedBy.name, chosen?.name ?? 'this home')
+    return null
+  }, [draft, shape, shortStay, blocking, blockedBy, client, chosen])
 
   /* What the tenant owes on day one, shown before anything is committed —
      the advance is the whole point of a rental, so it should not be a
@@ -92,7 +126,7 @@ export function BookingFormModal({
   }, [rental, shortStay, draft.advanceMonths, draft.rate, draft.deposit, draft.start, draft.end])
 
   const submit = () => {
-    if (!ready) return
+    if (problem) return
     if (booking) {
       dispatch({ type: 'update-booking', booking: editBooking(booking, draft) })
       toast({ title: `Agreement ${booking.reference} updated`, tone: 'success' })
@@ -102,7 +136,6 @@ export function BookingFormModal({
     const created = newBooking(draft, state.bookings)
     const invoices = openingCharges(created, state.invoices)
     dispatch({ type: 'add-booking', booking: created, invoices })
-    const client = state.clients.find((c) => c.id === created.clientId)
     toast({
       title: `Agreement ${created.reference} created`,
       body: invoices.length
@@ -128,8 +161,11 @@ export function BookingFormModal({
         <Button variant="secondary" onClick={onClose}>Close</Button>
       ) : (
         <>
+          {/* The reason sits beside the button rather than behind a click
+              on a disabled one, which tells nobody anything. */}
+          {problem && <p className="mr-auto max-w-[60%] self-center text-[12px] leading-snug text-ink-muted">{problem}</p>}
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" icon={<CalendarPlus size={14} />} onClick={submit} disabled={!ready}>
+          <Button variant="primary" icon={<CalendarPlus size={14} />} onClick={submit} disabled={!!problem}>
             {editing ? 'Save changes' : 'Create agreement'}
           </Button>
         </>
@@ -145,84 +181,115 @@ export function BookingFormModal({
         />
       ) : (
         <div className="grid gap-5">
+          {/* The client comes first: they decide which home the form lands on. */}
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Property" id="bf-prop">
+            <Field label="Client" id="bf-client" hint={editing ? undefined : 'Their home fills in below.'}>
+              <Select id="bf-client" value={draft.clientId} disabled={editing} onChange={(e) => chooseClient(e.target.value)}>
+                {state.clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </Select>
+            </Field>
+            <Field
+              label="Property"
+              id="bf-prop"
+              hint={chosen ? `${MODE_LABEL[chosen.mode]} · ${money(chosen.price)} ${fieldsFor(chosen.mode).rateUnit}` : undefined}
+            >
               <Select id="bf-prop" value={draft.propertyId} disabled={editing} onChange={(e) => chooseProperty(e.target.value)}>
                 {lettable.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </Select>
             </Field>
-            <Field label="Client" id="bf-client">
-              <Select id="bf-client" value={draft.clientId} disabled={editing} onChange={(e) => set('clientId', e.target.value)}>
-                {state.clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </Select>
-            </Field>
           </div>
 
-          <Field
-            label="Agreement type"
-            id="bf-mode"
-            hint={rental
-              ? `Open-ended: it runs until notice is given. At least ${floor} months are taken up front.`
-              : shortStay
-                ? 'Nightly, with a fixed departure date.'
-                : 'A fixed term with an agreed end date.'}
-          >
+          {blocking && blockedBy && client && (
+            <div className="flex gap-3 rounded-2xl border border-[rgb(var(--c-status-serious)/0.4)] bg-[rgb(var(--c-status-serious)/0.08)] p-4">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0 text-[rgb(var(--c-status-serious))]" aria-hidden />
+              <div className="text-[12.5px] leading-relaxed text-ink-secondary">
+                <p className="font-semibold text-ink">Still in {blockedBy.name}</p>
+                <p className="mt-1">
+                  {client.name} holds {blockedBy.name} under {blocking.reference}.
+                  Check them out of it first — otherwise they would be billed rent for two homes at once.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <Field label="Agreement type" id="bf-mode" hint={modeSummary(draft.mode)}>
             <Select id="bf-mode" value={draft.mode} disabled={editing} onChange={(e) => set('mode', e.target.value as TenancyMode)}>
-              {MODES.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+              {MODES.map((v) => <option key={v} value={v}>{MODE_LABEL[v]}</option>)}
             </Select>
           </Field>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label={shortStay ? 'Arrival' : 'Starts'} id="bf-start">
+            <Field label={shape.startLabel} id="bf-start">
               <Input id="bf-start" type="date" value={draft.start} onChange={(e) => set('start', e.target.value)} />
             </Field>
-            {rental ? (
-              <div className="flex items-end pb-1 text-[12.5px] text-ink-muted">
-                No end date — the tenant gives {draft.noticeDays} days' notice.
-              </div>
-            ) : (
-              <Field label={shortStay ? 'Departure' : 'Ends'} id="bf-end">
+            {shape.end ? (
+              <Field
+                label={shape.endLabel}
+                id="bf-end"
+                hint={shortStay && draft.end && draft.end > draft.start
+                  ? `${nightsBetween(draft.start, draft.end)} nights`
+                  : undefined}
+              >
                 <Input id="bf-end" type="date" min={draft.start} value={draft.end} onChange={(e) => set('end', e.target.value)} />
               </Field>
+            ) : (
+              <div className="flex items-end pb-1 text-[12.5px] text-ink-muted">
+                No end date — the tenant gives {draft.noticeDays} days’ notice.
+              </div>
             )}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
-              label={shortStay ? 'Nightly rate' : 'Monthly rent'}
+              label={shape.rateLabel}
               id="bf-rate"
               hint={chosen && draft.rate !== chosen.price
-                ? `${chosen.name} is listed at ${money(chosen.price)}${shortStay ? ' a night' : ' a month'}.`
+                ? `${chosen.name} is listed at ${money(chosen.price)} ${shape.rateUnit}.`
                 : 'Taken from the property. Change it here if this agreement differs.'}
             >
-              <Input id="bf-rate" type="number" min={0} step={1000} value={draft.rate} onChange={(e) => set('rate', Number(e.target.value))} />
+              <NumberInput id="bf-rate" min={0} step={10_000} value={draft.rate} onChange={(v) => set('rate', v)} />
             </Field>
             <Field label="Deposit" id="bf-deposit" hint="Refundable; never counted as revenue.">
-              <Input id="bf-deposit" type="number" min={0} step={1000} value={draft.deposit} onChange={(e) => set('deposit', Number(e.target.value))} />
+              <NumberInput id="bf-deposit" min={0} step={10_000} value={draft.deposit} onChange={(v) => set('deposit', v)} />
             </Field>
           </div>
 
-          {rental && (
+          {(shape.advance || shape.notice) && (
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field
-                label="Months paid up front"
-                id="bf-advance"
-                hint={`At least ${floor}, so a tenant cannot leave after one or two.`}
-              >
-                <Input
-                  id="bf-advance" type="number" min={floor} value={draft.advanceMonths}
-                  onChange={(e) => set('advanceMonths', Math.max(floor, Number(e.target.value)))}
-                />
+              {shape.advance && (
+                <Field
+                  label="Months paid up front"
+                  id="bf-advance"
+                  hint={`At least ${floor}, so a tenant cannot leave after one or two.`}
+                >
+                  <NumberInput
+                    id="bf-advance" min={floor} max={60} stepper
+                    value={draft.advanceMonths} onChange={(v) => set('advanceMonths', v)}
+                  />
+                </Field>
+              )}
+              {shape.notice && (
+                <Field label="Notice required" id="bf-notice" hint="How much warning before they leave.">
+                  <NumberInput id="bf-notice" min={0} max={365} suffix="days" value={draft.noticeDays} onChange={(v) => set('noticeDays', v)} />
+                </Field>
+              )}
+            </div>
+          )}
+
+          {shape.times && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Arrives after" id="bf-in">
+                <Input id="bf-in" type="time" value={draft.checkIn} onChange={(e) => set('checkIn', e.target.value)} />
               </Field>
-              <Field label="Notice required (days)" id="bf-notice">
-                <Input id="bf-notice" type="number" min={0} value={draft.noticeDays} onChange={(e) => set('noticeDays', Number(e.target.value))} />
+              <Field label="Leaves by" id="bf-out">
+                <Input id="bf-out" type="time" value={draft.checkOut} onChange={(e) => set('checkOut', e.target.value)} />
               </Field>
             </div>
           )}
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label={shortStay ? 'Guests' : 'Occupants'} id="bf-guests">
-              <Input id="bf-guests" type="number" min={1} value={draft.guests} onChange={(e) => set('guests', Number(e.target.value))} />
+            <Field label={shape.occupantsLabel} id="bf-guests">
+              <NumberInput id="bf-guests" min={1} max={99} stepper value={draft.guests} onChange={(v) => set('guests', v)} />
             </Field>
             <Field label="Booked through" id="bf-source">
               <Select id="bf-source" value={draft.source} onChange={(e) => set('source', e.target.value as BookingSource)}>
@@ -270,22 +337,24 @@ export function BookingFormModal({
 }
 
 /**
- * The terms a unit implies: its letting mode, its asking price as the
- * rent, and a deposit proportional to it — one and a half nights for a
- * short stay, two months for anything longer, which is what the business
- * actually asks for.
+ * The home a client belongs to.
  *
- * Applied when the form opens and again whenever the unit changes, so the
- * figures on the bill always belong to the home they are for.
+ * The one they are living in wins: an agreement that has not been checked
+ * out of is a fact, and the form should open on it. Failing that, the
+ * property their record is linked to — enquired about, viewed, next in
+ * line — which is what somebody adding an agreement for them means.
  */
-function termsFor(property: Property, base: BookingDraft): BookingDraft {
-  return {
-    ...base,
-    mode: property.mode,
-    rate: property.price,
-    deposit: property.mode === 'short_stay'
-      ? Math.round(property.price * 1.5)
-      : property.price * 2,
-    advanceMonths: advanceFloor(property.mode) || base.advanceMonths,
+function homeOf(
+  client: Client | undefined,
+  properties: Property[],
+  bookings: Booking[],
+): Property | undefined {
+  if (!client) return undefined
+  const [held] = holdsOf(bookings, client.id)
+  if (held) return properties.find((p) => p.id === held.propertyId)
+  for (const id of client.propertyIds) {
+    const property = properties.find((p) => p.id === id && p.status !== 'inactive')
+    if (property) return property
   }
+  return undefined
 }

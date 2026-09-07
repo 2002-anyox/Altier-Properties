@@ -7,8 +7,9 @@ import {
 import { PageHeader } from '../components/layout/PageHeader.js'
 import {
   Button, Card, Chip, Drawer, EmptyState, Field, Input, MAINTENANCE_STATUS_META, MaintenanceChip,
-  Modal, PRIORITY_META, PriorityChip, SearchInput, SegmentedControl, Select, Textarea, cx,
+  Modal, NumberInput, PRIORITY_META, PriorityChip, SearchInput, SegmentedControl, Select, Textarea, cx,
 } from '../components/ui'
+import { acceptable } from '../lib/numeric.js'
 import { currentMember, useStore } from '../lib/store.js'
 import { can, roleLabel } from '../lib/rbac.js'
 import { TODAY, dayOffset, daysBetween, iso } from '../lib/dates.js'
@@ -421,9 +422,10 @@ export default function Maintenance() {
             hint="Leave it blank if the invoice has not arrived yet."
           >
             <Input
-              id="job-final" type="number" min={0} step={1000} autoFocus
+              id="job-final" type="text" inputMode="decimal" autoFocus
+              className="tnum"
               value={finalCost}
-              onChange={(e) => setFinalCost(e.target.value)}
+              onChange={(e) => { if (acceptable(e.target.value)) setFinalCost(e.target.value) }}
               placeholder={closing ? String(closing.estimatedCost || '') : ''}
             />
           </Field>
@@ -478,10 +480,10 @@ export default function Maintenance() {
               id="job-estimate"
               hint="What you expect it to come to. It is what the board commits."
             >
-              <Input
-                id="job-estimate" type="number" min={0} step={1000}
+              <NumberInput
+                id="job-estimate" min={0} step={10_000}
                 value={draft.estimatedCost}
-                onChange={(e) => setDraft({ ...draft, estimatedCost: Number(e.target.value) })}
+                onChange={(v) => setDraft({ ...draft, estimatedCost: v })}
               />
             </Field>
             <Field

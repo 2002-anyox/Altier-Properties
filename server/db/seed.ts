@@ -84,6 +84,7 @@ export async function seed(db: Db) {
     addressLine1: p.address.line1, district: p.address.district,
     city: p.address.city, country: p.address.country,
     mapX: p.address.x, mapY: p.address.y,
+    latitude: p.address.lat ?? null, longitude: p.address.lng ?? null,
     bedrooms: p.bedrooms, bathrooms: p.bathrooms, sizeSqm: p.sizeSqm,
     price: p.price, managerId: p.managerId, rating: p.rating,
     availableFrom: p.availableFrom, acquiredOn: p.acquiredOn,

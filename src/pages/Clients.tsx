@@ -11,6 +11,7 @@ import { can } from '../lib/rbac.js'
 import { mediumDate, money } from '../lib/format.js'
 import { itemVariants, listVariants } from '../lib/motion.js'
 import { ClientFormModal } from '../components/forms/ClientFormModal.js'
+import { BookingFormModal } from '../components/forms/BookingFormModal.js'
 import type { Client, ClientKind } from '../lib/types.js'
 
 const KIND_LABEL: Record<ClientKind, string> = { tenant: 'Tenant', guest: 'Guest', corporate: 'Corporate', owner: 'Owner' }
@@ -22,6 +23,9 @@ export default function Clients() {
   const [status, setStatus] = useState<'all' | Client['status']>('all')
   const [sort, setSort] = useState<'name' | 'value' | 'recent'>('name')
   const [adding, setAdding] = useState(false)
+  /* Whoever was just added, held only long enough to offer the agreement
+     that almost always follows. Cleared when that form closes. */
+  const [placing, setPlacing] = useState<Client | null>(null)
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -177,7 +181,18 @@ export default function Clients() {
         </motion.ul>
       )}
 
-      <ClientFormModal open={adding} onClose={() => setAdding(false)} />
+      <ClientFormModal
+        open={adding}
+        onClose={() => setAdding(false)}
+        onCreated={(created) => { if (can(state.role, 'edit:bookings')) setPlacing(created) }}
+      />
+      {/* Straight from the name into the home: adding somebody and then
+          hunting for them again on another screen is a step for nothing. */}
+      <BookingFormModal
+        open={!!placing}
+        clientId={placing?.id}
+        onClose={() => setPlacing(null)}
+      />
     </>
   )
 }

@@ -280,6 +280,24 @@ connection string that shows twenty-four plausible properties is the kind of
 fault nobody thinks to check for. `npm run check:nodata` enforces it in CI by
 searching the built bundle for names that exist only in the test fixture.
 
+### The map
+
+The properties page draws a real Google map with a pin per home, and the
+property form places one — click the map, or drag the pin, or press *Find the
+address* and let the geocoder do it. The pin is a coordinate on the property
+record, so it travels with it: the map view, the property page and anyone's
+phone all read the same numbers.
+
+It needs a browser key. Create one in the Google Cloud console with **Maps
+JavaScript API** and **Geocoding API** enabled, restrict it to your domain, and
+set it as `VITE_GOOGLE_MAPS_API_KEY` before building — it is baked into the
+bundle at build time like every `VITE_` variable, so a key set after the fact
+needs a redeploy.
+
+Without a key nothing breaks. The map view falls back to the schematic district
+plan it has always had, the pin picker says plainly that the map is not switched
+on, and every other screen is unaffected.
+
 ## Deploying
 
 The build is the app and nothing else: it holds no records, so it needs a

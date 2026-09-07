@@ -242,6 +242,9 @@ try {
   const json = (body) => ({
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
   })
+  const put = (body) => ({
+    method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  })
   const stamp = Date.now().toString(36)
 
   const property = {
@@ -258,6 +261,42 @@ try {
   ok(storedProperty?.amenities?.length === 2,
      `property created with its amenities (${storedProperty?.amenities?.length ?? 'missing'})`)
 
+  /* ---------------------------- the pin ------------------------------ *
+   * map_x and map_y were never coordinates — a hash of the district name
+   * spread over a square. These are the real thing, and the point of
+   * storing them is that they come back unchanged: a pin that drifts is
+   * a plumber at the wrong gate.
+   * ------------------------------------------------------------------- */
+  ok(storedProperty?.address?.lat === null && storedProperty?.address?.lng === null,
+     'a property saved without a pin has none, rather than a guess')
+
+  const pinned = { ...property, address: { ...property.address, lat: 0.335412, lng: 32.590118 } }
+  const withPin = await get(`/properties/${property.id}`, put(pinned)).then((r) => r.json())
+  const located = withPin.properties?.find((p) => p.id === property.id)
+  ok(located?.address?.lat === 0.335412 && located?.address?.lng === 32.590118,
+     `a dropped pin reads back exactly (${located?.address?.lat}, ${located?.address?.lng})`)
+
+  const offEarth = await get(`/properties/${property.id}`, put({
+    ...property, address: { ...property.address, lat: 91, lng: 32 },
+  }))
+  ok(offEarth.status === 400, `a latitude past the pole is refused (got ${offEarth.status})`)
+
+  const halfPin = await get(`/properties/${property.id}`, put({
+    ...property, address: { ...property.address, lat: 0.335, lng: null },
+  }))
+  const afterHalf = await get('/portfolio').then((r) => r.json())
+  ok(halfPin.status === 200
+     && afterHalf.properties.find((p) => p.id === property.id)?.address?.lat === null,
+     'half a pin is stored as no pin at all')
+
+  const notAPlace = await get(`/properties/${property.id}`, put({
+    ...property, address: { ...property.address, lat: 'somewhere', lng: 'over there' },
+  }))
+  ok(notAPlace.status === 400, `words where a coordinate belongs answer 400 (got ${notAPlace.status})`)
+
+  // Put the pin back so the property ends this run as it was found.
+  await get(`/properties/${property.id}`, put(pinned))
+
   const client = {
     id: `c-smoke-${stamp}`, name: 'Smoke Test Tenant', kind: 'tenant',
     email: 'smoke@example.com', phone: '+256 700 000 000', nationality: 'Ugandan',
@@ -266,6 +305,14 @@ try {
   }
   const madeClient = await get('/clients', json(client)).then((r) => r.json())
   ok(!!madeClient.clients?.find((c) => c.id === client.id), 'client created')
+
+  /* Two more, because a client holds one home at a time now: the checks
+     below that need a second and third tenancy need a second and third
+     person to sign them. */
+  const second = { ...client, id: `c-other-${stamp}`, name: 'Smoke Test Second', email: 'second@example.com' }
+  const third = { ...client, id: `c-third-${stamp}`, name: 'Smoke Test Third', email: 'third@example.com' }
+  await get('/clients', json(second))
+  await get('/clients', json(third))
 
   const booking = {
     id: `b-smoke-${stamp}`, reference: `SMOKE-${stamp}`, propertyId: property.id,
@@ -296,7 +343,7 @@ try {
     const to = plusDays(from, nights)
     const free = {
       id: `b-free-${stamp}`, reference: `FREE-${stamp}`, propertyId: priced.id,
-      clientId: client.id, mode: priced.mode === 'rental' ? 'long_term' : priced.mode,
+      clientId: second.id, mode: priced.mode === 'rental' ? 'long_term' : priced.mode,
       status: 'upcoming', start: from, end: to,
       rate: 0, deposit: 0, advanceMonths: 0, paidThrough: null, noticeDays: 0,
       guests: 2, source: 'direct', checkIn: '15:00', checkOut: '11:00',
@@ -325,10 +372,13 @@ try {
   const secondProperty = { ...property, id: `p-rb-${stamp}`, code: `RB-${stamp}`, status: 'available' }
   await get('/properties', json(secondProperty))
   const doomed = await get('/bookings', json({
-    booking: { ...booking, id: `b-rb-${stamp}`, reference: `RB-${stamp}`, propertyId: secondProperty.id },
+    booking: {
+      ...booking, id: `b-rb-${stamp}`, reference: `RB-${stamp}`,
+      propertyId: secondProperty.id, clientId: third.id,
+    },
     invoices: [{
       ...charge, id: `i-rb-${stamp}`, number: `RB-INV-${stamp}`,
-      propertyId: secondProperty.id, bookingId: `b-rb-${stamp}`,
+      clientId: third.id, propertyId: secondProperty.id, bookingId: `b-rb-${stamp}`,
       // earns_to before earns_from — the schema must refuse it.
       earnsFrom: today, earnsTo: '2020-01-01',
     }],
@@ -341,6 +391,44 @@ try {
 
   const malformed = await get('/properties', json({ id: 'x', name: '' }))
   ok(malformed.status === 400, `a property with no name answers 400 (got ${malformed.status})`)
+
+  /* ---------------------- one home at a time ------------------------- *
+   * A client who has not moved out cannot be placed somewhere else. It
+   * is nearly always the wrong name picked off a list, and it would
+   * raise a second set of charges — rent for two homes, from one
+   * mis-click. Refused here, not just greyed out in the form.
+   * ------------------------------------------------------------------- */
+  const spareProperty = { ...property, id: `p-second-${stamp}`, code: `SEC-${stamp}`, status: 'available' }
+  await get('/properties', json(spareProperty))
+
+  const secondHome = {
+    ...booking, id: `b-second-${stamp}`, reference: `SECOND-${stamp}`,
+    propertyId: spareProperty.id, mode: 'long_term', status: 'upcoming',
+    start: plusDays(today, 7), end: plusMonths(plusDays(today, 7), 12),
+  }
+  const twoHomes = await get('/bookings', json({ booking: secondHome, invoices: [] }))
+  ok(twoHomes.status === 409,
+     `a client still in one home is refused a second (got ${twoHomes.status})`)
+  const refusalText = await twoHomes.json().then((b) => b.error ?? '').catch(() => '')
+  ok(refusalText.includes(property.name),
+     `and the refusal names the home they are in (${refusalText.slice(0, 80)})`)
+
+  const afterRefusal = await get('/portfolio').then((r) => r.json())
+  ok(!afterRefusal.bookings.find((b) => b.id === secondHome.id),
+     'the refused agreement stored nothing')
+  ok(afterRefusal.properties.find((p) => p.id === spareProperty.id)?.status === 'available',
+     'and left the other unit free')
+
+  /* The same unit is not a second home — renewing a lease, or a guest
+     extending, is the home they are already in. */
+  const renewal = {
+    ...booking, id: `b-renew-${stamp}`, reference: `RENEW-${stamp}`,
+    mode: 'long_term', status: 'upcoming',
+    start: plusMonths(today, 12), end: plusMonths(today, 24),
+  }
+  const renewed = await get('/bookings', json({ booking: renewal, invoices: [] }))
+  ok(renewed.status === 200, `renewing in the same home is allowed (got ${renewed.status})`)
+  await get(`/bookings/${renewal.id}`, { method: 'DELETE' })
 
   /* ------------------------- arriving and leaving -------------------- *
    * The two moments the business turns on, and until now there was no
@@ -380,11 +468,17 @@ try {
   ok(typeof afterDeparture.settled?.outstanding === 'number',
      `check-out says what is still owed (${afterDeparture.settled?.outstanding})`)
 
-  /* ------------------------ editing and removal ---------------------- */
-  const put = (body) => ({
-    method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
-  })
+  /* And now that they have actually moved out, the home that was refused
+     a moment ago is theirs to take. That is the whole rule: not "one
+     home ever", but "one at a time". */
+  const nowAllowed = await get('/bookings', json({ booking: secondHome, invoices: [] }))
+  ok(nowAllowed.status === 200,
+     `once they have moved out, the next home is allowed (got ${nowAllowed.status})`)
+  const placed = await nowAllowed.json()
+  ok(!!placed.bookings?.find((b) => b.id === secondHome.id), 'and the agreement is on file')
+  await get(`/bookings/${secondHome.id}`, { method: 'DELETE' })
 
+  /* ------------------------ editing and removal ---------------------- */
   const renamed = await get(`/clients/${client.id}`, put({ ...client, name: 'Renamed Tenant', status: 'active' }))
     .then((r) => r.json())
   ok(renamed.clients?.find((c) => c.id === client.id)?.name === 'Renamed Tenant', 'client edit persisted')

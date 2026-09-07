@@ -978,4 +978,55 @@ ALTER TABLE "organizations"
   END IF;
 END $mig_8$;
 
+-- ---------------------------------------------------------------
+-- migration: 0009_coordinates
+-- ---------------------------------------------------------------
+DO $mig_9$
+BEGIN
+  IF EXISTS (SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE hash = '5106d676a52042832405a22a20a729c6854d6ac5a764a402b56dc25c445bf173') THEN
+    RAISE NOTICE 'already applied: 0009_coordinates';
+  ELSE
+    EXECUTE $mig_9_sql$
+-- ---------------------------------------------------------------
+-- Where the property actually is
+--
+-- map_x and map_y are not coordinates. They are a hash of the district
+-- name spread over a unit square, which is enough to cluster a schematic
+-- and nothing else: two homes on opposite sides of Kololo land on the
+-- same dot, and no one can be sent to either of them.
+--
+-- These are the real thing — WGS 84, the numbers a phone's map app
+-- understands. Nullable, because a portfolio that has never opened the
+-- map has none, and inventing a location is worse than admitting there
+-- isn't one. The schematic coordinates stay: they still draw the fallback
+-- map for anyone without a Maps key configured.
+-- ---------------------------------------------------------------
+ALTER TABLE "properties"
+  ADD COLUMN IF NOT EXISTS "latitude" double precision;
+ALTER TABLE "properties"
+  ADD COLUMN IF NOT EXISTS "longitude" double precision;
+
+-- A pin is both numbers or neither. Half a coordinate is a point in the
+-- Gulf of Guinea, which is where every mis-set latitude on earth ends up.
+ALTER TABLE "properties"
+  DROP CONSTRAINT IF EXISTS "properties_pin_complete";
+ALTER TABLE "properties"
+  ADD CONSTRAINT "properties_pin_complete"
+  CHECK (("latitude" IS NULL) = ("longitude" IS NULL));
+
+ALTER TABLE "properties"
+  DROP CONSTRAINT IF EXISTS "properties_pin_on_earth";
+ALTER TABLE "properties"
+  ADD CONSTRAINT "properties_pin_on_earth"
+  CHECK (
+    "latitude" IS NULL
+    OR ("latitude" BETWEEN -90 AND 90 AND "longitude" BETWEEN -180 AND 180)
+  );
+    $mig_9_sql$;
+    INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at)
+    VALUES ('5106d676a52042832405a22a20a729c6854d6ac5a764a402b56dc25c445bf173', 1787900600000);
+    RAISE NOTICE 'applied: 0009_coordinates';
+  END IF;
+END $mig_9$;
+
 -- Done. Redeploy so the app picks up the code that uses this schema.

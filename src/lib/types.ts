@@ -53,6 +53,14 @@ export interface Address {
   /** Normalised 0–1 coords used by the schematic portfolio map. */
   x: number
   y: number
+  /**
+   * Where the home actually is, in WGS 84 — a real pin on a real map.
+   *
+   * Null until somebody drops one. Both or neither: half a coordinate
+   * is a point in the ocean off Ghana, and the schema refuses it.
+   */
+  lat: number | null
+  lng: number | null
 }
 
 export interface OccupancySpell {

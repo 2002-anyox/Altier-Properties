@@ -720,6 +720,31 @@ export function createApp(db: Db, driver: string) {
 
   class BadRequest extends Error {}
 
+  /**
+   * A pin is two numbers on the planet, or nothing at all.
+   *
+   * The database refuses a half-set pair and anything off the globe, but
+   * a string where a number belongs would reach the driver as a type
+   * error and come back as a 500 — which reads as "the server broke"
+   * rather than "that is not a coordinate". Both are normalised to null
+   * here so the map can be left unset without ceremony.
+   */
+  function requirePin(body: Property) {
+    const { lat, lng } = body.address as { lat?: unknown; lng?: unknown }
+    if (lat === undefined || lat === null || lng === undefined || lng === null) {
+      body.address.lat = null
+      body.address.lng = null
+      return
+    }
+    if (typeof lat !== 'number' || typeof lng !== 'number'
+        || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+      throw new BadRequest('That is not a location.')
+    }
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      throw new BadRequest('That location is not on the map.')
+    }
+  }
+
   /** Throws unless `value` is an object carrying every named string field. */
   function requireShape(value: unknown, fields: string[], what: string) {
     const record = value as Record<string, unknown> | null
@@ -738,6 +763,7 @@ export function createApp(db: Db, driver: string) {
       const body = req.body as Property
       requireShape(body, ['id', 'code', 'name', 'type', 'mode', 'status', 'managerId'], 'property')
       if (!body.address?.line1) throw new BadRequest('A property needs an address.')
+      requirePin(body)
       await addProperty(tx, w, body)
       return withPortfolio(tx, w, res, req)
     }))
@@ -747,6 +773,7 @@ export function createApp(db: Db, driver: string) {
       const body = req.body as Property
       requireShape(body, ['name', 'type', 'mode', 'status', 'managerId'], 'property')
       if (!body.address?.line1) throw new BadRequest('A property needs an address.')
+      requirePin(body)
       await updateProperty(tx, w, param(req, 'id'), body)
       return withPortfolio(tx, w, res, req)
     }))

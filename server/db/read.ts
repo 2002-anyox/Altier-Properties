@@ -114,6 +114,7 @@ export async function readPortfolio(db: Db, organizationId: string): Promise<Por
     address: {
       line1: p.addressLine1, district: p.district, city: p.city,
       country: p.country, x: p.mapX, y: p.mapY,
+      lat: p.latitude, lng: p.longitude,
     },
     bedrooms: p.bedrooms, bathrooms: p.bathrooms, sizeSqm: p.sizeSqm,
     amenities: (amenities.get(p.id) ?? []).map((a) => a.amenity),

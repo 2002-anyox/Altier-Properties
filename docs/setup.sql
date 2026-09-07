@@ -1158,6 +1158,45 @@ ALTER TABLE "organizations"
   ADD COLUMN IF NOT EXISTS "timezone" text DEFAULT 'Africa/Kampala' NOT NULL;
 
 -- ---------------------------------------------------------------
+-- migration: 0009_coordinates
+-- ---------------------------------------------------------------
+-- ---------------------------------------------------------------
+-- Where the property actually is
+--
+-- map_x and map_y are not coordinates. They are a hash of the district
+-- name spread over a unit square, which is enough to cluster a schematic
+-- and nothing else: two homes on opposite sides of Kololo land on the
+-- same dot, and no one can be sent to either of them.
+--
+-- These are the real thing — WGS 84, the numbers a phone's map app
+-- understands. Nullable, because a portfolio that has never opened the
+-- map has none, and inventing a location is worse than admitting there
+-- isn't one. The schematic coordinates stay: they still draw the fallback
+-- map for anyone without a Maps key configured.
+-- ---------------------------------------------------------------
+ALTER TABLE "properties"
+  ADD COLUMN IF NOT EXISTS "latitude" double precision;
+ALTER TABLE "properties"
+  ADD COLUMN IF NOT EXISTS "longitude" double precision;
+
+-- A pin is both numbers or neither. Half a coordinate is a point in the
+-- Gulf of Guinea, which is where every mis-set latitude on earth ends up.
+ALTER TABLE "properties"
+  DROP CONSTRAINT IF EXISTS "properties_pin_complete";
+ALTER TABLE "properties"
+  ADD CONSTRAINT "properties_pin_complete"
+  CHECK (("latitude" IS NULL) = ("longitude" IS NULL));
+
+ALTER TABLE "properties"
+  DROP CONSTRAINT IF EXISTS "properties_pin_on_earth";
+ALTER TABLE "properties"
+  ADD CONSTRAINT "properties_pin_on_earth"
+  CHECK (
+    "latitude" IS NULL
+    OR ("latitude" BETWEEN -90 AND 90 AND "longitude" BETWEEN -180 AND 180)
+  );
+
+-- ---------------------------------------------------------------
 -- Record the migrations as applied, so `npm run db:migrate`
 -- against this database does nothing rather than failing.
 -- ---------------------------------------------------------------
@@ -1176,6 +1215,7 @@ INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('8639019
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('6926432b1238e320f34332a1419792a18746635a7438a5dfd4fd8974012b7c7b', 1787900300000);
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('b422ae1153da2056f9ab7b1a8fb3f4afef1720a14872230389a999cb7a7d9f1f', 1787900400000);
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('4a7543b3291ee3bfa7775877272555881020cf26d0b9d432aa32c2e15aa3df99', 1787900500000);
+INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('5106d676a52042832405a22a20a729c6854d6ac5a764a402b56dc25c445bf173', 1787900600000);
 
 -- ---------------------------------------------------------------
 -- Reminder settings. One row, always id 1 — the app reads it on

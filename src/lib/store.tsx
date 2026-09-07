@@ -527,6 +527,18 @@ interface Ctx {
    */
   ssoError: string | null
   clearSsoError: () => void
+  /**
+   * Whether a change is currently being written through, and when the
+   * last one landed.
+   *
+   * Every click already goes to the server and comes back with the whole
+   * portfolio — that is how the screen and the database stay in step. It
+   * just used to happen silently, so there was no way to tell a saved
+   * change from one the browser had drawn and dropped. This is that
+   * difference, shown.
+   */
+  saving: boolean
+  savedAt: number | null
 }
 
 const StoreContext = createContext<Ctx | null>(null)
@@ -587,6 +599,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>(readStoredTheme)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [paletteOpen, setPaletteOpen] = useState(false)
+  /* How many writes are in the air, and when the last one landed. */
+  const [inFlight, setInFlight] = useState(0)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -788,9 +803,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (!live) return
     const call = requestFor(action)
     if (!call) return
+    /* Counted rather than a flag: two clicks in quick succession are two
+       writes in flight, and the first to answer must not report the
+       second one finished. */
+    setInFlight((n) => n + 1)
+    const settle = () => setInFlight((n) => Math.max(0, n - 1))
     call().then(
-      (portfolio) => dispatch({ type: 'sync', portfolio }),
+      (portfolio) => { settle(); setSavedAt(Date.now()); dispatch({ type: 'sync', portfolio }) },
       (error: Error) => {
+        settle()
         /* A session that ended mid-edit is not a failed save to apologise
            for; it is a sign-in to ask for. Anything else is worth saying. */
         if (isSignedOut(error)) {
@@ -824,9 +845,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       refreshAccount,
       ssoError,
       clearSsoError,
+      saving: inFlight > 0,
+      savedAt,
     }),
     [state, theme, toasts, toast, dismissToast, paletteOpen, dispatchWithSync, signIn, signOut,
-     switchWorkspace, createOwner, refreshAccount, ssoError, clearSsoError],
+     switchWorkspace, createOwner, refreshAccount, ssoError, clearSsoError, inFlight, savedAt],
   )
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

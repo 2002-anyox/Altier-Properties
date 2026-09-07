@@ -30,6 +30,15 @@ const MODE_LABEL: Record<TenancyMode, string> = {
   short_stay: 'Short stay',
 }
 
+type Filter = 'all' | BookingStatus | 'to_arrive' | 'in_residence'
+
+/** Somebody committed to a unit who has not walked through the door yet. */
+const toArrive = (b: Booking) =>
+  !b.arrivedOn && b.status !== 'completed' && b.status !== 'cancelled'
+
+/** Somebody in the building right now. */
+const inResidence = (b: Booking) => !!b.arrivedOn && !b.departedOn
+
 const STATUS_CHIP: Record<BookingStatus, string> = {
   in_progress: 'bg-gold-soft text-gold-ink',
   upcoming: 'bg-[rgb(var(--c-status-info)/0.12)] text-[rgb(var(--c-status-info))]',
@@ -40,7 +49,11 @@ const STATUS_CHIP: Record<BookingStatus, string> = {
 
 export default function Bookings() {
   const { state, dispatch, toast } = useStore()
-  const [status, setStatus] = useState<'all' | BookingStatus>('all')
+  /* Two of these are not statuses. "To check in" and "In residence" are
+     what somebody at a front desk actually wants the list narrowed to,
+     and neither is a column in the table — arriving is the absence of an
+     arrival date, which no status records. */
+  const [status, setStatus] = useState<Filter>('all')
   const [mode, setMode] = useState<'all' | TenancyMode>('all')
   const [source, setSource] = useState<'all' | BookingSource>('all')
   const [query, setQuery] = useState('')
@@ -58,7 +71,9 @@ export default function Bookings() {
     const q = query.trim().toLowerCase()
     return state.bookings
       .filter((b) => {
-        if (status !== 'all' && b.status !== status) return false
+        if (status === 'to_arrive') { if (!toArrive(b)) return false }
+        else if (status === 'in_residence') { if (!inResidence(b)) return false }
+        else if (status !== 'all' && b.status !== status) return false
         if (mode !== 'all' && b.mode !== mode) return false
         if (source !== 'all' && b.source !== source) return false
         if (!q) return true
@@ -71,7 +86,16 @@ export default function Bookings() {
 
   const counts = useMemo(() => {
     const by = (s: BookingStatus) => state.bookings.filter((b) => b.status === s).length
-    return { all: state.bookings.length, in_progress: by('in_progress'), upcoming: by('upcoming'), pending: by('pending'), completed: by('completed'), cancelled: by('cancelled') }
+    return {
+      all: state.bookings.length,
+      in_progress: by('in_progress'),
+      upcoming: by('upcoming'),
+      pending: by('pending'),
+      completed: by('completed'),
+      cancelled: by('cancelled'),
+      to_arrive: state.bookings.filter(toArrive).length,
+      in_residence: state.bookings.filter(inResidence).length,
+    }
   }, [state.bookings])
 
   const selectedProperty = selected ? state.properties.find((p) => p.id === selected.propertyId) : undefined
@@ -140,6 +164,8 @@ export default function Bookings() {
             size="sm"
             options={[
               { value: 'all', label: 'All', count: counts.all },
+              { value: 'to_arrive', label: 'To check in', count: counts.to_arrive },
+              { value: 'in_residence', label: 'In residence', count: counts.in_residence },
               { value: 'in_progress', label: 'In progress', count: counts.in_progress },
               { value: 'upcoming', label: 'Upcoming', count: counts.upcoming },
               { value: 'pending', label: 'Pending', count: counts.pending },
@@ -175,7 +201,7 @@ export default function Bookings() {
       ) : (
         <Card className="overflow-hidden">
           <div className="scroll-x">
-            <table className="w-full min-w-[880px] text-left text-[13px]">
+            <table className="w-full min-w-[1000px] text-left text-[13px]">
               <thead className="text-ink-muted">
                 <tr className="border-b border-line bg-surface-inset/50">
                   <th scope="col" className="px-5 py-3 font-medium sm:px-6">Reference</th>
@@ -184,6 +210,7 @@ export default function Bookings() {
                   <th scope="col" className="px-4 py-3 font-medium">Term</th>
                   <th scope="col" className="px-4 py-3 font-medium">Source</th>
                   <th scope="col" className="px-4 py-3 font-medium">Status</th>
+                  <th scope="col" className="px-4 py-3 font-medium">In the building</th>
                   <th scope="col" className="px-5 py-3 text-right font-medium sm:px-6">Value</th>
                 </tr>
               </thead>
@@ -213,6 +240,28 @@ export default function Bookings() {
                         <Chip className="bg-surface-inset text-ink-secondary"><Globe size={10} /> {SOURCE_LABEL[b.source]}</Chip>
                       </td>
                       <td className="px-4 py-3"><Chip className={STATUS_CHIP[b.status]}>{b.status.replace(/_/g, ' ')}</Chip></td>
+                      {/* Checking somebody in is the commonest thing anybody
+                          does on this page, and it used to be two clicks
+                          deep in a panel. It belongs on the row. */}
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        {!can(state.role, 'edit:bookings') ? (
+                          <span className="text-[12px] text-ink-muted">
+                            {b.departedOn ? `Left ${shortDate(b.departedOn)}` : b.arrivedOn ? 'In residence' : '—'}
+                          </span>
+                        ) : toArrive(b) ? (
+                          <Button size="sm" variant="secondary" icon={<LogIn size={13} />} onClick={() => setArriving(b)}>
+                            Check in
+                          </Button>
+                        ) : inResidence(b) ? (
+                          <Button size="sm" variant="secondary" icon={<LogOut size={13} />} onClick={() => setLeaving(b)}>
+                            Check out
+                          </Button>
+                        ) : (
+                          <span className="text-[12px] text-ink-muted">
+                            {b.departedOn ? `Left ${shortDate(b.departedOn)}` : '—'}
+                          </span>
+                        )}
+                      </td>
                       <td className="tnum px-5 py-3 text-right font-semibold text-ink sm:px-6">{money(value)}</td>
                     </tr>
                   )

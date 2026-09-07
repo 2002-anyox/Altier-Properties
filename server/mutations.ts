@@ -13,6 +13,7 @@ import type { Db } from './db/client.js'
 import * as t from './db/schema.js'
 import { openingCharges } from '../src/lib/create.js'
 import { dayIn } from '../src/lib/dates.js'
+import { holdBlocking, whyBlocked } from '../src/lib/occupancy.js'
 import { assertSeatAvailable } from './workspace.js'
 import type {
   Booking, Client, Invoice, MaintenancePriority, MaintenanceStatus, Property,
@@ -312,6 +313,7 @@ const propertyColumns = (p: Property, organizationId: string) => ({
   addressLine1: p.address.line1, district: p.address.district,
   city: p.address.city, country: p.address.country,
   mapX: p.address.x, mapY: p.address.y,
+  latitude: p.address.lat ?? null, longitude: p.address.lng ?? null,
   bedrooms: p.bedrooms, bathrooms: p.bathrooms, sizeSqm: p.sizeSqm,
   price: p.price, managerId: p.managerId, rating: p.rating,
   availableFrom: p.availableFrom, acquiredOn: p.acquiredOn,
@@ -389,13 +391,20 @@ export async function addBooking(db: Db, w: Workspace, booking: Booking, invoice
     )),
     `property ${booking.propertyId}`,
   )
-  await requireOne(
-    await db.select({ id: t.clients.id }).from(t.clients).where(and(
+  const client = await requireOne(
+    await db.select({ id: t.clients.id, name: t.clients.name }).from(t.clients).where(and(
       eq(t.clients.id, booking.clientId),
       eq(t.clients.organizationId, w.organizationId),
     )),
     `client ${booking.clientId}`,
   )
+
+  /* A client holds one home at a time. Placing somebody who has not moved
+     out of their last unit is nearly always the wrong name picked off a
+     list, and it would raise a second set of charges against them — rent
+     for two homes, from one mis-click. Checked here rather than only in
+     the form, because the form is a convenience and this is the rule. */
+  await assertNotAlreadyHoused(db, w, booking, client.name)
 
   /* What the unit is let at, unless this agreement says otherwise.
      A rate of zero used to be stored as written and raise no charge at
@@ -458,6 +467,45 @@ export async function addBooking(db: Db, w: Workspace, booking: Booking, invoice
       propertyId: booking.propertyId,
     })
     .onConflictDoNothing()
+}
+
+/**
+ * Refuses to place a client who is still in somewhere else.
+ *
+ * Reads the agreements rather than the client_properties links: a link
+ * is a connection — enquired, viewed, used to live there — and several
+ * are perfectly ordinary. An agreement that has not been closed or
+ * checked out of is a home somebody is living in, and there is only one
+ * of those at a time.
+ */
+async function assertNotAlreadyHoused(
+  db: Db, w: Workspace, booking: Booking, clientName: string,
+) {
+  const held = await db.select({
+    id: t.bookings.id,
+    propertyId: t.bookings.propertyId,
+    clientId: t.bookings.clientId,
+    status: t.bookings.status,
+    departedOn: t.bookings.departedOn,
+    reference: t.bookings.reference,
+  }).from(t.bookings).where(and(
+    eq(t.bookings.clientId, booking.clientId),
+    eq(t.bookings.organizationId, w.organizationId),
+  ))
+
+  const blocking = holdBlocking(held, booking.clientId, booking.propertyId)
+  if (!blocking) return
+
+  const [into] = await db.select({ name: t.properties.name }).from(t.properties)
+    .where(eq(t.properties.id, booking.propertyId))
+  const [already] = await db.select({ name: t.properties.name }).from(t.properties)
+    .where(eq(t.properties.id, blocking.propertyId))
+
+  throw new Conflict(whyBlocked(
+    clientName,
+    already?.name ?? 'their current home',
+    into?.name ?? 'another unit',
+  ))
 }
 
 /* ------------------------ editing and removal ---------------------- *

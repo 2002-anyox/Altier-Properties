@@ -55,6 +55,8 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
           <kbd className="hidden rounded-md border border-line bg-surface-inset px-1.5 py-0.5 text-[10.5px] font-medium sm:block">⌘K</kbd>
         </button>
 
+        <SaveState />
+
         <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-1.5">
           <IconButton label={theme === 'dark' ? t('action.themeLight') : t('action.themeDark')} onClick={toggleTheme}>
             <AnimatePresence mode="wait" initial={false}>
@@ -264,5 +266,55 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
         </div>
       </div>
     </header>
+  )
+}
+
+/**
+ * Whether the last click reached the server.
+ *
+ * Every change is applied on screen at once and written through behind
+ * it — that is what keeps the interface instant. The cost is that a save
+ * and a save that failed look identical for the second it takes, and a
+ * failure only ever announced itself as a red toast that had already
+ * gone by the time anybody looked up. This says which, quietly, and
+ * fades once it has been true for a few seconds.
+ */
+function SaveState() {
+  const { saving, savedAt } = useStore()
+  const [recent, setRecent] = useState(false)
+
+  useEffect(() => {
+    if (!savedAt) return
+    setRecent(true)
+    const timer = window.setTimeout(() => setRecent(false), 2400)
+    return () => window.clearTimeout(timer)
+  }, [savedAt])
+
+  const showing = saving || recent
+  return (
+    <AnimatePresence>
+      {showing && (
+        <motion.span
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.18 }}
+          aria-live="polite"
+          className="ml-2 hidden items-center gap-1.5 whitespace-nowrap text-[11.5px] text-ink-muted sm:inline-flex"
+        >
+          {saving ? (
+            <>
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold" aria-hidden />
+              Saving…
+            </>
+          ) : (
+            <>
+              <Check size={12} className="text-status-good" aria-hidden />
+              Saved
+            </>
+          )}
+        </motion.span>
+      )}
+    </AnimatePresence>
   )
 }

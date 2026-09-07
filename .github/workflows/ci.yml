@@ -61,6 +61,16 @@ jobs:
       - name: A day is a day, wherever you are
         run: npm run check:dates
 
+      # "On the months paid upfront, the number 3 can not be changed unless
+      # you type in front of it." A field bound to a number and clamped on
+      # every keystroke cannot be emptied: Number('') is 0, the floor pulls
+      # it back to 3, and the digit is back before the finger is off the
+      # key. This replays what hands actually do — overtype, backspace to
+      # empty, type 12 one digit at a time — and insists the field lets
+      # them. It also refuses any form that goes back to a raw number box.
+      - name: The forms let you finish typing
+        run: npm run check:forms
+
       # Revenue-recognition rules fail silently: a charge recognised twice, or
       # a deposit leaking into revenue, looks like ordinary growth on a chart.
       # This asserts the invariants that no reviewer would catch by eye.

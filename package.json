@@ -28,7 +28,8 @@
     "api": "npm run --silent api:build && node node_modules/.cache/db/api.mjs",
     "smoke:api": "npm run --silent db:seed && npm run --silent api:build && node scripts/smoke-api.mjs",
     "check:nodata": "node scripts/check-no-sample-data.mjs",
-    "check:dates": "node scripts/check-dates.mjs"
+    "check:dates": "node scripts/check-dates.mjs",
+    "check:forms": "esbuild scripts/check-forms.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/check-forms.mjs --log-level=warning && node node_modules/.cache/check-forms.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
