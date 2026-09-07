@@ -5,6 +5,7 @@ import { Button, Field, Input } from '../components/ui'
 import { Wordmark } from '../components/layout/Wordmark.js'
 import { useStore } from '../lib/store.js'
 import { SsoButtons, useSsoProviders } from '../components/auth/SsoButtons.js'
+import { goTo } from '../lib/hash.js'
 
 /**
  * The door. Two states: an ordinary sign-in, and — on a database where no
@@ -68,9 +69,17 @@ export default function SignIn() {
         className="w-full max-w-[400px]"
       >
         <div className="mb-7 flex justify-center">
-          <span className="rounded-2xl bg-surface-rail px-5 py-4 ring-1 ring-white/10">
+          {/* The wordmark goes home. Somebody who followed "Sign In" from
+              the landing page and then thought better of it should not
+              have to reach for the back button. */}
+          <a
+            href="#/"
+            onClick={(e) => { e.preventDefault(); goTo('#/') }}
+            aria-label="Back to the Altier Properties site"
+            className="rounded-2xl bg-surface-rail px-5 py-4 ring-1 ring-white/10 transition-shadow duration-200 hover:ring-white/25"
+          >
             <Wordmark />
-          </span>
+          </a>
         </div>
 
         <div className="card card-pad">
