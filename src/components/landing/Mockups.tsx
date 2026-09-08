@@ -353,7 +353,7 @@ export function TeamPreview() {
         </table>
       </div>
       <p className="mt-3 text-[10.5px] text-ink-muted">
-        Tick a box and the database changes with it — the server refuses what the row says it should.
+        Tick a box and the database changes with it. The server refuses what the row says it should.
       </p>
     </div>
   )

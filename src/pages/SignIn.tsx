@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { KeyRound, LogIn, ShieldCheck } from 'lucide-react'
-import { Button, Field, Input } from '../components/ui'
+import { Button, Field, Input, PasswordField, cx } from '../components/ui'
 import { Wordmark } from '../components/layout/Wordmark.js'
 import { useStore } from '../lib/store.js'
-import { SsoButtons, useSsoProviders } from '../components/auth/SsoButtons.js'
+import { SsoButtons, rememberSignIn, useSsoProviders } from '../components/auth/SsoButtons.js'
 import { goTo } from '../lib/hash.js'
 
 /**
@@ -26,6 +26,10 @@ export default function SignIn() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [leaving, setLeaving] = useState(false)
+  const [help, setHelp] = useState(false)
+  /* Focus lands on the failure when one arrives, so a screen reader
+     reader is put at the problem rather than left wherever they were. */
+  const errorRef = useRef<HTMLDivElement>(null)
 
   /* A failed Google or Apple attempt came back as a page load, so it is
      already waiting rather than being raised by anything on this screen. */
@@ -39,7 +43,7 @@ export default function SignIn() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!ready || busy) return
+    if (!ready || busy) return  // the button is aria-disabled, not disabled
     setBusy(true)
     setError(null)
     clearSsoError()
@@ -51,14 +55,22 @@ export default function SignIn() {
       } else {
         await signIn(email, password)
       }
+      rememberSignIn('password')
     } catch (err) {
       setError((err as Error).message)
+      /* The password goes, because it was wrong and retyping it is the
+         next step. The email stays, because it probably was not. */
       setPassword('')
       setConfirm('')
     } finally {
       setBusy(false)
     }
   }
+
+  /* Announced by the live region, then read again where focus lands. */
+  useEffect(() => {
+    if (shown) errorRef.current?.focus()
+  }, [shown])
 
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-surface px-5 py-10">
@@ -92,6 +104,29 @@ export default function SignIn() {
               : 'This portfolio holds client records. Sign in to continue.'}
           </p>
 
+          {/* Above the form, with a divider. Somebody who signed up with
+              Google and meets an email box first starts typing, spots the
+              button, and now has to work out which account they used —
+              which is exactly how duplicate accounts get made. */}
+          {!setup && providers.length > 0 && (
+            <div className="mb-5">
+              <SsoButtons
+                providers={providers}
+                showLastUsed
+                disabled={busy || leaving}
+                onPick={() => { setLeaving(true); clearSsoError() }}
+              />
+              <p className="mt-2.5 text-center text-[12px] leading-relaxed text-ink-muted">
+                Works once an owner has put that address on your team account.
+              </p>
+              <div className="mt-5 flex items-center gap-3" aria-hidden>
+                <span className="h-px flex-1 bg-line" />
+                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted">or</span>
+                <span className="h-px flex-1 bg-line" />
+              </div>
+            </div>
+          )}
+
           <form onSubmit={submit} className="mt-6 grid gap-4">
             {setup && (
               <Field label="Your name" id="si-name">
@@ -108,9 +143,16 @@ export default function SignIn() {
               id="si-email"
               hint={setup ? 'You sign in with this, and it is what a linked Google or Apple account is matched against.' : undefined}
             >
+              {/* autoComplete="username", not "email": password managers
+                  key the saved pair off username. And the three off
+                  switches, because a phone capitalising an email address
+                  is the commonest reason a correct one is refused. */}
               <Input
-                id="si-email" type="email" autoComplete="username" autoFocus={!setup}
-                value={email} onChange={(e) => setEmail(e.target.value)}
+                id="si-email" name="si-email" type="email" autoComplete="username"
+                autoFocus={!setup}
+                autoCapitalize="off" autoCorrect="off" spellCheck={false}
+                aria-invalid={!!shown || undefined}
+                value={email} onChange={(e) => { setEmail(e.target.value); if (error) setError(null) }}
                 placeholder="you@example.com"
               />
             </Field>
@@ -119,20 +161,43 @@ export default function SignIn() {
               label={setup ? 'Choose a password' : 'Password'}
               id="si-password"
               hint={setup ? 'At least 10 characters. Length beats punctuation.' : undefined}
+              action={setup ? undefined : (
+                <button
+                  type="button"
+                  onClick={() => setHelp((v) => !v)}
+                  aria-expanded={help}
+                  className="text-[12px] font-medium text-gold-ink underline-offset-2 hover:underline"
+                >
+                  Forgot password?
+                </button>
+              )}
             >
-              <Input
-                id="si-password" type="password"
+              <PasswordField
+                id="si-password"
                 autoComplete={setup ? 'new-password' : 'current-password'}
-                value={password} onChange={(e) => setPassword(e.target.value)}
+                invalid={!!shown}
+                value={password}
+                onChange={(v) => { setPassword(v); if (error) setError(null) }}
               />
             </Field>
+
+            {help && !setup && (
+              <p className="rounded-xl border border-line bg-surface-inset/60 px-3.5 py-3 text-[12.5px] leading-relaxed text-ink-secondary">
+                There is no self-service reset: Altier sends no email, so a reset
+                link would have nowhere to go. An owner can set a new password for
+                you from <span className="font-medium text-ink">Team &amp; access</span>,
+                and it takes them about ten seconds. If you are the owner and locked
+                out, whoever administers your database can do it directly.
+              </p>
+            )}
 
             {setup && (
               <>
                 <Field label="Confirm it" id="si-confirm" error={mismatch ? 'Those two do not match.' : undefined}>
-                  <Input
-                    id="si-confirm" type="password" autoComplete="new-password"
-                    value={confirm} onChange={(e) => setConfirm(e.target.value)}
+                  <PasswordField
+                    id="si-confirm" autoComplete="new-password"
+                    invalid={mismatch}
+                    value={confirm} onChange={setConfirm}
                   />
                 </Field>
                 <Field label="Setup token" id="si-token" hint="Only if SETUP_TOKEN was set on the server. Leave blank otherwise.">
@@ -141,46 +206,48 @@ export default function SignIn() {
               </>
             )}
 
-            {shown && (
-              <p
-                role="alert"
-                className="rounded-xl border border-[rgb(var(--c-status-critical)/0.35)] bg-[rgb(var(--c-status-critical)/0.08)] px-3.5 py-2.5 text-[13px] leading-relaxed text-[rgb(var(--c-status-critical))]"
-              >
-                {shown}
-              </p>
-            )}
+            {/* In the DOM from the first render, empty. A live region
+                created at the same moment as its content is a live region
+                most screen readers never announce. role="alert" is
+                assertive already, so there is no aria-live beside it —
+                the two together make some readers say it twice. */}
+            <div
+              ref={errorRef}
+              role="alert"
+              aria-atomic="true"
+              tabIndex={-1}
+              className={cx(
+                'rounded-xl border px-3.5 py-2.5 text-[13px] leading-relaxed outline-none',
+                shown
+                  ? 'border-[rgb(var(--c-status-critical)/0.35)] bg-[rgb(var(--c-status-critical)/0.08)] text-[rgb(var(--c-status-critical))]'
+                  : 'sr-only border-transparent',
+              )}
+            >
+              {shown}
+            </div>
 
+            {/* aria-disabled rather than disabled: a disabled button
+                leaves the tab order, so the keyboard user who just
+                pressed it loses their place. The guard is the early
+                return in submit(), which is where it belongs anyway. */}
             <Button
               type="submit"
               variant="primary"
               block
-              className="mt-1"
+              className={cx('mt-1', (!ready || busy) && 'opacity-45')}
               icon={setup ? <KeyRound size={15} /> : <LogIn size={15} />}
-              disabled={!ready || busy}
+              aria-disabled={!ready || busy}
             >
               {busy ? 'One moment…' : setup ? 'Create account and sign in' : 'Sign in'}
             </Button>
+
+            {/* Said once, out of the way, so the press is confirmed to
+                somebody who cannot see the button change. */}
+            <span aria-live="polite" className="sr-only">
+              {busy ? 'Signing in, one moment.' : ''}
+            </span>
           </form>
 
-          {/* Only after the owner exists: until then there is nobody for a
-              Google or Apple account to be. */}
-          {!setup && providers.length > 0 && (
-            <>
-              <div className="my-5 flex items-center gap-3" aria-hidden>
-                <span className="h-px flex-1 bg-line" />
-                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted">or</span>
-                <span className="h-px flex-1 bg-line" />
-              </div>
-              <SsoButtons
-                providers={providers}
-                disabled={busy || leaving}
-                onPick={() => { setLeaving(true); clearSsoError() }}
-              />
-              <p className="mt-3 text-center text-[12px] leading-relaxed text-ink-muted">
-                Works when an owner has already put that address on your team account.
-              </p>
-            </>
-          )}
         </div>
 
         <p className="mt-5 flex items-start gap-2 px-1 text-[12px] leading-relaxed text-ink-muted">
