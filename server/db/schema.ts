@@ -15,8 +15,8 @@
  * ------------------------------------------------------------------ */
 
 import {
-  bigint, boolean, check, date, doublePrecision, index, integer, jsonb, pgEnum,
-  pgTable, primaryKey, real, text, time, timestamp, uniqueIndex,
+  bigint, bigserial, boolean, check, date, doublePrecision, index, integer, jsonb,
+  pgEnum, pgTable, primaryKey, real, text, time, timestamp, uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 
@@ -122,6 +122,22 @@ export const subscriptions = pgTable('subscriptions', {
   trialEndsAt: date('trial_ends_at', { mode: 'string' }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
+
+/**
+ * A throttle on the public sign-up, and nothing else.
+ *
+ * Belongs to no workspace, so it carries no organization_id and gets no
+ * policy: RLS is on but not forced, which lets the owning role write it
+ * during sign-up — before any session exists — while altier_app, which
+ * every request runs as, can never touch it.
+ *
+ * The address is hashed because it is only ever compared with itself.
+ */
+export const signupAttempts = pgTable('signup_attempts', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  ipHash: text('ip_hash').notNull(),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('signup_attempts_ip_idx').on(t.ipHash, t.at)])
 
 /* ------------------------------- team ------------------------------ */
 /**

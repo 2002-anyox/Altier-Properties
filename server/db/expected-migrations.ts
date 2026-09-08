@@ -12,4 +12,5 @@ export const EXPECTED_MIGRATIONS: ReadonlyArray<{ tag: string; hash: string }> =
   { tag: '0007_permissions', hash: 'b422ae1153da2056f9ab7b1a8fb3f4afef1720a14872230389a999cb7a7d9f1f' },
   { tag: '0008_timezone', hash: '4a7543b3291ee3bfa7775877272555881020cf26d0b9d432aa32c2e15aa3df99' },
   { tag: '0009_coordinates', hash: '5106d676a52042832405a22a20a729c6854d6ac5a764a402b56dc25c445bf173' },
+  { tag: '0010_signup', hash: '22774247b29109bcea580528a19247d67bd31a433bac94e13e6bd06cc11dd394' },
 ]

@@ -264,6 +264,10 @@ export default function Landing() {
 
   const active = SHOWCASE.find((s) => s.id === shown) ?? SHOWCASE[0]!
   const signIn = () => goTo('#/signin')
+  /* Every "start" call to action goes to the trial, not the password box.
+     A landing page that sells a free trial and lands on a sign-in form is
+     a door with the wrong sign on it. */
+  const startFree = () => goTo('#/signup')
 
   /**
    * Left and right move between the screens, home and end jump to the
@@ -339,7 +343,7 @@ export default function Landing() {
               Sign In
             </button>
             <button
-              onClick={signIn}
+              onClick={startFree}
               className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-gold px-4 text-[13.5px] font-semibold text-navy-950 shadow-card transition-[background-color,transform] duration-200 hover:bg-gold-strong active:scale-[0.985]"
             >
               Start Free
@@ -388,7 +392,7 @@ export default function Landing() {
             </ul>
             <div className="grid gap-2 border-t border-line p-2 pt-3">
               <button onClick={signIn} className="h-10 rounded-xl border border-line text-[14px] font-medium text-ink hover:bg-surface-inset">Sign In</button>
-              <button onClick={signIn} className="h-10 rounded-xl bg-navy-900 text-[14px] font-semibold text-[rgb(var(--c-text-onrail))] dark:bg-gold dark:text-navy-950">Start Free</button>
+              <button onClick={startFree} className="h-10 rounded-xl bg-navy-900 text-[14px] font-semibold text-[rgb(var(--c-text-onrail))] dark:bg-gold dark:text-navy-950">Start Free</button>
             </div>
           </motion.div>
         </div>
@@ -439,7 +443,7 @@ export default function Landing() {
 
               <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
                 <button
-                  onClick={signIn}
+                  onClick={startFree}
                   className="group inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gold px-7 text-[15px] font-semibold text-navy-950 shadow-lift transition-[background-color,transform] duration-200 hover:bg-gold-strong active:scale-[0.985] sm:w-auto"
                 >
                   Start Managing Properties
@@ -546,7 +550,7 @@ export default function Landing() {
                   facts.
                 </p>
                 <button
-                  onClick={signIn}
+                  onClick={startFree}
                   className="group mt-8 inline-flex h-11 items-center gap-2 rounded-xl bg-navy-900 px-6 text-[14px] font-semibold text-[rgb(var(--c-text-onrail))] shadow-card transition-[background-color,transform] duration-200 hover:bg-navy-800 active:scale-[0.985] dark:bg-gold dark:text-navy-950 dark:hover:bg-gold-strong"
                 >
                   Create your workspace
@@ -751,7 +755,7 @@ export default function Landing() {
                   </ul>
 
                   <button
-                    onClick={signIn}
+                    onClick={plan.name === 'Enterprise' ? signIn : startFree}
                     className={cx(
                       'mt-8 h-11 w-full rounded-xl text-[14px] font-semibold transition-[background-color,transform] duration-200 active:scale-[0.985]',
                       plan.featured
@@ -823,7 +827,7 @@ export default function Landing() {
               you, accurate as you work, and ready the same afternoon you begin.
             </p>
             <button
-              onClick={signIn}
+              onClick={startFree}
               className="group mt-10 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-gold px-8 text-[15px] font-semibold text-navy-950 shadow-lift transition-[background-color,transform] duration-200 hover:bg-gold-strong active:scale-[0.985]"
             >
               Get Started with Altier Properties
@@ -849,7 +853,7 @@ export default function Landing() {
               </div>
 
               {[
-                { heading: 'Product', links: [['Features', '#features'], ['Pricing', '#pricing'], ['FAQ', '#faq'], ['Sign in', '#/signin']] },
+                { heading: 'Product', links: [['Features', '#features'], ['Pricing', '#pricing'], ['FAQ', '#faq'], ['Start free', '#/signup'], ['Sign in', '#/signin']] },
                 { heading: 'Support', links: [['Help centre', '#faq'], ['Getting started', '#product'], ['Status', '#top'], ['Contact', 'mailto:hello@altierproperties.com']] },
                 { heading: 'Company', links: [['Privacy policy', '#privacy'], ['Terms of service', '#terms'], ['Security', '#top'], ['Careers', '#top']] },
               ].map((group) => (

@@ -158,6 +158,55 @@ try {
   ok(strangerBody.error === 'That email and password do not match an account.',
      'an unknown email is refused in the same words as a wrong password')
 
+  /* -------------------------- the front door ------------------------- *
+   * Until this existed the only ways in were an invitation or being the
+   * first account on an empty database. What matters about opening it is
+   * that nothing else opened with it: a sign-up gets its own workspace
+   * and can never reach anybody else's.
+   * ------------------------------------------------------------------- */
+  const mark = Date.now().toString(36)
+  const newcomerEmail = `newcomer-${mark}@signup.test`
+  const signedUp = await get('/auth/signup', jsonInit({
+    name: 'Newcomer Owner',
+    email: newcomerEmail,
+    password: 'a-sufficiently-long-passphrase',
+    organizationName: `Newcomer Lettings ${mark}`,
+  }))
+  ok(signedUp.status === 200, `a stranger can start a trial (got ${signedUp.status})`)
+  const newcomer = await signedUp.json()
+  ok(newcomer.member?.role === 'owner', `and owns the workspace it made (${newcomer.member?.role})`)
+
+  /* The whole point. This session is now the newcomer's, and it must see
+     a workspace with nothing in it rather than the seeded portfolio. */
+  const theirs = await get('/portfolio').then((r) => r.json())
+  ok(theirs.properties.length === 0 && theirs.clients.length === 0,
+     `a new workspace opens empty (${theirs.properties.length} properties, ${theirs.clients.length} clients)`)
+  ok(theirs.team.length === 1, `holding only the person who made it (${theirs.team.length})`)
+
+  const dupe = await get('/auth/signup', jsonInit({
+    name: 'Impostor', email: newcomerEmail,
+    password: 'another-long-passphrase', organizationName: 'Not Yours',
+  }))
+  ok(dupe.status === 409, `an email that already has an account is refused (got ${dupe.status})`)
+
+  const feeble = await get('/auth/signup', jsonInit({
+    name: 'Feeble', email: `feeble-${mark}@signup.test`,
+    password: 'short', organizationName: 'Feeble',
+  }))
+  ok(feeble.status === 400, `a password under the floor is refused (got ${feeble.status})`)
+
+  const nameless = await get('/auth/signup', jsonInit({
+    name: '', email: `nameless-${mark}@signup.test`,
+    password: 'a-sufficiently-long-passphrase', organizationName: 'Nameless',
+  }))
+  ok(nameless.status === 400, `a sign-up with no name is refused (got ${nameless.status})`)
+
+  // Back to the owner, whose session the rest of this file assumes.
+  await get('/auth/login', jsonInit({ email: ownerEmail, password: PASSWORD }))
+  const reinstated = await get('/portfolio').then((r) => r.json())
+  ok(reinstated.properties.length > 0,
+     `signing back in returns the real portfolio (${reinstated.properties.length} properties)`)
+
   /* ------------------ Google and Apple sign-in ----------------------- *
    * The half that does not need a browser: what is offered, what the
    * redirect actually asks for, and every way the callback can be lied

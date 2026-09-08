@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { Outlet, useLocation } from 'react-router-dom'
 import { MobileSidebar, SidebarContent } from './Sidebar.js'
 import { Topbar } from './Topbar.js'
+import { TrialBanner } from './TrialBanner.js'
 import { CommandPalette } from './CommandPalette.js'
 import { useStore } from '../../lib/store.js'
 import { Toaster } from '../ui'
@@ -36,6 +37,7 @@ export function AppShell() {
 
       <div className="lg:pl-[248px]">
         <Topbar onOpenNav={() => setNavOpen(true)} />
+        <TrialBanner />
         <main id="main-content" className="px-4 pb-16 pt-6 sm:px-6 sm:pt-8 lg:px-8">
           {/* A keyed enter animation, deliberately without AnimatePresence.
               Coordinating an exit here left the incoming page stranded on the

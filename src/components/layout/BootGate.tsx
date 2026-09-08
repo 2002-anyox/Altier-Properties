@@ -8,6 +8,7 @@ import { diagnose, type Diagnosis } from '../../lib/api.js'
 import SignIn from '../../pages/SignIn.js'
 import Join from '../../pages/Join.js'
 import Landing from '../../pages/Landing.js'
+import SignUp from '../../pages/SignUp.js'
 import { doorFrom, useHash } from '../../lib/hash.js'
 
 /**
@@ -92,6 +93,10 @@ export function BootGate({ children }: { children: React.ReactNode }) {
        find both the landing page and the sign-in form a dead end. */
     if (typeof door === 'object') return <Join token={door.join} />
     if (door === 'signin') return <SignIn />
+    /* Closed while the very first account is being made: on an empty
+       database the setup form is the front door, and a second one
+       offering a trial would be a confusing race with it. */
+    if (door === 'signup' && !state.setupNeeded) return <SignUp />
     /* Everybody else gets the landing page. Pressing "Sign In" there sets
        the hash, which useHash notices, and this runs again. */
     return <Landing />

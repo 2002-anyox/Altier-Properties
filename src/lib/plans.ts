@@ -20,6 +20,9 @@ export const PLANS = {
 
 export type Plan = keyof typeof PLANS
 
+/** How long a new workspace runs before it has to be paid for. */
+export const TRIAL_DAYS = 7
+
 /** How the seat allowance reads in a sentence. */
 export const seatsLabel = (plan: Plan) => {
   const { seats } = PLANS[plan]

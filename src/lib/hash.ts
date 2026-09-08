@@ -28,12 +28,13 @@ export function useHash(): string {
 }
 
 /** Where a signed-out visitor is. */
-export type Door = 'landing' | 'signin' | { join: string }
+export type Door = 'landing' | 'signin' | 'signup' | { join: string }
 
 export function doorFrom(hash: string): Door {
   const invitation = /^#\/join\/([A-Za-z0-9_-]+)/.exec(hash)
   if (invitation) return { join: invitation[1]! }
   if (/^#\/(signin|sign-in|login)\b/.test(hash)) return 'signin'
+  if (/^#\/(signup|sign-up|register|start)\b/.test(hash)) return 'signup'
   return 'landing'
 }
 

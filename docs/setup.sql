@@ -1197,6 +1197,48 @@ ALTER TABLE "properties"
   );
 
 -- ---------------------------------------------------------------
+-- migration: 0010_signup
+-- ---------------------------------------------------------------
+-- ---------------------------------------------------------------
+-- Letting somebody in through the front door
+--
+-- Until now the only way to exist here was to be invited, or to be the
+-- very first account on an empty database. That was right while Altier
+-- was one deployment for one company. It stopped being right when
+-- organizations, subscriptions and seats arrived: that is the machinery
+-- of many customers, with no way for a customer to arrive.
+--
+-- A public sign-up creates rows for anybody who asks, so it needs a
+-- throttle. This is it: the hash of the caller's address and the moment
+-- they asked. Hashed rather than stored, because the address is only
+-- ever compared against itself and nobody needs to read it back.
+--
+-- No organization_id, because it belongs to no workspace. RLS is enabled
+-- but deliberately NOT forced: the owning role writes it during sign-up,
+-- before any session exists, while altier_app has no policy and so can
+-- never read or write it from inside a request.
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS "signup_attempts" (
+  "id" bigserial PRIMARY KEY,
+  "ip_hash" text NOT NULL,
+  "at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS "signup_attempts_ip_idx"
+  ON "signup_attempts" USING btree ("ip_hash", "at");
+
+ALTER TABLE "signup_attempts" ENABLE ROW LEVEL SECURITY;
+
+-- The trial has always been written and never read. Seven days, and an
+-- end date that means something: see altier_subscription_open() below.
+ALTER TABLE "subscriptions"
+  DROP CONSTRAINT IF EXISTS "subscriptions_trial_after_start";
+ALTER TABLE "subscriptions"
+  ADD CONSTRAINT "subscriptions_trial_after_start"
+  CHECK ("trial_ends_at" IS NULL OR "current_period_start" IS NULL
+         OR "trial_ends_at" >= "current_period_start");
+
+-- ---------------------------------------------------------------
 -- Record the migrations as applied, so `npm run db:migrate`
 -- against this database does nothing rather than failing.
 -- ---------------------------------------------------------------
@@ -1216,6 +1258,7 @@ INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('6926432
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('b422ae1153da2056f9ab7b1a8fb3f4afef1720a14872230389a999cb7a7d9f1f', 1787900400000);
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('4a7543b3291ee3bfa7775877272555881020cf26d0b9d432aa32c2e15aa3df99', 1787900500000);
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('5106d676a52042832405a22a20a729c6854d6ac5a764a402b56dc25c445bf173', 1787900600000);
+INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('22774247b29109bcea580528a19247d67bd31a433bac94e13e6bd06cc11dd394', 1787900700000);
 
 -- ---------------------------------------------------------------
 -- Reminder settings. One row, always id 1 — the app reads it on

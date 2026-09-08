@@ -277,6 +277,10 @@ export interface SeatUsage {
   tenants: number
   tenantsCountAsSeats: boolean
   open: boolean
+  /** The day the trial runs out, or null when there is no trial. */
+  trialEndsAt: string | null
+  /** Days remaining on a trial; null when not trialing. */
+  trialDaysLeft: number | null
 }
 
 export interface OpenInvitation {
@@ -383,6 +387,9 @@ export const auth = {
   /** First run only: creates the owner account on an empty portfolio. */
   setup: (owner: { name: string; email: string; password: string; token?: string }) =>
     send('/auth/setup', { method: 'POST', body: JSON.stringify(owner) }) as Promise<{ member: SessionMember }>,
+  /** The front door: a new account, a new workspace and a trial. */
+  signUp: (input: { name: string; email: string; password: string; organizationName: string }) =>
+    send('/auth/signup', { method: 'POST', body: JSON.stringify(input) }) as Promise<{ member: SessionMember }>,
   login: (email: string, password: string) =>
     send('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }) as Promise<{ member: SessionMember }>,
   logout: () => send('/auth/logout', { method: 'POST' }),
