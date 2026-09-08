@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { auth, type SsoProvider } from '../../lib/api.js'
+import { cx } from '../ui'
 
 /**
  * The marks, drawn rather than fetched.
@@ -10,7 +11,7 @@ import { auth, type SsoProvider } from '../../lib/api.js'
  */
 function GoogleMark() {
   return (
-    <svg viewBox="0 0 48 48" width="17" height="17" aria-hidden focusable="false">
+    <svg viewBox="0 0 48 48" width="20" height="20" aria-hidden focusable="false">
       <path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z" />
       <path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z" />
       <path fill="#FBBC05" d="M11.69 28.18C11.25 26.86 11 25.45 11 24s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24s.85 6.91 2.34 9.88l7.35-5.7z" />
@@ -46,34 +47,86 @@ export function useSsoProviders() {
   return providers
 }
 
+/* Which method opened this browser last. Not personal data, and it
+   survives signing out — its whole job is to stop somebody who signed up
+   with Google typing an email address and creating a second account. */
+const LAST_USED = 'altier.lastSignIn'
+
+export const rememberSignIn = (method: string) => {
+  try { window.localStorage.setItem(LAST_USED, method) } catch { /* private window */ }
+}
+
+export function useLastSignIn(): string | null {
+  const [last, setLast] = useState<string | null>(null)
+  useEffect(() => {
+    try { setLast(window.localStorage.getItem(LAST_USED)) } catch { /* fine */ }
+  }, [])
+  return last
+}
+
+function LastUsed() {
+  return (
+    <span className="ml-auto shrink-0 rounded-full bg-gold-soft px-2 py-0.5 text-[10.5px] font-semibold text-gold-ink">
+      Last used
+    </span>
+  )
+}
+
 /**
- * One button per configured provider. `verb` differs by context: the
- * sign-in screen continues *with* an account, Settings connects one to
- * an account that already exists.
+ * One button per configured provider.
+ *
+ * Google requires its own button to follow its brand guidelines, and
+ * requires it for app verification: 40px tall, its own mark unaltered
+ * and uncoloured, Roboto at 14px/500, and the approved wording. The
+ * measurements here match what Google's own button configurator emits.
+ * Generate from that configurator if you ever need to defend them.
+ *
+ * `verb` differs by context: the sign-in screen continues *with* an
+ * account, Settings connects one to an account that already exists.
  */
 export function SsoButtons({
-  providers, verb = 'Continue with', disabled, onPick,
+  providers, verb = 'Continue with', disabled, onPick, showLastUsed,
 }: {
   providers: SsoProvider[]
   verb?: string
   disabled?: boolean
   onPick?: (id: string) => void
+  /** Only on the sign-in screen; meaningless when linking an account. */
+  showLastUsed?: boolean
 }) {
+  const last = useLastSignIn()
   if (providers.length === 0) return null
   return (
     <div className="grid gap-2.5">
       {providers.map((p) => {
         const Mark = MARKS[p.id] ?? (() => null)
+        const isGoogle = p.id === 'google'
         return (
           <button
             key={p.id}
             type="button"
-            disabled={disabled}
-            onClick={() => { onPick?.(p.id); auth.startSso(p.id) }}
-            className="flex h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-line bg-surface-inset px-4 text-[13.5px] font-medium text-ink transition-colors hover:bg-surface-rail focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold disabled:cursor-not-allowed disabled:opacity-55"
+            aria-disabled={disabled || undefined}
+            onClick={() => {
+              if (disabled) return
+              rememberSignIn(p.id)
+              onPick?.(p.id)
+              auth.startSso(p.id)
+            }}
+            style={isGoogle
+              ? { height: 40, borderRadius: 4, letterSpacing: '0.25px', fontFamily: "'Roboto', Inter, arial, sans-serif" }
+              : undefined}
+            className={cx(
+              'flex w-full items-center gap-3 px-3 text-[14px] font-medium transition-colors',
+              'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold',
+              disabled && 'cursor-not-allowed opacity-55',
+              isGoogle
+                ? 'border border-line-strong bg-white text-[#1f1f1f] hover:bg-[#f8f9fa] dark:border-[#8e918f] dark:bg-[#131314] dark:text-[#e3e3e3] dark:hover:bg-[#1c1c1d]'
+                : 'h-11 rounded-xl border border-line bg-surface-inset text-ink hover:bg-surface-rail',
+            )}
           >
             <Mark />
             <span>{verb} {p.label}</span>
+            {showLastUsed && last === p.id && <LastUsed />}
           </button>
         )
       })}

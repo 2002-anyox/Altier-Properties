@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import clsx from 'clsx'
-import { Check, ChevronDown, Search, X } from 'lucide-react'
+import { Check, ChevronDown, Eye, EyeOff, Search, X } from 'lucide-react'
 import { drawerVariants, popVariants, spring, swift } from '../../lib/motion.js'
 import { acceptable, clampNumber, commitNumber, readNumber } from '../../lib/numeric.js'
 import { t } from '../../lib/strings.js'
@@ -156,14 +156,19 @@ export const MaintenanceChip = ({ status }: { status: MaintenanceStatus }) => (
 
 /* ------------------------------ Inputs ----------------------------- */
 export function Field({
-  label, hint, error, children, className, id,
+  label, hint, error, children, className, id, action,
 }: {
   label: string; hint?: string; error?: string
   children: React.ReactNode; className?: string; id?: string
+  /** Sits opposite the label — a "Forgot password?" and little else. */
+  action?: React.ReactNode
 }) {
   return (
     <div className={cx('flex flex-col gap-1.5', className)}>
-      <label htmlFor={id} className="text-[12.5px] font-medium text-ink-secondary">{label}</label>
+      <div className="flex items-baseline justify-between gap-3">
+        <label htmlFor={id} className="text-[12.5px] font-medium text-ink-secondary">{label}</label>
+        {action}
+      </div>
       {children}
       {/* An error replaces the hint: two lines of small text under one
           field is where people stop reading either. */}
@@ -174,8 +179,10 @@ export function Field({
   )
 }
 
+/* text-base below sm, text-sm above: iOS zooms the whole page when a
+   focused input is under 16px, which shoves the form off-screen mid-typing. */
 const CONTROL =
-  'h-10 w-full rounded-xl border border-line bg-surface-card px-3 text-sm text-ink placeholder:text-ink-muted transition-colors duration-200 hover:border-line-strong focus:border-gold focus:outline-none'
+  'h-10 w-full rounded-xl border border-line bg-surface-card px-3 text-base sm:text-sm text-ink placeholder:text-ink-muted transition-colors duration-200 hover:border-line-strong focus:border-gold focus:outline-none'
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   ({ className, ...rest }, ref) => <input ref={ref} className={cx(CONTROL, className)} {...rest} />,
@@ -289,6 +296,102 @@ export function NumberInput({
           +
         </button>
       )}
+    </div>
+  )
+}
+
+/**
+ * A password box you can read back.
+ *
+ * Masking was never much of a security measure — it stops nobody reading
+ * over your shoulder for more than the last character — and it reliably
+ * costs logins, because somebody who cannot check what they typed either
+ * gives up or picks something simpler next time. So: masked by default,
+ * with a control to reveal it.
+ *
+ * The accessible name stays "Show password" and the *state* moves, on
+ * aria-pressed. Screen readers handle a changing state well and a
+ * changing name badly — several will keep announcing the old name, or
+ * pair the new name with the stale state.
+ *
+ * Caps Lock earns its warning here too. Every desktop OS shows one in its
+ * own password fields and browsers mostly do not, so this is the last
+ * place it can come from.
+ */
+export function PasswordField({
+  id, value, onChange, autoComplete, autoFocus, describedBy, invalid, placeholder,
+}: {
+  id: string
+  value: string
+  onChange: (value: string) => void
+  autoComplete: 'current-password' | 'new-password'
+  autoFocus?: boolean
+  describedBy?: string
+  invalid?: boolean
+  placeholder?: string
+}) {
+  const [shown, setShown] = useState(false)
+  const [caps, setCaps] = useState(false)
+
+  /* Read off any key event the field sees, including the one that turns
+     Caps Lock on, so the warning appears on the keystroke rather than the
+     one after it. */
+  const readCaps = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    try { setCaps(e.getModifierState('CapsLock')) } catch { /* not all engines */ }
+  }
+
+  const capsId = `${id}-caps`
+  const described = [describedBy, caps ? capsId : null].filter(Boolean).join(' ') || undefined
+
+  return (
+    <div>
+      <div className="relative">
+        <input
+          id={id}
+          name={id}
+          /* Never autocomplete="off" here: it is ignored by browsers on
+             password fields anyway, and defeating a password manager is a
+             WCAG 2.2 failure under Accessible Authentication. */
+          autoComplete={autoComplete}
+          type={shown ? 'text' : 'password'}
+          value={value}
+          autoFocus={autoFocus}
+          placeholder={placeholder}
+          aria-invalid={invalid || undefined}
+          aria-describedby={described}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={readCaps}
+          onKeyUp={readCaps}
+          onBlur={() => setCaps(false)}
+          className={cx(CONTROL, 'pr-12')}
+        />
+        <button
+          /* Buttons inside a form submit it by default; this one must not. */
+          type="button"
+          onClick={() => setShown((v) => !v)}
+          aria-pressed={shown}
+          aria-controls={id}
+          /* A 44px square: the WCAG 2.2 floor is 24, but this is the one
+             control on the page most often fingered on a phone. */
+          className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-ink-muted transition-colors hover:text-ink"
+        >
+          {shown ? <EyeOff size={17} aria-hidden /> : <Eye size={17} aria-hidden />}
+          <span className="sr-only">Show password</span>
+        </button>
+      </div>
+
+      {/* Polite, so it waits its turn rather than cutting across whatever
+          the screen reader is saying about the field itself. */}
+      <p
+        id={capsId}
+        aria-live="polite"
+        className={cx(
+          'mt-1.5 flex items-center gap-1.5 text-[11.5px] text-[rgb(var(--c-status-serious))]',
+          !caps && 'sr-only',
+        )}
+      >
+        {caps ? 'Caps Lock is on.' : ''}
+      </p>
     </div>
   )
 }
