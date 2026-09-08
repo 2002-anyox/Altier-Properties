@@ -48,38 +48,106 @@ const scrollTo = (id: string) => (e: React.MouseEvent) => {
 /* ------------------------------ content ---------------------------- */
 
 const FEATURES = [
-  { icon: Building2, title: 'Properties and units', body: 'Apartments, houses, serviced flats, short-stay listings and commercial space in one portfolio, each with its own rate, manager and papers.' },
-  { icon: CalendarRange, title: 'Vacancy and occupancy', body: 'See what is let, what is free and what frees up next. A unit is held by its agreement, so the calendar cannot lie to you.' },
-  { icon: Users, title: 'Tenants, guests and clients', body: 'One record per person, with their home, their agreement, their charges and every conversation on file.' },
-  { icon: Receipt, title: 'Rent, invoices and payments', body: 'Charges take their figures from the property, so nobody is billed a rent that belongs to a different home.' },
-  { icon: Bell, title: 'Reminders that send themselves', body: 'Rent due, a lease ending, an arrival tomorrow, a unit sitting empty. All raised on your schedule, before they cost you.' },
-  { icon: KeyRound, title: 'Bookings and short stays', body: 'A three-night stay and a twelve-month lease are the same kind of record. Check people in and out from the row.' },
-  { icon: Wrench, title: 'Maintenance and jobs', body: 'Report it, assign it, price it, close it. What the job was expected to cost stays apart from what it actually did.' },
-  { icon: ShieldCheck, title: 'Roles and secure access', body: 'Owner, manager, accountant, staff. Change what a role reaches and the database changes with it.' },
-  { icon: LineChart, title: 'Revenue and occupancy reporting', body: 'Rent recognised across the period it pays for, so a quarterly advance is earned over three months rather than one.' },
-  { icon: FileText, title: 'Documents and records', body: 'Leases, titles, inspections, identity papers, each filed against the property or the person it belongs to.' },
+  {
+    icon: Building2,
+    title: 'Property and unit management',
+    body: 'Hold apartments, houses, villas, serviced flats, short-stay listings and commercial space in a single portfolio. Each property carries its own letting model, rent or nightly rate, assigned manager, amenities, photographs and paperwork, so everything about a unit lives in one record rather than four.',
+  },
+  {
+    icon: CalendarRange,
+    title: 'Vacancy and occupancy tracking',
+    body: 'A live calendar sets every unit against every night, marked by whether it is let, reserved, free, or being turned around between guests. Because a unit is held by its agreement rather than by a note somebody made, you can see precisely when each one comes free and let it again before it stands empty.',
+  },
+  {
+    icon: Users,
+    title: 'Tenant, guest and client profiles',
+    body: 'One record for each tenant, guest, corporate account or property owner, holding their contact details, identity documents, the home they occupy, the terms they agreed, every charge raised against them and the history of your correspondence. Any client can be given a portal login to their own records.',
+  },
+  {
+    icon: Receipt,
+    title: 'Rent, invoice and payment tracking',
+    body: 'Charges take their figures from the property itself, so an agreement cannot quietly bill somebody the wrong rent. Rent, advances, deposits, booking fees, utilities, service charges, late fees and maintenance recharges each have their own type, and payments are recorded against them by bank transfer, card, mobile money or cash.',
+  },
+  {
+    icon: Bell,
+    title: 'Due-date reminders and notifications',
+    body: 'Decide how much warning you want for rent falling due, a lease approaching its end, a guest arriving or departing, a unit standing empty, or a job nearing its target date. Altier raises each one on that schedule, and observes quiet hours if you would rather not hear from it in the evening.',
+  },
+  {
+    icon: KeyRound,
+    title: 'Booking and short-stay management',
+    body: 'A three-night stay and a twelve-month lease are the same kind of record, and the form asks only for what that kind of agreement actually needs. Bookings record where they came from, whether direct, Airbnb, Booking.com, an agency or a corporate account, and your team can check guests in and out from the booking list itself.',
+  },
+  {
+    icon: Wrench,
+    title: 'Maintenance requests and task tracking',
+    body: 'Log a job against a property, give it a category and a priority, assign it to a colleague and set a target date. What the work was expected to cost is kept separate from what it finally came to, and every change is recorded on the job\u2019s own timeline for whoever picks it up next.',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Team roles and secure workspace access',
+    body: 'Invite colleagues as owners, managers, accountants or staff, and assign managers and staff to the particular properties they look after. The permission grid is yours to edit, and the database enforces whatever it says, so a role you narrow here is narrowed everywhere.',
+  },
+  {
+    icon: LineChart,
+    title: 'Reporting, revenue and occupancy analytics',
+    body: 'Revenue is recognised across the period each payment buys rather than on the day it arrives, so a quarterly advance is earned over its three months. Reports cover collection rates per property, revenue by district, letting model against maintenance cost, your most valuable clients, and how far overdue each outstanding balance has become.',
+  },
+  {
+    icon: FileText,
+    title: 'Documents and property records',
+    body: 'Leases, title deeds, insurance certificates, inspection reports, compliance papers, invoices and identity documents are filed against the property or the person they belong to. When somebody needs one months later, it is where it ought to be rather than on a colleague\u2019s laptop.',
+  },
 ]
 
 const OUTCOMES = [
-  { value: 'One place', label: 'instead of four', body: 'The spreadsheet, the WhatsApp thread, the paper file and the calendar in somebody’s head, all replaced by one record everybody reads.' },
-  { value: 'Nothing missed', label: 'no forgotten rent', body: 'Every charge carries its due date and chases itself. Arrears are a number on a screen, not a discovery in March.' },
-  { value: 'Fewer empty days', label: 'higher occupancy', body: 'A unit coming free is visible weeks ahead, so the next tenant is found before the last one has gone.' },
-  { value: 'Always current', label: 'organised by default', body: 'Every click is written through and confirmed. What you see is what the database holds, not what your browser hoped.' },
+  {
+    value: 'One place',
+    label: 'A single source of truth',
+    body: 'The spreadsheet, the WhatsApp thread, the paper file and the calendar somebody keeps in their head all describe the same portfolio slightly differently. Altier replaces them with one record your whole team works from.',
+  },
+  {
+    value: 'Nothing missed',
+    label: 'No rent left uninvoiced',
+    body: 'Every charge carries its own due date and chases itself, so arrears appear as a figure you can act on this week rather than something you discover at the end of the quarter.',
+  },
+  {
+    value: 'Fewer empty days',
+    label: 'Stronger occupancy',
+    body: 'A unit coming free is visible weeks in advance, which gives you the time to find and sign the next tenant before the current one has moved their furniture out.',
+  },
+  {
+    value: 'Always current',
+    label: 'Accurate as you work',
+    body: 'Every change is written to the database and confirmed on screen as you make it, so the figures you are reading are the ones that are stored, not the ones your browser hoped had saved.',
+  },
 ]
 
 const STEPS = [
-  { title: 'Create your workspace', body: 'One account, one private workspace. Nothing is shared with anybody else on the platform, and nothing is seeded. It opens empty, because it is yours.' },
-  { title: 'Add properties and units', body: 'Name it, price it, pin it on the map. The rate you set here is the rate every agreement and every bill takes from it.' },
-  { title: 'Invite your team and add clients', body: 'Send an invitation, pick a role. Tenants and guests get a portal of their own, and never take a paid seat.' },
-  { title: 'Watch it stay in step', body: 'Occupancy, payments, arrivals, jobs and documents, live. Every change is saved and confirmed as you make it.' },
+  {
+    title: 'Create your workspace',
+    body: 'Your workspace is private to you and opens completely empty, with no sample records to clear out before you can begin. Nothing in it is visible to any other customer on the platform.',
+  },
+  {
+    title: 'Add your properties and units',
+    body: 'Give each property a name, a letting model, a rent or nightly rate, and a pin on the map. The rate you set becomes the figure that every agreement and every invoice raised against that property will use.',
+  },
+  {
+    title: 'Invite your team and add clients',
+    body: 'Send your colleagues an invitation and choose the role each of them holds. Tenants and guests can be given portal access to their own records, and they never count against your seat allowance.',
+  },
+  {
+    title: 'Track occupancy, payments and activity',
+    body: 'Occupancy, payments, arrivals, maintenance and documents all move as your team works, in one live picture. Nothing needs to be reconciled at the end of the month, because nothing was ever kept in two places.',
+  },
 ]
 
 const SHOWCASE = [
-  { id: 'dashboard', label: 'Dashboard', file: 'Altier Properties — Dashboard', render: () => <DashboardPreview />, note: 'What the whole portfolio is doing, on one screen, the moment you sign in.' },
-  { id: 'calendar', label: 'Availability', file: 'Altier Properties — Availability', render: () => <CalendarPreview />, note: 'Every unit against every night. Gaps are money, so they are drawn as gaps.' },
-  { id: 'client', label: 'Client', file: 'Altier Properties — A. Mugisha', render: () => <ClientPreview />, note: 'One person, their home, their agreement and everything they have ever been charged.' },
-  { id: 'payments', label: 'Payments', file: 'Altier Properties — Payments', render: () => <PaymentsPreview />, note: 'What has come in, what has not, and what is about to be chased.' },
-  { id: 'team', label: 'Team', file: 'Altier Properties — Team & access', render: () => <TeamPreview />, note: 'Roles you can actually edit. The database enforces the same grid.' },
+  { id: 'dashboard', label: 'Dashboard', file: 'Altier Properties — Dashboard', render: () => <DashboardPreview />, note: 'The state of the whole portfolio on one screen: occupancy, rent collected, units ready to let, and what falls due over the coming week.' },
+  { id: 'calendar', label: 'Availability', file: 'Altier Properties — Availability', render: () => <CalendarPreview />, note: 'Every unit set against every night, so you can see at a glance what is let, what is reserved, and exactly where the gaps fall.' },
+  { id: 'client', label: 'Client', file: 'Altier Properties — A. Mugisha', render: () => <ClientPreview />, note: 'A single view of one client: the home they occupy, the terms they agreed, and every charge that has been raised against them.' },
+  { id: 'payments', label: 'Payments', file: 'Altier Properties — Payments', render: () => <PaymentsPreview />, note: 'What has been collected, what is still outstanding, and which invoices are due to be chased next.' },
+  { id: 'team', label: 'Team', file: 'Altier Properties — Team & access', render: () => <TeamPreview />, note: 'The permissions held by each role, edited by you and enforced by the database rather than by the interface.' },
 ]
 
 /* PLACEHOLDER PRICING — the money is invented and must be set before this
@@ -98,46 +166,46 @@ const PLANS = [
     name: 'Starter',
     price: '$29',
     cadence: 'per month',
-    blurb: 'A landlord with a handful of doors.',
+    blurb: 'For a landlord managing a handful of properties.',
     seats: seatsLabel('starter'),
     featured: false,
     includes: [
       'Unlimited properties and units',
-      'Tenants, guests and agreements',
+      'Tenant, guest and client records',
       'Rent, invoices and payment tracking',
-      'Due-date reminders',
-      'Tenant portals, never a paid seat',
+      'Due-date reminders and notifications',
+      'Tenant portals, which never take a seat',
     ],
   },
   {
     name: 'Professional',
     price: '$79',
     cadence: 'per month',
-    blurb: 'An agency or manager running a real portfolio.',
+    blurb: 'For agencies and managers running a full portfolio.',
     seats: seatsLabel('professional'),
     featured: true,
     includes: [
       'Everything in Starter',
-      'Short stays, check-in and check-out',
-      'Maintenance board with costs',
-      'Revenue and occupancy reporting',
+      'Short stays, with check-in and check-out',
+      'Maintenance board with estimated and final costs',
+      'Revenue, occupancy and collection reporting',
       'Editable roles and permissions',
-      'Google map with pinned properties',
+      'Google map with a pin on every property',
     ],
   },
   {
     name: 'Enterprise',
     price: 'Talk to us',
     cadence: '',
-    blurb: 'Several portfolios, or several landlords’ books.',
+    blurb: 'For groups running several portfolios, or keeping more than one landlord’s books.',
     seats: seatsLabel('enterprise'),
     featured: false,
     includes: [
       'Everything in Professional',
-      'Multiple workspaces on one login',
+      'Multiple workspaces under one login',
       'Single sign-on with Google and Apple',
       'Priority support',
-      'Onboarding and data import',
+      'Assisted onboarding and data import',
     ],
   },
 ]
@@ -145,27 +213,27 @@ const PLANS = [
 const FAQ = [
   {
     q: 'Do tenants and guests use up my seats?',
-    a: 'No. A tenant portal is a login that reads one person’s own agreement, charges and documents. It is not a member of staff with fewer buttons. Only owners, managers, accountants and staff count against a plan.',
+    a: 'No. A tenant portal is a login that reads one person’s own agreement, charges and documents; it is not a member of staff with fewer buttons. Only owners, managers, accountants and staff are counted against your plan, so you can give every tenant and guest access without it costing you a seat.',
   },
   {
     q: 'Can somebody at another agency see my properties?',
-    a: 'No, and not because we filter it on the way out. Every record carries the workspace it belongs to, and the database itself refuses to return a row from a workspace you are not an active member of. A bug in the app can only ever show you less than you are entitled to, never more.',
+    a: 'No, and the protection does not depend on the application filtering correctly. Every record carries the workspace it belongs to, and the database itself declines to return a row from a workspace you are not an active member of. A fault in the application could therefore show you less than you are entitled to see, but never more.',
   },
   {
     q: 'What happens to a tenant who moves?',
-    a: 'Check them out. That releases the unit from the day they actually went, frees it on the calendar, and lets them be placed somewhere else. Until then a client is held to one home at a time, so nobody is billed rent for two.',
+    a: 'Check them out, and the unit is released from the day they actually left rather than the day the agreement said they would. It becomes available on the calendar immediately, and the client can then be placed elsewhere. Until that happens a client is held to one home at a time, which prevents anybody being billed rent for two.',
   },
   {
     q: 'Does it handle short stays as well as long leases?',
-    a: 'Both, in one pipeline. The form asks for what each kind of agreement needs and nothing it does not: a departure date and arrival times for a stay, months up front and notice for an open-ended rental, a term for a lease.',
+    a: 'Both, through the same set of records. The agreement form adapts to the kind of let you are creating and asks only for what it genuinely requires: a departure date and arrival times for a short stay, months paid up front and a notice period for an open-ended rental, and a fixed term for a lease.',
   },
   {
     q: 'Is my data really mine?',
-    a: 'It is. Your workspace starts empty rather than full of samples, so there is never any question about whose figures you are reading. If the platform cannot reach your database it says so and shows nothing.',
+    a: 'It is. Your workspace begins empty rather than pre-filled with samples, so there is never any question about whose figures are on the screen. If the platform cannot reach your database, it tells you so plainly and shows nothing at all rather than falling back on invented numbers.',
   },
   {
     q: 'What currency and calendar does it use?',
-    a: 'Amounts are held in one base currency and shown in yours. Dates follow the calendar where your workspace is, which defaults to Africa/Kampala, so “today” on the screen and “today” in the ledger are the same day.',
+    a: 'Amounts are stored in a single base currency and presented in the one you choose. Dates follow the calendar of the place your workspace is set to, which defaults to Africa/Kampala, so that “today” on the screen and “today” in your ledger always mean the same day.',
   },
 ]
 
@@ -363,9 +431,10 @@ export default function Landing() {
               </h1>
 
               <p className="mx-auto mt-6 max-w-2xl text-[15px] leading-relaxed text-[rgb(var(--c-text-onrail-muted))] sm:text-[17px]">
-                Rentals, real estate, serviced apartments and short stays, held in one place
-                with the tenants, the agreements, the payments and the availability behind
-                them. It stays current on its own.
+                Altier Properties brings your rentals, real estate, serviced apartments and
+                short stays together with the tenants, agreements, payments and availability
+                behind them. One workspace for the whole portfolio, accurate as your team
+                works in it.
               </p>
 
               <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -386,7 +455,7 @@ export default function Landing() {
               </div>
 
               <p className="mt-5 text-[12.5px] text-[rgb(var(--c-text-onrail-muted))]">
-                Your workspace opens empty. No sample data, ever.
+                Your workspace opens empty. There is no sample data to clear out first.
               </p>
             </motion.div>
 
@@ -411,12 +480,13 @@ export default function Landing() {
             <Reveal className="mx-auto max-w-2xl text-center">
               <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-gold-ink">Why it is worth it</p>
               <h2 className="mt-3 font-display text-[28px] font-semibold leading-tight tracking-[-0.015em] text-ink sm:text-[38px]">
-                The work does not go away. The chasing does.
+                What changes when everything is in one place.
               </h2>
               <p className="mt-4 text-[15px] leading-relaxed text-ink-secondary">
-                Most portfolios are run out of a spreadsheet, a phone and somebody’s memory.
-                That works until it does not. What it costs then is a month’s rent nobody
-                invoiced, or six weeks of an empty flat nobody noticed.
+                Most portfolios are run from a spreadsheet, a phone and somebody’s memory. That
+                holds together until it does not, and the cost is rarely small: a month’s
+                rent nobody invoiced, or six weeks of an empty flat nobody noticed was
+                empty.
               </p>
             </Reveal>
 
@@ -438,7 +508,7 @@ export default function Landing() {
             <Reveal className="max-w-2xl">
               <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-gold-ink">Everything in one place</p>
               <h2 className="mt-3 font-display text-[28px] font-semibold leading-tight tracking-[-0.015em] text-ink sm:text-[38px]">
-                Ten things you are already doing, done properly.
+                Everything the portfolio asks of you, in one place.
               </h2>
             </Reveal>
 
@@ -468,11 +538,12 @@ export default function Landing() {
               <Reveal>
                 <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-gold-ink">How it works</p>
                 <h2 className="mt-3 font-display text-[28px] font-semibold leading-tight tracking-[-0.015em] text-ink sm:text-[38px]">
-                  Four steps, and an afternoon.
+                  Set up in an afternoon.
                 </h2>
                 <p className="mt-4 max-w-md text-[15px] leading-relaxed text-ink-secondary">
-                  There is no import to survive and no consultant to book. Add the first
-                  property, put somebody in it, and the rest follows from those two facts.
+                  There is no migration to survive and no consultant to book. Add your first
+                  property, place a tenant in it, and everything else follows from those two
+                  facts.
                 </p>
                 <button
                   onClick={signIn}
@@ -507,7 +578,7 @@ export default function Landing() {
             <Reveal className="mx-auto max-w-2xl text-center">
               <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-gold-ink">A look inside</p>
               <h2 className="mt-3 font-display text-[28px] font-semibold leading-tight tracking-[-0.015em] text-ink sm:text-[38px]">
-                The screens you will live in.
+                The screens you will use every day.
               </h2>
             </Reveal>
 
@@ -587,26 +658,28 @@ export default function Landing() {
               <Reveal>
                 <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-gold">Your workspace</p>
                 <h2 className="mt-3 font-display text-[28px] font-semibold leading-tight tracking-[-0.015em] text-[rgb(var(--c-text-onrail))] sm:text-[38px]">
-                  Isolation the database enforces, not the interface.
+                  Your data is isolated by the database itself.
                 </h2>
                 <p className="mt-5 text-[15px] leading-relaxed text-[rgb(var(--c-text-onrail-muted))]">
-                  Filtering records on the way out is a promise the front end makes and can
-                  break. Here, every property, tenant, payment, booking and document carries
-                  the workspace it belongs to, and Postgres itself refuses to hand back a row
-                  from a workspace you are not an active member of.
+                  Filtering records on their way out of the application is a promise the front
+                  end makes and can break. Altier does not rely on it. Every property,
+                  tenant, payment, booking and document carries the workspace it belongs to,
+                  and Postgres itself declines to return a row from a workspace you are not
+                  an active member of.
                 </p>
                 <p className="mt-4 text-[15px] leading-relaxed text-[rgb(var(--c-text-onrail-muted))]">
-                  A mistake in the app can only ever show you less than you are entitled to.
-                  Never somebody else’s.
+                  The practical effect is that a mistake in the application can only ever show
+                  you less than you are entitled to see. It cannot show you somebody
+                  else’s portfolio.
                 </p>
               </Reveal>
 
               <RevealGroup as="ul" className="grid gap-3.5 sm:grid-cols-2">
                 {[
-                  { icon: Lock, title: 'A private workspace', body: 'Your portfolio is yours alone. Nothing is pooled and nothing is shared by default.' },
-                  { icon: ShieldCheck, title: 'Row-level security', body: 'The membership table is the authority. The session only makes a claim, and the claim is checked.' },
-                  { icon: Users, title: 'Roles you control', body: 'Owner, manager, accountant, staff. Plus a permission grid you can edit yourself.' },
-                  { icon: Gauge, title: 'Only what they need', body: 'A manager sees the properties they are assigned. A tenant sees their own agreement and nothing else.' },
+                  { icon: Lock, title: 'A private workspace', body: 'Your portfolio belongs to your workspace alone. Nothing is pooled with other customers, and nothing is shared unless you share it.' },
+                  { icon: ShieldCheck, title: 'Row-level security', body: 'Your membership record is the authority on what you may see. A request only makes a claim, and every claim is checked against it.' },
+                  { icon: Users, title: 'Roles you control', body: 'Owner, manager, accountant and staff, with a permission grid you can edit yourself as your team changes shape.' },
+                  { icon: Gauge, title: 'Only what they need', body: 'A manager sees the properties they have been assigned. A tenant sees their own agreement, charges and documents, and nothing further.' },
                 ].map(({ icon: Icon, title, body }) => (
                   <motion.li
                     key={title}
@@ -634,8 +707,9 @@ export default function Landing() {
                 Pay for the people, not the doors.
               </h2>
               <p className="mt-4 text-[15px] leading-relaxed text-ink-secondary">
-                Every plan carries unlimited properties and units. What changes is how many
-                colleagues work alongside you, and tenants and guests are never one of them.
+                Every plan includes unlimited properties and units. What differs between them is
+                how many colleagues can work alongside you, and tenants and guests are never
+                counted among them.
               </p>
             </Reveal>
 
@@ -693,8 +767,9 @@ export default function Landing() {
 
             <Reveal delay={0.05}>
               <p className="mt-8 text-center text-[12.5px] leading-relaxed text-ink-muted">
-                Move up whenever the team outgrows the seats. The app tells you before it
-                refuses an invitation, and nothing is lost in between.
+                You can move up whenever your team outgrows its seats. Altier tells you as you
+                approach the limit rather than at the moment an invitation is refused, and
+                nothing is lost in the meantime.
               </p>
             </Reveal>
           </div>
@@ -706,7 +781,7 @@ export default function Landing() {
             <Reveal className="text-center">
               <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-gold-ink">Questions</p>
               <h2 className="mt-3 font-display text-[28px] font-semibold leading-tight tracking-[-0.015em] text-ink sm:text-[38px]">
-                The ones worth asking first.
+                Questions we are asked most often.
               </h2>
             </Reveal>
 
@@ -744,8 +819,8 @@ export default function Landing() {
               Bring every property into focus.
             </h2>
             <p className="mx-auto mt-5 max-w-xl text-[15px] leading-relaxed text-[rgb(var(--c-text-onrail-muted))] sm:text-[16.5px]">
-              One workspace, every door, every tenant and every shilling. Current, private,
-              and yours from the first afternoon.
+              One workspace for every property, every tenant and every shilling: private to
+              you, accurate as you work, and ready the same afternoon you begin.
             </p>
             <button
               onClick={signIn}
@@ -755,7 +830,7 @@ export default function Landing() {
               <ArrowRight size={16} className="transition-transform duration-300 ease-premium group-hover:translate-x-0.5" />
             </button>
             <p className="mt-5 text-[12.5px] text-[rgb(var(--c-text-onrail-muted))]">
-              No card to begin. Your workspace starts empty and stays private.
+              No card required to begin. Your workspace starts empty and remains private to you.
             </p>
           </Reveal>
         </section>
@@ -767,8 +842,9 @@ export default function Landing() {
               <div>
                 <Wordmark />
                 <p className="mt-5 max-w-xs text-[13px] leading-relaxed text-[rgb(var(--c-text-onrail-muted))]">
-                  A premium platform for managing real estate, rentals, serviced apartments,
-                  short stays and commercial space. Built in Kampala.
+                  A platform for managing real estate, rentals, serviced apartments, short stays
+                  and commercial space, with the tenants, payments and paperwork that come
+                  with them. Built in Kampala.
                 </p>
               </div>
 
