@@ -52,25 +52,25 @@ const FEATURES = [
   { icon: CalendarRange, title: 'Vacancy and occupancy', body: 'See what is let, what is free and what frees up next. A unit is held by its agreement, so the calendar cannot lie to you.' },
   { icon: Users, title: 'Tenants, guests and clients', body: 'One record per person, with their home, their agreement, their charges and every conversation on file.' },
   { icon: Receipt, title: 'Rent, invoices and payments', body: 'Charges take their figures from the property, so nobody is billed a rent that belongs to a different home.' },
-  { icon: Bell, title: 'Reminders that send themselves', body: 'Rent due, a lease ending, an arrival tomorrow, a unit sitting empty — raised on your schedule, before they cost you.' },
+  { icon: Bell, title: 'Reminders that send themselves', body: 'Rent due, a lease ending, an arrival tomorrow, a unit sitting empty. All raised on your schedule, before they cost you.' },
   { icon: KeyRound, title: 'Bookings and short stays', body: 'A three-night stay and a twelve-month lease are the same kind of record. Check people in and out from the row.' },
-  { icon: Wrench, title: 'Maintenance and jobs', body: 'Report it, assign it, price it, close it — with what it was expected to cost kept apart from what it actually did.' },
+  { icon: Wrench, title: 'Maintenance and jobs', body: 'Report it, assign it, price it, close it. What the job was expected to cost stays apart from what it actually did.' },
   { icon: ShieldCheck, title: 'Roles and secure access', body: 'Owner, manager, accountant, staff. Change what a role reaches and the database changes with it.' },
   { icon: LineChart, title: 'Revenue and occupancy reporting', body: 'Rent recognised across the period it pays for, so a quarterly advance is earned over three months rather than one.' },
-  { icon: FileText, title: 'Documents and records', body: 'Leases, titles, inspections, identity papers — filed against the property or the person they belong to.' },
+  { icon: FileText, title: 'Documents and records', body: 'Leases, titles, inspections, identity papers, each filed against the property or the person it belongs to.' },
 ]
 
 const OUTCOMES = [
-  { value: 'One place', label: 'instead of four', body: 'The spreadsheet, the WhatsApp thread, the paper file and the calendar in somebody’s head — replaced by one record everybody reads.' },
+  { value: 'One place', label: 'instead of four', body: 'The spreadsheet, the WhatsApp thread, the paper file and the calendar in somebody’s head, all replaced by one record everybody reads.' },
   { value: 'Nothing missed', label: 'no forgotten rent', body: 'Every charge carries its due date and chases itself. Arrears are a number on a screen, not a discovery in March.' },
   { value: 'Fewer empty days', label: 'higher occupancy', body: 'A unit coming free is visible weeks ahead, so the next tenant is found before the last one has gone.' },
   { value: 'Always current', label: 'organised by default', body: 'Every click is written through and confirmed. What you see is what the database holds, not what your browser hoped.' },
 ]
 
 const STEPS = [
-  { title: 'Create your workspace', body: 'One account, one private workspace. Nothing is shared with anybody else on the platform, and nothing is seeded — it opens empty, because it is yours.' },
+  { title: 'Create your workspace', body: 'One account, one private workspace. Nothing is shared with anybody else on the platform, and nothing is seeded. It opens empty, because it is yours.' },
   { title: 'Add properties and units', body: 'Name it, price it, pin it on the map. The rate you set here is the rate every agreement and every bill takes from it.' },
-  { title: 'Invite your team and add clients', body: 'Send an invitation, pick a role. Tenants and guests get a portal of their own — and never take a paid seat.' },
+  { title: 'Invite your team and add clients', body: 'Send an invitation, pick a role. Tenants and guests get a portal of their own, and never take a paid seat.' },
   { title: 'Watch it stay in step', body: 'Occupancy, payments, arrivals, jobs and documents, live. Every change is saved and confirmed as you make it.' },
 ]
 
@@ -106,7 +106,7 @@ const PLANS = [
       'Tenants, guests and agreements',
       'Rent, invoices and payment tracking',
       'Due-date reminders',
-      'Tenant portals — never a paid seat',
+      'Tenant portals, never a paid seat',
     ],
   },
   {
@@ -145,7 +145,7 @@ const PLANS = [
 const FAQ = [
   {
     q: 'Do tenants and guests use up my seats?',
-    a: 'No. A tenant portal is a login that reads one person’s own agreement, charges and documents — it is not a member of staff with fewer buttons. Only owners, managers, accountants and staff count against a plan.',
+    a: 'No. A tenant portal is a login that reads one person’s own agreement, charges and documents. It is not a member of staff with fewer buttons. Only owners, managers, accountants and staff count against a plan.',
   },
   {
     q: 'Can somebody at another agency see my properties?',
@@ -157,7 +157,7 @@ const FAQ = [
   },
   {
     q: 'Does it handle short stays as well as long leases?',
-    a: 'Both, in one pipeline. The form asks for what each kind of agreement needs — a departure date and arrival times for a stay, months up front and notice for an open-ended rental, a term for a lease — and nothing it does not.',
+    a: 'Both, in one pipeline. The form asks for what each kind of agreement needs and nothing it does not: a departure date and arrival times for a stay, months up front and notice for an open-ended rental, a term for a lease.',
   },
   {
     q: 'Is my data really mine?',
@@ -165,7 +165,7 @@ const FAQ = [
   },
   {
     q: 'What currency and calendar does it use?',
-    a: 'Amounts are held in one base currency and shown in yours. Dates are the calendar where your workspace is — set to Africa/Kampala by default — so “today” on the screen and “today” in the ledger are the same day.',
+    a: 'Amounts are held in one base currency and shown in yours. Dates follow the calendar where your workspace is, which defaults to Africa/Kampala, so “today” on the screen and “today” in the ledger are the same day.',
   },
 ]
 
@@ -363,9 +363,9 @@ export default function Landing() {
               </h1>
 
               <p className="mx-auto mt-6 max-w-2xl text-[15px] leading-relaxed text-[rgb(var(--c-text-onrail-muted))] sm:text-[17px]">
-                Rentals, real estate, serviced apartments and short stays — with the tenants,
-                the agreements, the payments and the availability behind them — held in one
-                place that stays current on its own.
+                Rentals, real estate, serviced apartments and short stays, held in one place
+                with the tenants, the agreements, the payments and the availability behind
+                them. It stays current on its own.
               </p>
 
               <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -415,7 +415,7 @@ export default function Landing() {
               </h2>
               <p className="mt-4 text-[15px] leading-relaxed text-ink-secondary">
                 Most portfolios are run out of a spreadsheet, a phone and somebody’s memory.
-                That works until it does not — and what it costs is a month’s rent nobody
+                That works until it does not. What it costs then is a month’s rent nobody
                 invoiced, or six weeks of an empty flat nobody noticed.
               </p>
             </Reveal>
@@ -605,7 +605,7 @@ export default function Landing() {
                 {[
                   { icon: Lock, title: 'A private workspace', body: 'Your portfolio is yours alone. Nothing is pooled and nothing is shared by default.' },
                   { icon: ShieldCheck, title: 'Row-level security', body: 'The membership table is the authority. The session only makes a claim, and the claim is checked.' },
-                  { icon: Users, title: 'Roles you control', body: 'Owner, manager, accountant, staff — and a permission grid you can edit yourself.' },
+                  { icon: Users, title: 'Roles you control', body: 'Owner, manager, accountant, staff. Plus a permission grid you can edit yourself.' },
                   { icon: Gauge, title: 'Only what they need', body: 'A manager sees the properties they are assigned. A tenant sees their own agreement and nothing else.' },
                 ].map(({ icon: Icon, title, body }) => (
                   <motion.li
@@ -635,7 +635,7 @@ export default function Landing() {
               </h2>
               <p className="mt-4 text-[15px] leading-relaxed text-ink-secondary">
                 Every plan carries unlimited properties and units. What changes is how many
-                colleagues work alongside you — and tenants and guests are never one of them.
+                colleagues work alongside you, and tenants and guests are never one of them.
               </p>
             </Reveal>
 
@@ -693,7 +693,7 @@ export default function Landing() {
 
             <Reveal delay={0.05}>
               <p className="mt-8 text-center text-[12.5px] leading-relaxed text-ink-muted">
-                Move up whenever the team outgrows the seats — the app tells you before it
+                Move up whenever the team outgrows the seats. The app tells you before it
                 refuses an invitation, and nothing is lost in between.
               </p>
             </Reveal>
@@ -744,7 +744,7 @@ export default function Landing() {
               Bring every property into focus.
             </h2>
             <p className="mx-auto mt-5 max-w-xl text-[15px] leading-relaxed text-[rgb(var(--c-text-onrail-muted))] sm:text-[16.5px]">
-              One workspace, every door, every tenant and every shilling — current, private,
+              One workspace, every door, every tenant and every shilling. Current, private,
               and yours from the first afternoon.
             </p>
             <button
