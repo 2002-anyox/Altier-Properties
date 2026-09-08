@@ -250,6 +250,21 @@ export default function SignIn() {
 
         </div>
 
+          {/* A share of every failed sign-in is somebody who has no
+              account yet. The research is blunt about giving them a way
+              out rather than a password box they cannot satisfy. */}
+          {!setup && (
+            <p className="mt-5 border-t border-line pt-4 text-center text-[13px] text-ink-secondary">
+              New to Altier?{' '}
+              <button
+                type="button"
+                onClick={() => goTo('#/signup')}
+                className="font-medium text-gold-ink underline-offset-2 hover:underline"
+              >
+                Start a free trial
+              </button>
+            </p>
+          )}
         <p className="mt-5 flex items-start gap-2 px-1 text-[12px] leading-relaxed text-ink-muted">
           <ShieldCheck size={14} className="mt-px shrink-0" aria-hidden />
           <span>

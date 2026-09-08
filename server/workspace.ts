@@ -14,8 +14,8 @@
  * ------------------------------------------------------------------ */
 
 import { randomBytes, createHash, randomUUID } from 'node:crypto'
-import { and, eq, inArray, sql } from 'drizzle-orm'
-import { PLANS, type Plan } from '../src/lib/plans.js'
+import { and, eq, gte, inArray, sql } from 'drizzle-orm'
+import { PLANS, TRIAL_DAYS, type Plan } from '../src/lib/plans.js'
 import type { Db } from './db/client.js'
 import * as t from './db/schema.js'
 import {
@@ -31,13 +31,42 @@ import type { Role } from '../src/lib/types.js'
    definition in src/lib/plans.ts keeps the promise and the enforcement
    the same figure. Re-exported because everything downstream — the API,
    the seat checks, the tests — has always read them from here. */
-export { PLANS, type Plan }
+export { PLANS, TRIAL_DAYS, type Plan }
 
 /** The roles that do the work, and so take a seat. */
 export const STAFF_ROLES = ['owner', 'manager', 'accountant', 'staff'] as const
 
 /** A subscription that has stopped paying can still be read, not added to. */
 const OPEN_STATUSES = ['trialing', 'active'] as const
+
+/**
+ * Whether a subscription is still open for business.
+ *
+ * The status alone is not enough. 'trialing' was written when the
+ * workspace was created and nothing has ever changed it since, so a
+ * trial that ended in March still reads as open. The end date is what
+ * decides it — the status only says which kind of ending it was.
+ */
+export function subscriptionOpen(
+  sub: { status: string; trialEndsAt: string | null },
+  today: string,
+): boolean {
+  if (!(OPEN_STATUSES as readonly string[]).includes(sub.status)) return false
+  if (sub.status !== 'trialing') return true
+  /* A trial with no end date never ends: that is how the workspaces
+     created before any of this existed keep working. */
+  return sub.trialEndsAt === null || sub.trialEndsAt >= today
+}
+
+/** Days left, or null when nothing is counting down. */
+export function trialDaysLeft(
+  sub: { status: string; trialEndsAt: string | null },
+  today: string,
+): number | null {
+  if (sub.status !== 'trialing' || !sub.trialEndsAt) return null
+  const ms = Date.parse(`${sub.trialEndsAt}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)
+  return Math.max(0, Math.round(ms / 86_400_000))
+}
 
 export class SeatLimit extends Error {
   constructor(message: string, readonly usage: SeatUsage) { super(message) }
@@ -60,6 +89,10 @@ export interface SeatUsage {
   tenantsCountAsSeats: boolean
   /** True while the subscription allows anybody new to be added. */
   open: boolean
+  /** The day the trial runs out, or null when there is no trial. */
+  trialEndsAt: string | null
+  /** Days remaining on a trial; null when not trialing. */
+  trialDaysLeft: number | null
 }
 
 /**
@@ -111,7 +144,9 @@ export async function seatUsage(db: Db, organizationId: string): Promise<SeatUsa
     pending,
     tenants: members?.tenants ?? 0,
     tenantsCountAsSeats: countsTenants,
-    open: (OPEN_STATUSES as readonly string[]).includes(sub.status),
+    open: subscriptionOpen(sub, dayIn(DEFAULT_TIMEZONE)),
+    trialEndsAt: sub.trialEndsAt,
+    trialDaysLeft: trialDaysLeft(sub, dayIn(DEFAULT_TIMEZONE)),
   }
 }
 
@@ -128,9 +163,11 @@ export async function assertSeatAvailable(db: Db, organizationId: string, role: 
 
   if (!usage.open) {
     throw new SeatLimit(
-      usage.status === 'past_due'
-        ? 'This workspace has an unpaid invoice, so nobody new can be added until it is settled.'
-        : 'This workspace has no active subscription, so nobody new can be added.',
+      usage.status === 'trialing'
+        ? 'Your free trial has ended. Choose a plan to carry on adding people.'
+        : usage.status === 'past_due'
+          ? 'This workspace has an unpaid invoice, so nobody new can be added until it is settled.'
+          : 'This workspace has no active subscription, so nobody new can be added.',
       usage,
     )
   }
@@ -363,6 +400,79 @@ export async function inviteMember(
 
 export class BadInvitation extends Error {}
 
+/* ------------------------------ sign-up ---------------------------- *
+ * The front door, opened.
+ *
+ * Every property this platform relies on still holds: a sign-up creates
+ * a NEW organization and can never join an existing one, the caller
+ * becomes its owner and nobody else's, and the database still decides
+ * what any of them can see. What changes is only that somebody can start
+ * the process without being invited first.
+ * ------------------------------------------------------------------- */
+
+export class SignupRefused extends Error {}
+export class TooManySignups extends Error {}
+
+/** Addresses are compared with each other, never read, so they are hashed. */
+const hashIp = (ip: string) =>
+  createHash('sha256').update(`altier-signup:${ip}`).digest('hex')
+
+/**
+ * A public endpoint that writes rows needs a limit, or it is a way to
+ * fill somebody's database for free. Per address, over an hour.
+ */
+export async function assertSignupAllowed(db: Db, ip: string, perHour = 5) {
+  const since = new Date(Date.now() - 3_600_000)
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(t.signupAttempts)
+    .where(and(eq(t.signupAttempts.ipHash, hashIp(ip)), gte(t.signupAttempts.at, since)))
+  if (Number(row?.n ?? 0) >= perHour) {
+    throw new TooManySignups('That is a lot of workspaces from one place. Try again in an hour.')
+  }
+  await db.insert(t.signupAttempts).values({ ipHash: hashIp(ip) })
+}
+
+export interface Signup {
+  name: string
+  email: string
+  password: string
+  organizationName: string
+}
+
+/**
+ * Creates the account, the workspace and the trial in one go.
+ *
+ * The email is unique across the platform, so an address that already
+ * has an account is refused rather than quietly attached to a second
+ * workspace — which would be a way to end up with two of yourself.
+ */
+export async function signUp(db: Db, input: Signup, createProfileRow: (
+  db: Db, profile: { name: string; email: string; password: string },
+) => Promise<string>) {
+  const email = input.email.trim().toLowerCase()
+  const [existing] = await db.select({ id: t.profiles.id }).from(t.profiles)
+    .where(eq(t.profiles.email, email))
+  if (existing) {
+    throw new SignupRefused('That email already has an account here. Sign in instead.')
+  }
+
+  const profileId = await createProfileRow(db, {
+    name: input.name.trim(), email, password: input.password,
+  })
+
+  const { organizationId } = await createWorkspace(db, {
+    profileId,
+    name: input.name.trim(),
+    organizationName: input.organizationName.trim() || `${input.name.trim()}'s properties`,
+    title: 'Owner',
+  })
+
+  return { profileId, organizationId }
+}
+
+
+
 /** Withdrawing one, which is also how a seat is given back. */
 export async function revokeInvitation(db: Db, organizationId: string, id: string) {
   const open = and(
@@ -553,7 +663,7 @@ export async function createWorkspace(db: Db, input: {
     slug,
   })
 
-  const trialEnds = dayIn(DEFAULT_TIMEZONE, new Date(Date.now() + 30 * 86_400_000))
+  const trialEnds = dayIn(DEFAULT_TIMEZONE, new Date(Date.now() + TRIAL_DAYS * 86_400_000))
   await db.insert(t.subscriptions).values({
     organizationId,
     plan: 'starter',

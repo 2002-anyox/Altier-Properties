@@ -518,6 +518,8 @@ interface Ctx {
   switchWorkspace: (organizationId: string) => Promise<void>
   /** First run only: creates the owner account on an empty portfolio. */
   createOwner: (owner: { name: string; email: string; password: string; token?: string }) => Promise<void>
+  /** The public front door: a new account, its own workspace, and a trial. */
+  signUp: (input: { name: string; email: string; password: string; organizationName: string }) => Promise<void>
   /** Re-reads which ways in the account has, after linking or unlinking. */
   refreshAccount: () => Promise<void>
   /**
@@ -711,6 +713,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     await refreshAccount().catch(() => { /* cosmetic; the session is real */ })
   }, [refreshAccount])
 
+  /* Same shape as createOwner: the account exists, so adopt the session
+     and read the (empty) portfolio it opens on. */
+  const signUp = useCallback(async (input: {
+    name: string; email: string; password: string; organizationName: string
+  }) => {
+    const { member } = await auth.signUp(input)
+    dispatch({ type: 'signed-in', member })
+    const { portfolio } = await loadPortfolio()
+    dispatch({ type: 'sync', portfolio, source: 'database' })
+    await refreshAccount().catch(() => { /* cosmetic; the session is real */ })
+  }, [refreshAccount])
+
   const createOwner = useCallback(async (owner: { name: string; email: string; password: string; token?: string }) => {
     const { member } = await auth.setup(owner)
     dispatch({ type: 'signed-in', member })
@@ -842,6 +856,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       signOut,
       switchWorkspace,
       createOwner,
+      signUp,
       refreshAccount,
       ssoError,
       clearSsoError,
@@ -849,7 +864,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       savedAt,
     }),
     [state, theme, toasts, toast, dismissToast, paletteOpen, dispatchWithSync, signIn, signOut,
-     switchWorkspace, createOwner, refreshAccount, ssoError, clearSsoError, inFlight, savedAt],
+     switchWorkspace, createOwner, signUp, refreshAccount, ssoError, clearSsoError,
+     inFlight, savedAt],
   )
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

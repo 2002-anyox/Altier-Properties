@@ -43,7 +43,8 @@ import {
 import { DEFAULT_TIMEZONE } from '../src/lib/defaults.js'
 import { scoped } from './scope.js'
 import {
-  BadInvitation, NoSubscription, SeatLimit, createWorkspace, defaultOrganization,
+  BadInvitation, NoSubscription, SeatLimit, SignupRefused, TooManySignups,
+  assertSignupAllowed, createWorkspace, defaultOrganization, signUp,
   BadPermission, acceptInvitation, invitationByToken, inviteMember, membershipsFor,
   openInvitations, permissionMatrix, resetPermissions, revokeInvitation, seatUsage,
   setRolePermission,
@@ -320,6 +321,49 @@ export function createApp(db: Db, driver: string) {
       : DEFAULT_TIMEZONE
     return { profile, membership, permissions, timezone }
   }
+
+  /* ------------------------------ sign-up ---------------------------- *
+   * A stranger arriving at the front door, which until now did not
+   * exist: the only ways in were an invitation, or being the very first
+   * account on an empty database.
+   *
+   * Nothing about isolation changes. This creates a NEW organization and
+   * can never join one that exists; the caller owns it and nothing else;
+   * and every read they go on to make is still decided by the database.
+   * ------------------------------------------------------------------- */
+  app.post('/api/auth/signup', route(async (req, res) => {
+    const name = String(req.body?.name ?? '').trim()
+    const email = String(req.body?.email ?? '').trim().toLowerCase()
+    const password = String(req.body?.password ?? '')
+    const organizationName = String(req.body?.organizationName ?? '').trim()
+
+    if (name.length < 2) throw new BadRequest('Tell us your name.')
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new BadRequest('That does not look like an email address.')
+    }
+    const problem = rejectPassword(password, { name, email })
+    if (problem) throw new BadRequest(problem)
+
+    /* A public endpoint that writes rows needs a ceiling, or it is a free
+       way to fill the database. Counted against the caller's address. */
+    const ip = String(req.ip ?? req.socket?.remoteAddress ?? 'unknown')
+    await assertSignupAllowed(db, ip)
+
+    const { profileId, organizationId } = await signUp(
+      db,
+      { name, email, password, organizationName },
+      async (conn, profile) => {
+        const id = `pr-${randomUUID().slice(0, 12)}`
+        await conn.insert(profiles).values({ id, name: profile.name, email: profile.email })
+        await setPassword(conn, id, profile.password)
+        return id
+      },
+    )
+
+    const { token, expiresAt } = await createSession(db, profileId, organizationId, req.get('user-agent'))
+    setSessionCookie(res, token, expiresAt)
+    res.json({ member: publicMember(await readViewer(profileId, organizationId)) })
+  }))
 
   app.post('/api/auth/login', route(async (req, res) => {
     const email = String(req.body?.email ?? '')
@@ -1104,8 +1148,13 @@ export function createApp(db: Db, driver: string) {
       res.status(400).json({ error: err.message })
       return
     }
-    if (err instanceof Conflict || err instanceof BadInvitation) {
+    if (err instanceof Conflict || err instanceof BadInvitation
+        || err instanceof SignupRefused) {
       res.status(409).json({ error: err.message })
+      return
+    }
+    if (err instanceof TooManySignups) {
+      res.status(429).json({ error: err.message })
       return
     }
     /* 402 Payment Required, for once literally. The request was allowed
