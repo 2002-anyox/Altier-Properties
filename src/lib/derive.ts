@@ -21,8 +21,29 @@ export type ChargeClass = 'recurring' | 'advance' | 'deposit'
 export const chargeClass = (type: ChargeType): ChargeClass =>
   type === 'advance' ? 'advance' : type === 'deposit' ? 'deposit' : 'recurring'
 
+/**
+ * Which way a charge moves the ledger.
+ *
+ * A credit note is money owed back to the client — an early departure
+ * refunding days that were paid for and never used. It is stored as a
+ * positive amount, because the column refuses negatives and a bill with a
+ * minus sign on it is a bill nobody can read, so the direction lives here
+ * instead. Every total that adds money up goes through this, which is the
+ * only way they can all agree about it.
+ */
+export const chargeSign = (type: ChargeType) => (type === 'credit_note' ? -1 : 1)
+
+/**
+ * A credit note is money we owe, not money we are owed. It nets out of
+ * revenue and out of cash, but it has no business in a list of what
+ * clients still have to pay — "2 overdue, minus 600,000" is not a debt
+ * anybody is chasing.
+ */
+const receivable = (i: Invoice) => i.type !== 'credit_note'
+
 const sumBy = (invoices: Invoice[], cls: ChargeClass) =>
-  invoices.filter((i) => chargeClass(i.type) === cls).reduce((a, i) => a + i.paidAmount, 0)
+  invoices.filter((i) => chargeClass(i.type) === cls)
+    .reduce((a, i) => a + chargeSign(i.type) * i.paidAmount, 0)
 
 const monthKeyOf = (isoDate: string) => isoDate.slice(0, 7)
 
@@ -35,14 +56,22 @@ const shiftMonthKey = (key: string, months: number) => {
 const DAY = 86_400_000
 const asDate = (d: string) => new Date(d + 'T00:00:00').getTime()
 
-/** Days two half-open date ranges have in common. */
+/**
+ * Days two half-open date ranges have in common.
+ *
+ * Rounded: a calendar day is not always 86,400,000 milliseconds long, and
+ * in a timezone that puts its clocks forward a three-month period divides
+ * out as 89.958 days. The ratios below mostly hide it, but anything that
+ * reads a day count straight — a settlement, say — comes out short.
+ */
 function overlapDays(aFrom: string, aTo: string, bFrom: string, bTo: string) {
   const from = Math.max(asDate(aFrom), asDate(bFrom))
   const to = Math.min(asDate(aTo), asDate(bTo))
-  return Math.max(0, (to - from) / DAY)
+  return Math.max(0, Math.round((to - from) / DAY))
 }
 
-const spanDays = (inv: Invoice) => Math.max(0, (asDate(inv.earnsTo) - asDate(inv.earnsFrom)) / DAY)
+const spanDays = (inv: Invoice) =>
+  Math.max(0, Math.round((asDate(inv.earnsTo) - asDate(inv.earnsFrom)) / DAY))
 
 const firstOfMonth = (key: string) => `${key}-01`
 
@@ -66,7 +95,7 @@ export function earnedInMonth(invoices: Invoice[], key: string) {
     const span = spanDays(inv)
     if (span <= 0) continue
     const share = overlapDays(inv.earnsFrom, inv.earnsTo, monthFrom, monthTo)
-    if (share > 0) total += inv.amount * (share / span)
+    if (share > 0) total += chargeSign(inv.type) * inv.amount * (share / span)
   }
   return total
 }
@@ -84,7 +113,7 @@ export function deferredPortion(inv: Invoice) {
   if (span <= 0) return 0
   const nextMonth = firstOfMonth(shiftMonthKey(inv.paidOn.slice(0, 7), 1))
   const beyond = overlapDays(inv.earnsFrom, inv.earnsTo, nextMonth, '2999-12-31')
-  return inv.paidAmount * (beyond / span)
+  return chargeSign(inv.type) * inv.paidAmount * (beyond / span)
 }
 
 /** An open-ended rental has no end date; for range maths treat it as running
@@ -170,7 +199,8 @@ export function computeKpis(
     (i) => i.paidOn && inMonth(i.paidOn, -1) && Number(i.paidOn.slice(8, 10)) <= dayOfMonth,
   )
   const cashOf = (rows: Invoice[]) =>
-    rows.filter((i) => chargeClass(i.type) !== 'deposit').reduce((a, i) => a + i.paidAmount, 0)
+    rows.filter((i) => chargeClass(i.type) !== 'deposit')
+      .reduce((a, i) => a + chargeSign(i.type) * i.paidAmount, 0)
   const deferredOf = (rows: Invoice[]) => rows.reduce((a, i) => a + deferredPortion(i), 0)
 
   const depositsCollected = sumBy(paidThisMonth, 'deposit')
@@ -181,13 +211,16 @@ export function computeKpis(
 
   const today = iso(TODAY)
   const upcoming = invoices.filter(
-    (i) => (i.status === 'upcoming' || i.status === 'pending') && daysBetween(today, i.dueOn) >= 0 && daysBetween(today, i.dueOn) <= 30,
+    (i) => receivable(i) && (i.status === 'upcoming' || i.status === 'pending') && daysBetween(today, i.dueOn) >= 0 && daysBetween(today, i.dueOn) <= 30,
   )
-  const overdue = invoices.filter((i) => i.status === 'overdue' || i.status === 'partial')
+  const overdue = invoices.filter((i) => receivable(i) && (i.status === 'overdue' || i.status === 'partial'))
 
+  /* Collection is a ratio of money, not of documents, so a credit note
+     belongs on both sides of it: it reduces what was billed, and once
+     refunded it reduces what was collected. */
   const settled = invoices.filter((i) => i.dueOn <= today && i.status !== 'upcoming')
-  const billed = settled.reduce((a, i) => a + i.amount, 0)
-  const collected = settled.reduce((a, i) => a + i.paidAmount, 0)
+  const billed = settled.reduce((a, i) => a + chargeSign(i.type) * i.amount, 0)
+  const collected = settled.reduce((a, i) => a + chargeSign(i.type) * i.paidAmount, 0)
 
   const openMx = maintenance.filter((m) => m.status !== 'completed')
   const shortStay = properties.filter((p) => p.mode === 'short_stay' && p.status !== 'inactive')
@@ -237,11 +270,12 @@ export function revenueSeries(invoices: Invoice[], months = 12) {
     const advance = paid.reduce((a, i) => a + deferredPortion(i), 0)
     const billed = invoices
       .filter((i) => i.dueOn.slice(0, 7) === key && chargeClass(i.type) !== 'deposit')
-      .reduce((a, i) => a + i.amount, 0)
+      .reduce((a, i) => a + chargeSign(i.type) * i.amount, 0)
     out.push({
       key,
       label: ref.toLocaleDateString(presentation.locale, { month: 'short' }),
-      collected: paid.filter((i) => chargeClass(i.type) !== 'deposit').reduce((a, i) => a + i.paidAmount, 0),
+      collected: paid.filter((i) => chargeClass(i.type) !== 'deposit')
+        .reduce((a, i) => a + chargeSign(i.type) * i.paidAmount, 0),
       billed,
       recurring,
       advance,
@@ -260,7 +294,7 @@ export function ageingBuckets(invoices: Invoice[]) {
     { label: '60+ days', lo: 61, hi: 100000, amount: 0, count: 0 },
   ]
   invoices
-    .filter((i) => i.status === 'overdue' || i.status === 'partial')
+    .filter((i) => receivable(i) && (i.status === 'overdue' || i.status === 'partial'))
     .forEach((i) => {
       const late = Math.abs(daysBetween(today, i.dueOn))
       const b = buckets.find((x) => late >= x.lo && late <= x.hi)
@@ -291,11 +325,11 @@ export function propertyPerformance(
     const inv = invoices.filter((i) => i.propertyId === p.id)
     /* Deposits are held, not earned, so they stay out of revenue entirely. */
     const earning = inv.filter((i) => chargeClass(i.type) !== 'deposit')
-    const revenue = earning.reduce((a, i) => a + i.paidAmount, 0)
-    const recurring = earning.reduce((a, i) => a + (i.paidAmount - deferredPortion(i)), 0)
+    const revenue = earning.reduce((a, i) => a + chargeSign(i.type) * i.paidAmount, 0)
+    const recurring = earning.reduce((a, i) => a + (chargeSign(i.type) * i.paidAmount - deferredPortion(i)), 0)
     const advances = earning.reduce((a, i) => a + deferredPortion(i), 0)
-    const billed = earning.reduce((a, i) => a + i.amount, 0)
-    const outstanding = earning.reduce((a, i) => a + (i.amount - i.paidAmount), 0)
+    const billed = earning.reduce((a, i) => a + chargeSign(i.type) * i.amount, 0)
+    const outstanding = earning.filter(receivable).reduce((a, i) => a + (i.amount - i.paidAmount), 0)
     const costs = maintenance.filter((m) => m.propertyId === p.id).reduce((a, m) => a + (m.actualCost ?? m.estimatedCost * 0.5), 0)
     /* An open-ended rental is counted to today, not to a fabricated end. */
     const nights = bookings

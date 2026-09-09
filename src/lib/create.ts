@@ -14,6 +14,7 @@
 import { TODAY, addDays, iso } from './dates.js'
 import { AMENITY_POOL, COMMERCIAL_AMENITIES } from './defaults.js'
 import { depositFor, timesFor } from './agreement.js'
+import { creditNote, dailyRate, extraNote, settleStay, timeCharges, valueOver } from './stay.js'
 import type {
   Booking, BookingSource, Client, ClientKind, Invoice, Property,
   PropertyStatus, PropertyType, Role, TeamMember, TenancyMode,
@@ -400,6 +401,91 @@ export function openingCharges(booking: Booking, existing: Invoice[]): Invoice[]
           ? `${Math.max(1, nights)}-night stay — ${booking.reference}`
           : `First month's rent — ${booking.reference}`,
     })
+  }
+
+  return out
+}
+
+/**
+ * The charges that bring an agreement into line with the days actually spent.
+ *
+ * Raised at check-out, and never by editing what was already billed — an
+ * invoice that quietly changes after it was sent is not an invoice. Two
+ * things can be wrong and they are not opposites, so this can return one
+ * of each:
+ *
+ *  - credit notes, for days that were paid for and never used: the guest
+ *    who booked a week and left on Thursday, the tenant who paid a
+ *    quarter up front and gave notice in the second month;
+ *  - a further charge, for days lived through that nothing covered — the
+ *    overstay, priced at the rate already running rather than at some new
+ *    number invented for the occasion.
+ *
+ * Each one carries the window it belongs to, so the revenue recognised
+ * for those days is reversed on exactly the days it was recognised on. A
+ * month that has already closed does not move.
+ */
+export function settlementCharges(
+  booking: Booking,
+  invoices: Invoice[],
+  on: string,
+  existing: Invoice[],
+): Invoice[] {
+  const settlement = settleStay(booking, invoices, on)
+  if (!settlement.adjusts) return []
+
+  const charges = timeCharges(invoices, booking.id)
+  const issuedOn = iso(TODAY)
+  let n = nextNumber(existing.map((i) => i.number), /^ALT-INV-(\d+)$/, 5000)
+  const out: Invoice[] = []
+
+  const raise = (
+    type: Invoice['type'],
+    amount: number,
+    from: string,
+    to: string,
+    memo: string,
+  ) => {
+    if (amount <= 0) return
+    out.push({
+      id: uid('i'),
+      number: `ALT-INV-${n++}`,
+      propertyId: booking.propertyId,
+      clientId: booking.clientId,
+      bookingId: booking.id,
+      type,
+      issuedOn,
+      dueOn: issuedOn,
+      amount,
+      earnsFrom: from,
+      earnsTo: to,
+      paidAmount: 0,
+      /* Due the day it is raised, so neither side is left waiting on a
+         date that has no meaning once somebody has already moved out. */
+      status: 'pending',
+      method: null,
+      paidOn: null,
+      memo,
+    })
+  }
+
+  for (const w of settlement.unused) {
+    raise(
+      'credit_note',
+      Math.round(valueOver(charges, w)),
+      w.from, w.to,
+      creditNote(w.days, booking.reference),
+    )
+  }
+
+  const rate = dailyRate(charges, booking)
+  for (const w of settlement.extra) {
+    raise(
+      booking.mode === 'short_stay' ? 'booking' : 'rent',
+      Math.round(w.days * rate),
+      w.from, w.to,
+      extraNote(w.days, booking.reference),
+    )
   }
 
   return out

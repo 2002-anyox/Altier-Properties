@@ -13,4 +13,6 @@ export const EXPECTED_MIGRATIONS: ReadonlyArray<{ tag: string; hash: string }> =
   { tag: '0008_timezone', hash: '4a7543b3291ee3bfa7775877272555881020cf26d0b9d432aa32c2e15aa3df99' },
   { tag: '0009_coordinates', hash: '5106d676a52042832405a22a20a729c6854d6ac5a764a402b56dc25c445bf173' },
   { tag: '0010_signup', hash: '22774247b29109bcea580528a19247d67bd31a433bac94e13e6bd06cc11dd394' },
+  { tag: '0011_settlement', hash: 'e4821b8f24bf4ed2a4f1326ba9565d8535fb773e52110b2f18de2329f50a9bcc' },
+  { tag: '0012_numbering_per_workspace', hash: 'd22e72910b3fb0f892849b3b72452a0d198e6b3c61bbb997004f9eff17508dd4' },
 ]

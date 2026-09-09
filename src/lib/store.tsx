@@ -83,7 +83,10 @@ type Action =
   | { type: 'update-booking'; booking: Booking }
   | { type: 'end-booking'; booking: Booking }
   | { type: 'check-in'; id: string; on: string }
-  | { type: 'check-out'; id: string; on: string }
+  /* The settlement charges ride along so the ledger moves under the
+     press. The server works them out again from its own copy and its
+     answer replaces these; it never takes an amount from here. */
+  | { type: 'check-out'; id: string; on: string; settle: boolean; invoices: Invoice[] }
   | { type: 'reassign-maintenance'; id: string; assigneeId: string }
   | { type: 'set-permission'; role: Role; permission: Permission; allowed: boolean }
   | { type: 'reset-permissions'; role?: Role }
@@ -311,6 +314,7 @@ function reducer(state: State, action: Action): State {
           (p.id === state.bookings.find((b) => b.id === action.id)?.propertyId
             ? { ...p, status: 'available' as const, availableFrom: action.on }
             : p)),
+        invoices: [...action.invoices, ...state.invoices],
       }
     case 'reassign-maintenance':
       return {
@@ -784,7 +788,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       case 'update-booking': return () => api.updateBooking(action.booking)
       case 'end-booking': return () => api.updateBooking(action.booking)
       case 'check-in': return () => api.checkIn(action.id, action.on)
-      case 'check-out': return () => api.checkOut(action.id, action.on)
+      case 'check-out': return () => api.checkOut(action.id, action.on, action.settle)
       case 'reassign-maintenance':
         return () => api.reassignMaintenance(action.id, action.assigneeId)
       case 'set-permission':

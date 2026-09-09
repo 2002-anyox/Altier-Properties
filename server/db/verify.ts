@@ -135,6 +135,25 @@ await rejects('earns-backwards', { earnsFrom: '2026-06-01', earnsTo: '2026-05-01
 await rejects('overpaid', { amount: 1000, paidAmount: 5000, paidOn: '2026-06-01' })
 await rejects('paid-without-date', { amount: 1000, paidAmount: 1000, paidOn: null })
 await rejects('dated-without-payment', { amount: 1000, paidAmount: 0, paidOn: '2026-06-01' })
+/* Control again, for the two probes below: a proper credit note has to be
+   accepted, or they could both be failing on the enum value not existing
+   and would prove nothing about the constraint they are aimed at. */
+try {
+  await db.insert(t.invoices).values({
+    ...sample, id: 'probe-credit-ok', number: 'PROBE-CREDIT-OK', type: 'credit_note',
+    amount: 1000, paidAmount: 0, paidOn: null, status: 'pending', method: null,
+  } as any)
+  await db.delete(t.invoices).where(sql`${t.invoices.id} = 'probe-credit-ok'`)
+} catch (e) {
+  fail.push(`a valid credit note was rejected: ${(e as Error).message}`)
+}
+/* A credit note refunds part of a stay, so it belongs to the agreement it
+   is adjusting. One floating free would never show up in that tenancy's
+   balance, which is the only place anybody would look for it. */
+await rejects('credit-without-agreement', { type: 'credit_note', bookingId: null })
+/* And the sign lives in the type, not in the column: a negative amount
+   would sail through every sum in the app unnoticed. */
+await rejects('negative-credit', { type: 'credit_note', amount: -1000 })
 
 const badBooking = async () => {
   const b = (await db.select().from(t.bookings).limit(1))[0]
@@ -147,7 +166,7 @@ const badBooking = async () => {
   } catch { /* rejected */ }
 }
 await badBooking()
-console.log(`constraint check: 5 invalid rows offered, all refused`)
+console.log(`constraint check: 7 invalid rows offered, all refused`)
 
 /* 9. The reader is the exact inverse of the seeder. A mis-mapped column
       would not fail any constraint — it would just quietly show the wrong

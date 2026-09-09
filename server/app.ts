@@ -865,7 +865,12 @@ export function createApp(db: Db, driver: string) {
     inWorkspace(async (tx, w, req, res) => {
       const on = String(req.body?.on ?? '').trim() || undefined
       if (on && !/^\d{4}-\d{2}-\d{2}$/.test(on)) throw new BadRequest('That is not a date.')
-      const settled = await checkOut(tx, w, param(req, 'id'), on)
+      /* Whether to reconcile the bill against the days actually spent.
+         The request may turn it off — a manager waiving a refund on a
+         late cancellation is a real decision — but it may never say what
+         the adjustment is worth. That is worked out from the ledger. */
+      const settle = req.body?.settle !== false
+      const settled = await checkOut(tx, w, param(req, 'id'), on, settle)
       const portfolio = await readPortfolio(tx, w.organizationId)
       res.json({ ...visibleTo(portfolio, req), settled })
       return undefined

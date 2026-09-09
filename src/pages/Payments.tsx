@@ -16,7 +16,7 @@ import { TODAY, daysBetween, iso } from '../lib/dates.js'
 import { mediumDate, money, num, relativeDay, shortDate } from '../lib/format.js'
 import { exportCsv } from '../lib/csv.js'
 import { amountIn } from '../lib/money.js'
-import { ageingBuckets, computeKpis } from '../lib/derive.js'
+import { ageingBuckets, chargeSign, computeKpis } from '../lib/derive.js'
 import { itemVariants, listVariants } from '../lib/motion.js'
 import type { ChargeType, Invoice, InvoiceStatus } from '../lib/types.js'
 
@@ -75,9 +75,11 @@ export default function Payments() {
     return { all: state.invoices.length, paid: by('paid'), pending: by('pending'), overdue: by('overdue'), upcoming: by('upcoming'), partial: by('partial') }
   }, [state.invoices])
 
+  /* Net of refunds paid out: a month in which 600,000 went back to a
+     guest who left early did not collect it. */
   const paidThisMonth = state.invoices
     .filter((i) => i.paidOn?.slice(0, 7) === iso(TODAY).slice(0, 7))
-    .reduce((a, i) => a + i.paidAmount, 0)
+    .reduce((a, i) => a + chargeSign(i.type) * i.paidAmount, 0)
 
   const recordPayment = (inv: Invoice) => {
     dispatch({ type: 'record-payment', invoiceId: inv.id })
@@ -123,9 +125,11 @@ export default function Payments() {
                 { header: 'Property', value: (i) => state.properties.find((p) => p.id === i.propertyId)?.name ?? '' },
                 { header: 'Issued', value: (i) => i.issuedOn },
                 { header: 'Due', value: (i) => i.dueOn },
-                { header: `Amount (${state.currency})`, value: (i) => amountIn(i.amount) },
-                { header: `Paid (${state.currency})`, value: (i) => amountIn(i.paidAmount) },
-                { header: `Outstanding (${state.currency})`, value: (i) => amountIn(i.amount - i.paidAmount) },
+                /* Signed, so a credit note subtracts in a spreadsheet the
+                   same way it subtracts on the screen. */
+                { header: `Amount (${state.currency})`, value: (i) => amountIn(chargeSign(i.type) * i.amount) },
+                { header: `Paid (${state.currency})`, value: (i) => amountIn(chargeSign(i.type) * i.paidAmount) },
+                { header: `Outstanding (${state.currency})`, value: (i) => amountIn(chargeSign(i.type) * (i.amount - i.paidAmount)) },
                 { header: 'Method', value: (i) => i.method ?? '' },
                 { header: 'Paid on', value: (i) => i.paidOn ?? '' },
                 { header: 'Memo', value: (i) => i.memo },
@@ -149,7 +153,8 @@ export default function Payments() {
           <span className="absolute inset-y-0 left-0 w-[3px] bg-gold" aria-hidden />
           <p className="text-[12.5px] font-medium text-ink-secondary">Pending</p>
           <p className="tnum mt-2 text-[26px] font-semibold leading-none text-ink">
-            {money(state.invoices.filter((i) => i.status === 'pending').reduce((a, i) => a + i.amount - i.paidAmount, 0))}
+            {money(state.invoices.filter((i) => i.status === 'pending')
+              .reduce((a, i) => a + chargeSign(i.type) * (i.amount - i.paidAmount), 0))}
           </p>
           <p className="mt-2 text-[12px] text-ink-muted">{counts.pending} awaiting settlement</p>
         </motion.div>
@@ -199,8 +204,10 @@ export default function Payments() {
               <Select value={type} onChange={(e) => setType(e.target.value as any)} aria-label="Filter by charge type" className="w-auto min-w-[160px]">
                 <option value="all">All charge types</option>
                 <option value="rent">Rent</option>
+                <option value="advance">Advance</option>
                 <option value="booking">Booking</option>
                 <option value="deposit">Deposit</option>
+                <option value="credit_note">Credit note</option>
                 <option value="utilities">Utilities</option>
                 <option value="service_fee">Service fee</option>
                 <option value="late_fee">Late fee</option>
@@ -295,8 +302,16 @@ export default function Payments() {
                         </span>
                       </td>
                       <td className="px-4 py-3"><InvoiceChip status={i.status} /></td>
-                      <td className="tnum px-4 py-3 text-right font-semibold text-ink">
-                        {money(i.amount)}
+                      <td className={cx(
+                        'tnum px-4 py-3 text-right font-semibold',
+                        i.type === 'credit_note' ? 'text-status-good' : 'text-ink',
+                      )}>
+                        {/* A credit note is stored positive and counts the
+                            other way, so the sign is put back on here — a
+                            refund sitting in a column of charges with no
+                            mark on it reads as more money owed. */}
+                        {i.type === 'credit_note' ? `− ${money(i.amount)}` : money(i.amount)}
+                        {i.type === 'credit_note' && <span className="block text-[11px] font-normal text-ink-muted">credit to the client</span>}
                         {i.status === 'partial' && <span className="block text-[11px] font-normal text-ink-muted">{money(i.paidAmount)} received</span>}
                       </td>
                       <td className="px-5 py-3 text-right sm:px-6" onClick={(e) => e.stopPropagation()}>
@@ -305,7 +320,9 @@ export default function Payments() {
                             <Button size="sm" variant="ghost" onClick={() => logReminder(i)} title="Log a payment reminder">
                               <BellRing size={14} /><span className="sr-only">Log a reminder for {i.number}</span>
                             </Button>
-                            <Button size="sm" variant="secondary" onClick={() => recordPayment(i)}>Record</Button>
+                            <Button size="sm" variant="secondary" onClick={() => recordPayment(i)}>
+                              {i.type === 'credit_note' ? 'Refund' : 'Record'}
+                            </Button>
                           </span>
                         ) : (
                           <span className="text-[12px] text-ink-muted">{i.paidOn ? shortDate(i.paidOn) : '—'}</span>

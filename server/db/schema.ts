@@ -53,9 +53,14 @@ export const bookingSourceEnum = pgEnum('booking_source', [
 export const invoiceStatusEnum = pgEnum('invoice_status', [
   'paid', 'pending', 'overdue', 'upcoming', 'partial',
 ])
+/* 'credit_note' is money owed back to the client — a stay that ended
+   early, leaving days paid for and never used. It carries a positive
+   amount like every other charge, because the column refuses negatives
+   and a bill with a minus sign is unreadable; chargeSign() in the domain
+   code is the single place that knows it counts the other way. */
 export const chargeTypeEnum = pgEnum('charge_type', [
   'rent', 'advance', 'booking', 'deposit', 'utilities', 'service_fee',
-  'late_fee', 'maintenance_recharge',
+  'late_fee', 'maintenance_recharge', 'credit_note',
 ])
 export const paymentMethodEnum = pgEnum('payment_method', [
   'bank_transfer', 'card', 'mobile_money', 'cash',
@@ -339,7 +344,7 @@ export const properties = pgTable('properties', {
   organizationId: text('organization_id').notNull()
     .references(() => organizations.id, { onDelete: 'cascade' }),
   id: text('id').primaryKey(),
-  code: text('code').notNull().unique(),
+  code: text('code').notNull(),
   name: text('name').notNull(),
   type: propertyTypeEnum('type').notNull(),
   mode: tenancyModeEnum('mode').notNull(),
@@ -373,6 +378,11 @@ export const properties = pgTable('properties', {
   photoSeed: integer('photo_seed').notNull(),
 }, (t) => [
   index('properties_status_idx').on(t.status),
+  /* A reference number belongs to a workspace, not to the world: every
+     generator counts up from what it can see, and what it can see is its
+     own organization. Global uniqueness meant the second customer to
+     create anything collided with the first. */
+  uniqueIndex('properties_code_per_org').on(t.organizationId, t.code),
   index('properties_mode_idx').on(t.mode),
   index('properties_manager_idx').on(t.managerId),
   check('properties_price_positive', sql`${t.price} >= 0`),
@@ -476,7 +486,7 @@ export const bookings = pgTable('bookings', {
   organizationId: text('organization_id').notNull()
     .references(() => organizations.id, { onDelete: 'cascade' }),
   id: text('id').primaryKey(),
-  reference: text('reference').notNull().unique(),
+  reference: text('reference').notNull(),
   propertyId: text('property_id').notNull().references(() => properties.id, { onDelete: 'cascade' }),
   clientId: text('client_id').notNull().references(() => clients.id, { onDelete: 'restrict' }),
   mode: tenancyModeEnum('mode').notNull(),
@@ -513,6 +523,7 @@ export const bookings = pgTable('bookings', {
   index('bookings_client_idx').on(t.clientId),
   index('bookings_status_idx').on(t.status),
   index('bookings_range_idx').on(t.startsOn, t.endsOn),
+  uniqueIndex('bookings_reference_per_org').on(t.organizationId, t.reference),
   check('bookings_range_valid', sql`${t.endsOn} IS NULL OR ${t.endsOn} > ${t.startsOn}`),
   // Only an open-ended rental may omit an end date.
   check('bookings_open_ended_is_rental', sql`${t.endsOn} IS NOT NULL OR ${t.mode} = 'rental'`),
@@ -524,7 +535,7 @@ export const invoices = pgTable('invoices', {
   organizationId: text('organization_id').notNull()
     .references(() => organizations.id, { onDelete: 'cascade' }),
   id: text('id').primaryKey(),
-  number: text('number').notNull().unique(),
+  number: text('number').notNull(),
   propertyId: text('property_id').notNull().references(() => properties.id, { onDelete: 'cascade' }),
   clientId: text('client_id').notNull().references(() => clients.id, { onDelete: 'restrict' }),
   bookingId: text('booking_id').references(() => bookings.id, { onDelete: 'set null' }),
@@ -551,10 +562,13 @@ export const invoices = pgTable('invoices', {
   index('invoices_due_idx').on(t.dueOn),
   index('invoices_paid_on_idx').on(t.paidOn),
   index('invoices_earns_idx').on(t.earnsFrom, t.earnsTo),
+  uniqueIndex('invoices_number_per_org').on(t.organizationId, t.number),
   // The earning period must be a real interval, or recognition divides by zero.
   check('invoices_earns_valid', sql`${t.earnsTo} > ${t.earnsFrom}`),
   check('invoices_amount_positive', sql`${t.amount} >= 0`),
   check('invoices_paid_within_amount', sql`${t.paidAmount} >= 0 AND ${t.paidAmount} <= ${t.amount}`),
+  // A credit note adjusts an agreement, so it belongs to one.
+  check('invoices_credit_has_booking', sql`${t.type} <> 'credit_note' OR ${t.bookingId} IS NOT NULL`),
   // Nothing is settled without a date, and nothing has a date without money.
   check('invoices_paid_consistent', sql`(${t.paidOn} IS NULL) = (${t.paidAmount} = 0)`),
 ])
@@ -565,7 +579,7 @@ export const maintenanceRequests = pgTable('maintenance_requests', {
   organizationId: text('organization_id').notNull()
     .references(() => organizations.id, { onDelete: 'cascade' }),
   id: text('id').primaryKey(),
-  reference: text('reference').notNull().unique(),
+  reference: text('reference').notNull(),
   propertyId: text('property_id').notNull().references(() => properties.id, { onDelete: 'cascade' }),
   title: text('title').notNull(),
   description: text('description').notNull(),
@@ -585,6 +599,7 @@ export const maintenanceRequests = pgTable('maintenance_requests', {
   index('maintenance_property_idx').on(t.propertyId),
   index('maintenance_status_idx').on(t.status),
   index('maintenance_due_idx').on(t.dueOn),
+  uniqueIndex('maintenance_requests_reference_per_org').on(t.organizationId, t.reference),
   // A job is completed exactly when it has a completion date.
   check('maintenance_completed_consistent',
     sql`(${t.status} = 'completed') = (${t.completedOn} IS NOT NULL)`),

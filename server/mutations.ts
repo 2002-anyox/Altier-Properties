@@ -11,9 +11,10 @@ import { randomUUID } from 'node:crypto'
 import { and, eq, ne, sql } from 'drizzle-orm'
 import type { Db } from './db/client.js'
 import * as t from './db/schema.js'
-import { openingCharges } from '../src/lib/create.js'
+import { openingCharges, settlementCharges } from '../src/lib/create.js'
 import { dayIn } from '../src/lib/dates.js'
 import { holdBlocking, whyBlocked } from '../src/lib/occupancy.js'
+import { stayWindow } from '../src/lib/stay.js'
 import { assertSeatAvailable } from './workspace.js'
 import type {
   Booking, Client, Invoice, MaintenancePriority, MaintenanceStatus, Property,
@@ -628,7 +629,9 @@ export async function checkIn(db: Db, w: Workspace, id: string, on?: string) {
  * exactly when somebody wants to know whether the account is clear and
  * whether the deposit comes back.
  */
-export async function checkOut(db: Db, w: Workspace, id: string, on?: string) {
+export async function checkOut(
+  db: Db, w: Workspace, id: string, on?: string, settle = true,
+) {
   const booking = await requireOne(
     await db.select().from(t.bookings)
       .where(and(eq(t.bookings.id, id), eq(t.bookings.organizationId, w.organizationId))),
@@ -660,6 +663,23 @@ export async function checkOut(db: Db, w: Workspace, id: string, on?: string) {
     .set({ status: 'available', availableFrom: departedOn })
     .where(eq(t.properties.id, booking.propertyId))
 
+  /* The bill follows the days, not the plan.
+     A stay is priced before anybody has stayed in it, so a departure is
+     the first moment the real number is knowable. Whatever was charged
+     for days nobody used comes back as a credit note, and whatever was
+     lived through and never billed is charged at the rate that was
+     already running. Both are new documents: the charges already sent
+     stand exactly as they were sent.
+     Computed here rather than taken from the request — this is money, and
+     the client may propose a departure date but never an amount. */
+  const daysStayed = stayWindow(
+    { start: booking.startsOn, arrivedOn: booking.arrivedOn, departedOn },
+    departedOn,
+  ).days
+  const settlement = settle
+    ? await settleOnDeparture(db, w, booking, departedOn)
+    : { credit: 0, due: 0, raised: [] as Invoice[] }
+
   /* Their stay becomes part of the property's occupancy history, which is
      what the property record shows and what the reports read. */
   const [{ paid }] = await db.select({
@@ -680,12 +700,25 @@ export async function checkOut(db: Db, w: Workspace, id: string, on?: string) {
     revenue: Number(paid) || 0,
   }).onConflictDoNothing()
 
+  /* What the account comes to now the adjustment is on it. A credit note
+     counts the other way, so a guest who overpaid for days they did not
+     use lands on a negative balance — money owed back rather than owed. */
   const [{ owed }] = await db.select({
-    owed: sql<number>`coalesce(sum(${t.invoices.amount} - ${t.invoices.paidAmount}), 0)::int`,
+    owed: sql<number>`coalesce(sum(
+      (case when ${t.invoices.type} = 'credit_note' then -1 else 1 end)
+      * (${t.invoices.amount} - ${t.invoices.paidAmount})
+    ), 0)::int`,
   }).from(t.invoices).where(and(
     eq(t.invoices.bookingId, id),
     sql`${t.invoices.amount} > ${t.invoices.paidAmount}`,
   ))
+
+  const balance = Number(owed) || 0
+  const adjustment = settlement.credit > 0
+    ? ` ${settlement.credit.toLocaleString('en-UG')} credited for days not used.`
+    : settlement.due > 0
+      ? ` ${settlement.due.toLocaleString('en-UG')} charged for days beyond the agreement.`
+      : ''
 
   await db.insert(t.communications).values({
     id: `${booking.clientId}-cm-${Date.now()}`,
@@ -694,14 +727,85 @@ export async function checkOut(db: Db, w: Workspace, id: string, on?: string) {
     channel: 'note',
     direction: 'outbound',
     subject: `Checked out · ${booking.reference}`,
-    preview: Number(owed) > 0
-      ? `Left ${departedOn}. ${Number(owed).toLocaleString('en-UG')} still outstanding on this agreement.`
-      : `Left ${departedOn}. Nothing outstanding on this agreement.`,
+    preview: `Left ${departedOn}.${adjustment} ${
+      balance > 0
+        ? `${balance.toLocaleString('en-UG')} still outstanding on this agreement.`
+        : balance < 0
+          ? `${Math.abs(balance).toLocaleString('en-UG')} is owed back to them.`
+          : 'Nothing outstanding on this agreement.'
+    }`.trim(),
     at: today(w),
     author: w.name,
   })
 
-  return { outstanding: Number(owed) || 0, deposit: booking.deposit }
+  return {
+    outstanding: balance,
+    deposit: booking.deposit,
+    credit: settlement.credit,
+    due: settlement.due,
+    daysStayed,
+    adjusted: settlement.raised.length,
+  }
+}
+
+/**
+ * Work out what the days actually spent come to, and raise the difference.
+ *
+ * Reads the agreement's own charges back out of the ledger and hands them
+ * to the same settlement function the check-out screen used to show the
+ * figure, so what somebody was shown before they pressed the button is
+ * what lands on the account after they did.
+ */
+async function settleOnDeparture(
+  db: Db, w: Workspace, booking: typeof t.bookings.$inferSelect, departedOn: string,
+) {
+  /* Two reads rather than one: the agreement's own charges in full,
+     because the arithmetic needs their amounts and earning windows, and
+     nothing but the numbers from the rest of the workspace, because all
+     the numbering needs is the highest one already taken. Pulling every
+     column of every invoice a landlord has ever raised would work, and
+     would get slower every month they stayed in business. */
+  const mine = await db.select().from(t.invoices)
+    .where(and(eq(t.invoices.organizationId, w.organizationId), eq(t.invoices.bookingId, booking.id)))
+  const numbers = await db.select({ number: t.invoices.number }).from(t.invoices)
+    .where(eq(t.invoices.organizationId, w.organizationId))
+
+  const raised = settlementCharges(
+    {
+      id: booking.id,
+      reference: booking.reference,
+      propertyId: booking.propertyId,
+      clientId: booking.clientId,
+      mode: booking.mode,
+      rate: booking.rate,
+      start: booking.startsOn,
+      end: booking.endsOn,
+      arrivedOn: booking.arrivedOn,
+      /* The departure being recorded now, not the one on the row — the
+         update above has landed, but this is clearer than relying on it. */
+      departedOn,
+    } as Booking,
+    mine as unknown as Invoice[],
+    departedOn,
+    numbers as Invoice[],
+  )
+
+  if (raised.length) {
+    await db.insert(t.invoices).values(raised.map((i) => ({
+      id: i.id, organizationId: w.organizationId,
+      number: i.number, propertyId: i.propertyId, clientId: i.clientId,
+      bookingId: i.bookingId, type: i.type, issuedOn: i.issuedOn, dueOn: i.dueOn,
+      amount: i.amount, earnsFrom: i.earnsFrom, earnsTo: i.earnsTo,
+      paidAmount: i.paidAmount, status: i.status, method: i.method,
+      paidOn: i.paidOn, memo: i.memo,
+    })))
+  }
+
+  return {
+    credit: raised.filter((i) => i.type === 'credit_note').reduce((a, i) => a + i.amount, 0),
+    due: raised.filter((i) => i.type !== 'credit_note').reduce((a, i) => a + i.amount, 0),
+    raised,
+  }
 }
 
 /** Removing a property takes its agreements, charges and jobs with it. */

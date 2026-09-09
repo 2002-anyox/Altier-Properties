@@ -71,6 +71,25 @@ jobs:
       - name: The forms let you finish typing
         run: npm run check:forms
 
+      # A stay is priced before anybody has stayed in it, so the bill at the
+      # end is arithmetic nobody notices is wrong until a guest disputes it
+      # at the desk. This replays the real cases — left early, stayed on,
+      # arrived two days late, moved out and came back — and insists that
+      # once a settlement is raised, the revenue recognised for the
+      # agreement is exactly what the occupied days are worth.
+      - name: The bill follows the days spent
+        run: npm run check:stay
+
+      # And again where the clocks move. A calendar day is not always
+      # 86,400,000 milliseconds long, so a ninety-day advance divides out
+      # as 89.958 days in a timezone that springs forward — and the refund
+      # of its unused part came out 695 shillings short. Small enough to
+      # pass any review, large enough to be wrong.
+      - name: The same bill where the clocks change
+        run: npm run check:stay
+        env:
+          TZ: America/New_York
+
       # Revenue-recognition rules fail silently: a charge recognised twice, or
       # a deposit leaking into revenue, looks like ordinary growth on a chart.
       # This asserts the invariants that no reviewer would catch by eye.

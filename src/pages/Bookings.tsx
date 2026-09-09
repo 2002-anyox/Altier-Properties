@@ -6,18 +6,19 @@ import {
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader.js'
 import {
-  Avatar, Button, Card, Chip, Drawer, EmptyState, Field, Input, Modal, SearchInput,
+  Avatar, Button, Card, Checkbox, Chip, Drawer, EmptyState, Field, Input, Modal, SearchInput,
   SegmentedControl, Select, cx,
 } from '../components/ui'
 import { useStore } from '../lib/store.js'
 import { BookingFormModal } from '../components/forms/BookingFormModal.js'
 import { ConfirmDelete } from '../components/forms/ConfirmDelete.js'
-import { endBooking } from '../lib/create.js'
+import { endBooking, settlementCharges } from '../lib/create.js'
 import { can } from '../lib/rbac.js'
 import { TODAY, daysBetween, iso } from '../lib/dates.js'
 import { mediumDate, money, relativeDay, shortDate } from '../lib/format.js'
 import { itemVariants, listVariants } from '../lib/motion.js'
 import { isOpenEnded } from '../lib/derive.js'
+import { settleStay, type Settlement } from '../lib/stay.js'
 import type { Booking, BookingSource, BookingStatus, TenancyMode } from '../lib/types.js'
 
 const SOURCE_LABEL: Record<BookingSource, string> = {
@@ -101,6 +102,14 @@ export default function Bookings() {
   const selectedProperty = selected ? state.properties.find((p) => p.id === selected.propertyId) : undefined
   const selectedClient = selected ? state.clients.find((c) => c.id === selected.clientId) : undefined
   const selectedInvoices = selected ? state.invoices.filter((i) => i.bookingId === selected.id) : []
+
+  /* The money against the days, as things stand. Nobody who has not
+     arrived has a position yet — an agreement signed for next month is
+     not a debt about days. */
+  const position = useMemo(
+    () => (selected?.arrivedOn ? settleStay(selected, state.invoices, iso(TODAY)) : null),
+    [selected, state.invoices],
+  )
 
   return (
     <>
@@ -354,6 +363,60 @@ export default function Bookings() {
               <Detail label="Created" value={mediumDate(selected.createdAt)} />
             </dl>
 
+            {/* Where the money stands against the days, as it stands right
+                now. On an agreement still running this is what somebody
+                would owe if they walked out today — worth being able to
+                answer before anybody walks out, and worth seeing coming
+                on one that is already over. */}
+            {can(state.role, 'view:payments') && position && (
+              <div className="rounded-xl border border-line bg-surface-inset/50 px-3.5 py-3">
+                <h4 className="text-[13px] font-semibold text-ink">
+                  {selected.departedOn ? 'Settled against the days spent' : 'As it stands today'}
+                </h4>
+                <dl className="mt-2.5 space-y-2 text-[12.5px]">
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-ink-secondary">
+                      {selected.departedOn ? 'Days in residence' : 'Days so far'}
+                    </dt>
+                    <dd className="tnum text-ink">{Math.round(position.daysStayed)}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-ink-secondary">Days billed for</dt>
+                    <dd className="tnum text-ink">{Math.round(position.daysBilled)}</dd>
+                  </div>
+                  {position.due > 0 && (
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-ink-secondary">
+                        {Math.round(position.extraDays)} day{Math.round(position.extraDays) === 1 ? '' : 's'} not yet billed
+                      </dt>
+                      <dd className="tnum text-ink">+ {money(position.due)}</dd>
+                    </div>
+                  )}
+                  {position.credit > 0 && (
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-ink-secondary">
+                        {Math.round(position.unusedDays)} day{Math.round(position.unusedDays) === 1 ? '' : 's'} paid for and unused
+                      </dt>
+                      <dd className="tnum text-status-good">− {money(position.credit)}</dd>
+                    </div>
+                  )}
+                  <div className="flex justify-between gap-3 border-t border-line pt-2 font-semibold">
+                    <dt className="text-ink">
+                      {position.balance < 0 ? 'Owed back to them' : 'Outstanding'}
+                    </dt>
+                    <dd className={cx('tnum', position.balance > 0 ? 'text-status-critical' : position.balance < 0 ? 'text-status-good' : 'text-ink')}>
+                      {money(Math.abs(position.balance))}
+                    </dd>
+                  </div>
+                </dl>
+                {!selected.departedOn && position.adjusts && (
+                  <p className="mt-2.5 text-[12px] leading-relaxed text-ink-muted">
+                    Nothing has been raised for this yet. Checking them out settles it.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div>
               <h4 className="text-[13px] font-semibold text-ink">Notes</h4>
               <p className="mt-2 rounded-xl border border-line bg-surface-inset/60 p-3.5 text-[12.5px] leading-relaxed text-ink-secondary">{selected.notes}</p>
@@ -479,35 +542,58 @@ function ArrivalModal({
   const property = state.properties.find((p) => p.id === booking?.propertyId)
   const client = state.clients.find((c) => c.id === booking?.clientId)
 
+  /* Whether to reconcile the bill against the days actually spent. On by
+     default, because the days are what the home was worth; off is a
+     deliberate decision — a late cancellation nobody is refunding. */
+  const [settle, setSettle] = useState(true)
+  useEffect(() => { if (booking) setSettle(true) }, [booking])
+
+  /* What the days come to, recomputed on every change of the date, so the
+     figure somebody is agreeing to is the one on screen when they press
+     the button rather than a surprise on the ledger afterwards. */
+  const settlement = useMemo<Settlement | null>(
+    () => (booking && !arriving ? settleStay({ ...booking, departedOn: on }, state.invoices, on) : null),
+    [booking, arriving, on, state.invoices],
+  )
+
   /* What they still owe on this agreement, which is the question somebody
      asks at exactly the moment a guest is leaving. */
-  const owed = booking
-    ? state.invoices
-        .filter((i) => i.bookingId === booking.id)
-        .reduce((sum, i) => sum + Math.max(0, i.amount - i.paidAmount), 0)
-    : 0
+  const owed = settlement?.outstanding ?? 0
+  const balance = settle && settlement ? settlement.balance : owed
 
   const early = !!booking && arriving && on < booking.start
   const late = !!booking && !arriving && !!booking.end && on > booking.end
 
   const confirm = () => {
     if (!booking) return
-    dispatch(arriving
-      ? { type: 'check-in', id: booking.id, on }
-      : { type: 'check-out', id: booking.id, on })
-    toast(arriving
-      ? {
-          title: `${client?.name ?? 'Guest'} checked in`,
-          body: `${property?.name ?? 'The unit'} is now occupied.`,
-          tone: 'success',
-        }
-      : {
-          title: `${client?.name ?? 'Guest'} checked out`,
-          body: owed > 0
-            ? `${property?.name ?? 'The unit'} is available. ${money(owed)} is still outstanding.`
-            : `${property?.name ?? 'The unit'} is available and the account is clear.`,
-          tone: owed > 0 ? 'critical' : 'success',
-        })
+    if (arriving) {
+      dispatch({ type: 'check-in', id: booking.id, on })
+      toast({
+        title: `${client?.name ?? 'Guest'} checked in`,
+        body: `${property?.name ?? 'The unit'} is now occupied.`,
+        tone: 'success',
+      })
+      onDone()
+      return
+    }
+
+    /* Raised locally so the ledger moves under the press. The server
+       works the same figures out from its own copy of the charges and
+       replaces these; it never takes an amount from the browser. */
+    const invoices = settle
+      ? settlementCharges({ ...booking, departedOn: on }, state.invoices, on, state.invoices)
+      : []
+
+    dispatch({ type: 'check-out', id: booking.id, on, settle, invoices })
+    toast({
+      title: `${client?.name ?? 'Guest'} checked out`,
+      body: balance > 0
+        ? `${property?.name ?? 'The unit'} is available. ${money(balance)} is still outstanding.`
+        : balance < 0
+          ? `${property?.name ?? 'The unit'} is available. ${money(Math.abs(balance))} is owed back to them.`
+          : `${property?.name ?? 'The unit'} is available and the account is clear.`,
+      tone: balance > 0 ? 'critical' : 'success',
+    })
     onDone()
   }
 
@@ -556,24 +642,109 @@ function ArrivalModal({
           </p>
         )}
 
-        {!arriving && (
-          <div className="rounded-xl border border-line bg-surface-inset/50 px-3.5 py-3">
-            <p className="text-[12.5px] leading-relaxed text-ink-secondary">
-              {owed > 0
-                ? <>There is <span className="font-semibold text-ink">{money(owed)}</span> still
-                    outstanding on this agreement. Checking out does not settle it, and the charges
-                    stay on the ledger.</>
-                : 'Nothing is outstanding on this agreement.'}
-            </p>
-            {(booking?.deposit ?? 0) > 0 && (
-              <p className="mt-2 text-[12px] leading-relaxed text-ink-muted">
-                {money(booking!.deposit)} is held as a deposit. Returning it is a payment you
-                record separately — this does not do it.
-              </p>
-            )}
-          </div>
+        {!arriving && settlement && (
+          <SettlementPanel
+            settlement={settlement}
+            settle={settle}
+            onSettle={setSettle}
+            deposit={booking?.deposit ?? 0}
+            reference={booking?.reference ?? ''}
+          />
         )}
       </div>
     </Modal>
+  )
+}
+
+/**
+ * The bill, reconciled against the days actually spent.
+ *
+ * Shown before the button is pressed rather than reported after it,
+ * because a refund somebody was not expecting and a charge somebody did
+ * not agree to are the same kind of problem. The days are on screen, the
+ * rate they were charged at is on screen, and the arithmetic between them
+ * is one line — so a guest standing at the desk can be shown why.
+ */
+function SettlementPanel({
+  settlement, settle, onSettle, deposit, reference,
+}: {
+  settlement: Settlement
+  settle: boolean
+  onSettle: (v: boolean) => void
+  deposit: number
+  reference: string
+}) {
+  const { credit, due, unusedDays, extraDays, daysStayed, daysBilled, dailyRate } = settlement
+  const balance = settle ? settlement.balance : settlement.outstanding
+  const days = (n: number) => `${Math.round(n)} day${Math.round(n) === 1 ? '' : 's'}`
+
+  return (
+    <div className="rounded-xl border border-line bg-surface-inset/50 px-3.5 py-3">
+      <dl className="space-y-2 text-[13px]">
+        <div className="flex justify-between gap-3">
+          <dt className="text-ink-secondary">Days in residence</dt>
+          <dd className="tnum text-ink">{days(daysStayed)}</dd>
+        </div>
+        <div className="flex justify-between gap-3">
+          <dt className="text-ink-secondary">Days billed for</dt>
+          <dd className="tnum text-ink">{days(daysBilled)}</dd>
+        </div>
+
+        {settlement.adjusts && (
+          <div className="flex justify-between gap-3">
+            <dt className="text-ink-secondary">Charged at</dt>
+            <dd className="tnum text-ink">{money(Math.round(dailyRate))} a day</dd>
+          </div>
+        )}
+
+        {settle && credit > 0 && (
+          <div className="flex justify-between gap-3 border-t border-line pt-2">
+            <dt className="text-ink-secondary">{days(unusedDays)} not used — credited</dt>
+            <dd className="tnum text-status-good">− {money(credit)}</dd>
+          </div>
+        )}
+        {settle && due > 0 && (
+          <div className="flex justify-between gap-3 border-t border-line pt-2">
+            <dt className="text-ink-secondary">{days(extraDays)} beyond the agreement</dt>
+            <dd className="tnum text-ink">+ {money(due)}</dd>
+          </div>
+        )}
+
+        <div className="flex justify-between gap-3 border-t border-line pt-2 font-semibold">
+          <dt className="text-ink">{balance < 0 ? 'Owed back to them' : 'Still outstanding'}</dt>
+          <dd className={cx('tnum', balance > 0 ? 'text-status-critical' : balance < 0 ? 'text-status-good' : 'text-ink')}>
+            {money(Math.abs(balance))}
+          </dd>
+        </div>
+      </dl>
+
+      {settlement.adjusts ? (
+        <div className="mt-3 border-t border-line pt-3">
+          <Checkbox
+            checked={settle}
+            onChange={onSettle}
+            label="Adjust the bill to the days actually spent"
+          />
+          <p className="mt-2 text-[12px] leading-relaxed text-ink-muted">
+            {credit > 0 && due > 0
+              ? `Raises a credit note for the ${days(unusedDays)} nobody used and a charge for the ${days(extraDays)} beyond what was billed, both against ${reference}.`
+              : credit > 0
+                ? `Raises a credit note against ${reference}. The charges already sent are left exactly as they were sent — this is a separate document, so the history stands.`
+                : `Raises a charge against ${reference} for the days lived through that nothing covered, at the rate that was already running.`}
+          </p>
+        </div>
+      ) : (
+        <p className="mt-3 border-t border-line pt-3 text-[12px] leading-relaxed text-ink-muted">
+          The days billed and the days spent agree, so there is nothing to adjust.
+        </p>
+      )}
+
+      {deposit > 0 && (
+        <p className="mt-2 text-[12px] leading-relaxed text-ink-muted">
+          {money(deposit)} is held as a deposit. Returning it is a payment you record
+          separately — this does not do it.
+        </p>
+      )}
+    </div>
   )
 }
