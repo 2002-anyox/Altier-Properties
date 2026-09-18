@@ -15,6 +15,7 @@ import { TODAY, daysBetween, iso } from '../lib/dates.js'
 import { money, pct, relativeDay, shortDate } from '../lib/format.js'
 import { ageingBuckets, computeKpis, occupancyMix, revenueSeries, upcomingAvailability } from '../lib/derive.js'
 import { listVariants } from '../lib/motion.js'
+import { CHARGE_TYPE_LABEL } from '../lib/labels.js'
 
 export default function Dashboard() {
   const { state } = useStore()
@@ -120,10 +121,10 @@ export default function Dashboard() {
       <motion.div variants={listVariants} initial="initial" animate="animate" className="grid gap-4 lg:grid-cols-3">
         {showMoney && (
           <motion.div variants={listVariants} className="lg:col-span-1">
-            <div className="card relative h-full overflow-hidden bg-navy-900 p-6 text-[rgb(var(--c-text-onrail))] dark:bg-surface-card dark:ring-1 dark:ring-inset dark:ring-gold/25">
+            <div className="on-dark card relative h-full overflow-hidden bg-navy-900 p-6 text-[rgb(var(--c-text-onrail))] dark:bg-surface-card dark:ring-1 dark:ring-inset dark:ring-gold/25">
               <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-gold/10 blur-3xl" aria-hidden />
               <div className="relative">
-                <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">
+                <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-gold-text">
                   <Sparkles size={12} /> This month
                 </p>
                 <p
@@ -140,7 +141,7 @@ export default function Dashboard() {
                   ) : (
                     <>
                       {' · '}
-                      <span className={cx('font-medium', kpis.recurringDelta >= 0 ? 'text-[#7BD88F]' : 'text-[#F0A9A9]')}>
+                      <span className={cx('font-medium', kpis.recurringDelta >= 0 ? 'text-status-good-ink' : 'text-status-critical-ink')}>
                         {kpis.recurringDelta >= 0 ? '+' : ''}{kpis.recurringDelta.toFixed(1)}%
                       </span>{' '}
                       vs last month
@@ -325,7 +326,7 @@ export default function Dashboard() {
             <CardHeader
               title="Needs chasing"
               subtitle={`${money(kpis.overdueAmount)} outstanding`}
-              action={<Link to="/payments?status=overdue" className="text-[12.5px] font-medium text-gold link-underline">View all</Link>}
+              action={<Link to="/payments?status=overdue" className="text-[12.5px] font-medium text-gold-text link-underline">View all</Link>}
             />
             <div className="mt-3 flex-1">
               {overdue.length === 0 ? (
@@ -345,7 +346,7 @@ export default function Dashboard() {
                           </span>
                           <span className="shrink-0 text-right">
                             <span className="tnum block text-[13.5px] font-semibold text-ink">{money(inv.amount - inv.paidAmount)}</span>
-                            <span className="block text-[11.5px] text-[rgb(var(--c-status-critical))]">{late}d late</span>
+                            <span className="block text-[11.5px] text-status-critical-ink">{late}d late</span>
                           </span>
                         </Link>
                       </li>
@@ -364,7 +365,7 @@ export default function Dashboard() {
           <CardHeader
             title="Arrivals & departures"
             subtitle="Next seven days"
-            action={<Link to="/bookings" className="text-[12.5px] font-medium text-gold link-underline">All bookings</Link>}
+            action={<Link to="/bookings" className="text-[12.5px] font-medium text-gold-text link-underline">All bookings</Link>}
           />
           <div className="mt-3 flex-1">
             {movements.length === 0 ? (
@@ -379,7 +380,7 @@ export default function Dashboard() {
                       <span
                         className={cx(
                           'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                          m.kind === 'in' ? 'bg-[rgb(var(--c-status-good)/0.12)] text-[rgb(var(--c-status-good))]' : 'bg-surface-inset text-ink-secondary',
+                          m.kind === 'in' ? 'bg-status-good-soft text-status-good-ink' : 'bg-surface-inset text-ink-secondary',
                         )}
                         aria-hidden
                       >
@@ -406,7 +407,7 @@ export default function Dashboard() {
             <CardHeader
               title="Maintenance pipeline"
               subtitle={`${kpis.openMaintenance} open jobs`}
-              action={<Link to="/maintenance" className="text-[12.5px] font-medium text-gold link-underline">Open board</Link>}
+              action={<Link to="/maintenance" className="text-[12.5px] font-medium text-gold-text link-underline">Open board</Link>}
             />
             <ul className="mt-4 space-y-3 px-5 pb-5 sm:px-6">
               {maintenanceStages.map((s) => (
@@ -425,7 +426,7 @@ export default function Dashboard() {
             <CardHeader
               title="Becoming available"
               subtitle="Next 45 days"
-              action={<Link to="/availability" className="text-[12.5px] font-medium text-gold link-underline">Calendar</Link>}
+              action={<Link to="/availability" className="text-[12.5px] font-medium text-gold-text link-underline">Calendar</Link>}
             />
             {freeingUp.length === 0 ? (
               <div className="px-5 pb-5 pt-3 text-[13px] text-ink-muted sm:px-6">
@@ -457,7 +458,7 @@ export default function Dashboard() {
           <CardHeader
             title="Due in the next fortnight"
             subtitle={`${upcoming.length} payment obligations approaching`}
-            action={<Link to="/payments" className="text-[12.5px] font-medium text-gold link-underline">Payments dashboard</Link>}
+            action={<Link to="/payments" className="text-[12.5px] font-medium text-gold-text link-underline">Payments dashboard</Link>}
           />
           <div className="scroll-x mt-3">
             <table className="w-full min-w-[640px] text-left text-[13px]">
@@ -478,7 +479,7 @@ export default function Dashboard() {
                     <tr key={inv.id} className="transition-colors hover:bg-surface-inset/60">
                       <td className="px-5 py-3 font-medium text-ink sm:px-6">{c?.name}</td>
                       <td className="px-4 py-3 text-ink-secondary">{p?.name}</td>
-                      <td className="px-4 py-3 text-ink-secondary capitalize">{inv.type.replace(/_/g, ' ')}</td>
+                      <td className="px-4 py-3 text-ink-secondary">{CHARGE_TYPE_LABEL[inv.type]}</td>
                       <td className="tnum px-4 py-3 text-right font-semibold text-ink">{money(inv.amount)}</td>
                       <td className="px-5 py-3 text-right text-ink-secondary sm:px-6">
                         {shortDate(inv.dueOn)} <span className="text-ink-muted">· {relativeDay(inv.dueOn)}</span>

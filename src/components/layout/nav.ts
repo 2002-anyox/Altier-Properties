@@ -8,6 +8,8 @@ export interface NavItem {
   to: string
   /** Translation key; resolved at render so language can change live. */
   labelKey: string
+  /** A shorter key for the tab bar, where a label is a word wide. */
+  tabKey?: string
   icon: typeof Building2
   permission: Permission
   /** Shown as a count pill in the rail. */
@@ -31,7 +33,7 @@ export const NAV: Array<{ sectionKey: string; items: NavItem[] }> = [
     sectionKey: 'nav.portfolio',
     items: [
       { to: '/properties', labelKey: 'nav.properties', icon: Building2, permission: 'view:properties', hint: 'Every unit and listing' },
-      { to: '/bookings', labelKey: 'nav.bookings', icon: ClipboardList, permission: 'view:bookings', hint: 'Long lets and short stays' },
+      { to: '/bookings', labelKey: 'nav.bookings', tabKey: 'nav.tab.bookings', icon: ClipboardList, permission: 'view:bookings', hint: 'Long lets and short stays' },
       { to: '/clients', labelKey: 'nav.clients', icon: Users, permission: 'view:clients', hint: 'Tenants, guests and companies' },
     ],
   },
@@ -52,8 +54,8 @@ export const NAV: Array<{ sectionKey: string; items: NavItem[] }> = [
   {
     sectionKey: 'nav.workspace',
     items: [
-      { to: '/team', labelKey: 'nav.team', icon: UsersRound, permission: 'manage:team', hint: 'People, roles, seats and invitations' },
-      { to: '/tenants', labelKey: 'nav.tenants', icon: UserRound, permission: 'view:clients', hint: 'Renters and their portal logins' },
+      { to: '/team', labelKey: 'nav.team', tabKey: 'nav.tab.team', icon: UsersRound, permission: 'manage:team', hint: 'People, roles, seats and invitations' },
+      { to: '/tenants', labelKey: 'nav.tenants', tabKey: 'nav.tab.tenants', icon: UserRound, permission: 'view:clients', hint: 'Renters and their portal logins' },
       { to: '/settings', labelKey: 'nav.settings', icon: Settings, permission: 'manage:settings', hint: 'Your profile, reminders and appearance' },
     ],
   },

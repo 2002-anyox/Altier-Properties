@@ -133,7 +133,7 @@ export function MemberFormModal({
               />
             </Field>
             {passwordError && (
-              <p role="alert" className="mt-2 text-[12px] text-[rgb(var(--c-status-critical))]">{passwordError}</p>
+              <p role="alert" className="mt-2 text-[12px] text-status-critical-ink">{passwordError}</p>
             )}
           </fieldset>
         )}

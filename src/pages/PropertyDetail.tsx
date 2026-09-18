@@ -23,6 +23,7 @@ import { TODAY, daysBetween, iso } from '../lib/dates.js'
 import { mediumDate, money, relativeDay, shortDate } from '../lib/format.js'
 import { itemVariants, listVariants } from '../lib/motion.js'
 import type { PropertyStatus } from '../lib/types.js'
+import { BOOKING_STATUS_LABEL, TENANCY_MODE_LABEL } from '../lib/labels.js'
 
 type Tab = 'overview' | 'occupancy' | 'financials' | 'maintenance' | 'documents' | 'activity'
 
@@ -139,7 +140,7 @@ export default function PropertyDetail() {
                 </p>
               </div>
               <Chip className="bg-navy-950/70 text-white backdrop-blur-sm">
-                <Star size={11} className="fill-gold text-gold" /> {property.rating.toFixed(1)}
+                <Star size={11} className="fill-gold text-gold-text" /> {property.rating.toFixed(1)}
               </Chip>
             </div>
           </div>
@@ -174,7 +175,7 @@ export default function PropertyDetail() {
                 <Link to={`/clients/${currentClient.id}`} className="group flex items-center gap-3">
                   <Avatar name={currentClient.name} size={38} tone="gold" />
                   <div className="min-w-0">
-                    <p className="truncate text-[14px] font-medium text-ink group-hover:text-gold">{currentClient.name}</p>
+                    <p className="truncate text-[14px] font-medium text-ink group-hover:text-gold-text">{currentClient.name}</p>
                     <p className="truncate text-[12px] text-ink-muted">{current.reference} · {current.mode === 'short_stay' ? 'Short stay' : current.mode === 'rental' ? 'Open-ended rental' : 'Fixed-term lease'}</p>
                   </div>
                 </Link>
@@ -196,7 +197,7 @@ export default function PropertyDetail() {
                       <div>
                         <div className="mb-1.5 flex justify-between text-[12.5px]">
                           <span className="text-ink-muted">Rent covered to</span>
-                          <span className={cx(rentCovered < 0 ? 'text-[rgb(var(--c-status-critical))]' : 'text-ink-secondary')}>
+                          <span className={cx(rentCovered < 0 ? 'text-status-critical-ink' : 'text-ink-secondary')}>
                             {current.paidThrough ? mediumDate(current.paidThrough) : '—'}
                           </span>
                         </div>
@@ -344,7 +345,7 @@ export default function PropertyDetail() {
                         <p className="text-[12px] text-ink-muted">{shortDate(row.from)} – {row.to ? shortDate(row.to) : 'ongoing'}</p>
                       </div>
                       <p className="mt-0.5 text-[12px] text-ink-muted">
-                        {row.ref} · {row.mode === 'short_stay' ? 'Short stay' : row.mode === 'rental' ? 'Open-ended rental' : 'Fixed-term lease'} · {row.status.replace(/_/g, ' ')}
+                        {row.ref} · {TENANCY_MODE_LABEL[row.mode]} · {BOOKING_STATUS_LABEL[row.status]}
                       </p>
                     </div>
                   </li>
@@ -546,7 +547,7 @@ function Fact({ icon, label, value }: { icon: React.ReactNode; label: string; va
 }
 
 function MiniStat({ label, value, tone = 'default' }: { label: string; value: string; tone?: 'default' | 'good' | 'critical' }) {
-  const colors = { default: 'text-ink', good: 'text-[rgb(var(--c-status-good))]', critical: 'text-[rgb(var(--c-status-critical))]' }
+  const colors = { default: 'text-ink', good: 'text-status-good-ink', critical: 'text-status-critical-ink' }
   return (
     <div className="card card-pad">
       <p className="text-[12.5px] font-medium text-ink-secondary">{label}</p>

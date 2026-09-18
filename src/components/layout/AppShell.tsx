@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { Outlet, useLocation } from 'react-router-dom'
 import { MobileSidebar, SidebarContent } from './Sidebar.js'
 import { Topbar } from './Topbar.js'
+import { TabBar } from './TabBar.js'
 import { TrialBanner } from './TrialBanner.js'
 import { CommandPalette } from './CommandPalette.js'
 import { useStore } from '../../lib/store.js'
@@ -36,9 +37,11 @@ export function AppShell() {
       <MobileSidebar open={navOpen} onClose={() => setNavOpen(false)} />
 
       <div className="lg:pl-[248px]">
-        <Topbar onOpenNav={() => setNavOpen(true)} />
+        <Topbar />
         <TrialBanner />
-        <main id="main-content" className="px-4 pb-16 pt-6 sm:px-6 sm:pt-8 lg:px-8">
+        {/* The bottom padding clears the tab bar below `lg`, where it is
+            fixed over the content, and goes back to normal above it. */}
+        <main id="main-content" className="px-4 pb-28 pt-6 sm:px-6 sm:pt-8 lg:px-8 lg:pb-16">
           {/* A keyed enter animation, deliberately without AnimatePresence.
               Coordinating an exit here left the incoming page stranded on the
               exit variant — present in the DOM but at opacity 0, so every
@@ -49,6 +52,8 @@ export function AppShell() {
           </motion.div>
         </main>
       </div>
+
+      <TabBar onOpenNav={() => setNavOpen(true)} />
 
       <CommandPalette />
       <Toaster toasts={toasts} onDismiss={dismissToast} />

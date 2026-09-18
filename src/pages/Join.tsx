@@ -87,7 +87,7 @@ export default function Join({ token }: { token: string }) {
           {problem && !offer && (
             <>
               <span
-                className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-[rgb(var(--c-status-critical)/0.12)] text-[rgb(var(--c-status-critical))]"
+                className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-status-critical-soft text-status-critical-ink"
                 aria-hidden
               >
                 <AlertTriangle size={19} />
@@ -150,7 +150,7 @@ export default function Join({ token }: { token: string }) {
                 )}
 
                 {problem && (
-                  <p className="text-[12.5px] leading-relaxed text-[rgb(var(--c-status-critical))]" role="alert">
+                  <p className="text-[12.5px] leading-relaxed text-status-critical-ink" role="alert">
                     {problem}
                   </p>
                 )}

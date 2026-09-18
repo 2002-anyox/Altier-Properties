@@ -66,7 +66,7 @@ export function useLastSignIn(): string | null {
 
 function LastUsed() {
   return (
-    <span className="ml-auto shrink-0 rounded-full bg-gold-soft px-2 py-0.5 text-[10.5px] font-semibold text-gold-ink">
+    <span className="ml-auto shrink-0 rounded-full bg-gold-soft px-2 py-0.5 text-[11px] font-semibold text-gold-ink">
       Last used
     </span>
   )

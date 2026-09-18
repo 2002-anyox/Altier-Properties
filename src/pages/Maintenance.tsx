@@ -141,7 +141,7 @@ export default function Maintenance() {
         <motion.div variants={itemVariants} className="card card-pad relative overflow-hidden">
           <span className="absolute inset-y-0 left-0 w-[3px] bg-status-critical" aria-hidden />
           <p className="text-[12.5px] font-medium text-ink-secondary">Past due</p>
-          <p className="tnum mt-2 text-[26px] font-semibold leading-none text-[rgb(var(--c-status-critical))]">{overdue.length}</p>
+          <p className="tnum mt-2 text-[26px] font-semibold leading-none text-status-critical-ink">{overdue.length}</p>
           <p className="mt-2 text-[12px] text-ink-muted">jobs beyond their target date</p>
         </motion.div>
         <motion.div variants={itemVariants} className="card card-pad">
@@ -202,7 +202,7 @@ export default function Maintenance() {
                 <div key={col} className="flex w-[216px] shrink-0 flex-col">
                   <div className="mb-2.5 flex items-center justify-between gap-2 px-1">
                     <span className="text-[12.5px] font-semibold text-ink">{MAINTENANCE_STATUS_META[col].label}</span>
-                    <span className="tnum rounded-full bg-surface-inset px-1.5 py-0.5 text-[10.5px] text-ink-muted">{items.length}</span>
+                    <span className="tnum rounded-full bg-surface-inset px-1.5 py-0.5 text-[11px] text-ink-muted">{items.length}</span>
                   </div>
                   <motion.ul variants={listVariants} initial="initial" animate="animate" className="flex flex-col gap-2.5">
                     {items.map((m) => {
@@ -216,12 +216,12 @@ export default function Maintenance() {
                           >
                             <div className="flex items-start justify-between gap-2">
                               <PriorityChip priority={m.priority} />
-                              <span className="tnum shrink-0 text-[10.5px] text-ink-muted">{m.reference}</span>
+                              <span className="tnum shrink-0 text-[11px] text-ink-muted">{m.reference}</span>
                             </div>
                             <p className="mt-2.5 text-[13px] font-medium leading-snug text-ink">{m.title}</p>
                             <p className="mt-1 truncate text-[11.5px] text-ink-muted">{p?.name}</p>
                             <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-2.5">
-                              <span className={cx('inline-flex items-center gap-1 text-[11px]', late ? 'text-[rgb(var(--c-status-critical))]' : 'text-ink-muted')}>
+                              <span className={cx('inline-flex items-center gap-1 text-[11px]', late ? 'text-status-critical-ink' : 'text-ink-muted')}>
                                 <Timer size={11} /> {shortDate(m.dueOn)}
                               </span>
                               <span className="tnum text-[11px] text-ink-muted">{money(m.actualCost ?? m.estimatedCost, true)}</span>
@@ -270,7 +270,7 @@ export default function Maintenance() {
                       <td className="px-4 py-3 text-ink-secondary">{m.vendor}</td>
                       <td className="px-4 py-3"><PriorityChip priority={m.priority} /></td>
                       <td className="px-4 py-3"><MaintenanceChip status={m.status} /></td>
-                      <td className={cx('px-4 py-3', late ? 'text-[rgb(var(--c-status-critical))]' : 'text-ink-secondary')}>{shortDate(m.dueOn)}</td>
+                      <td className={cx('px-4 py-3', late ? 'text-status-critical-ink' : 'text-ink-secondary')}>{shortDate(m.dueOn)}</td>
                       <td className="tnum px-5 py-3 text-right font-semibold text-ink sm:px-6">{money(m.actualCost ?? m.estimatedCost)}</td>
                     </tr>
                   )
@@ -318,7 +318,7 @@ export default function Maintenance() {
             <p className="text-[13.5px] leading-relaxed text-ink-secondary">{open.description}</p>
 
             <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-[13px]">
-              <Detail label="Property" value={<Link to={`/properties/${open.propertyId}`} className="text-ink hover:text-gold">{openProperty?.name}</Link>} />
+              <Detail label="Property" value={<Link to={`/properties/${open.propertyId}`} className="text-ink hover:text-gold-text">{openProperty?.name}</Link>} />
               <Detail label="Reported by" value={open.reportedBy} />
               <Detail label="Vendor" value={open.vendor} />
               <Detail

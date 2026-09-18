@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import {
-  CalendarPlus, ClipboardList, DoorOpen, Globe, LogIn, LogOut, Pencil, Search, Trash2, Users,
+  CalendarPlus, ClipboardList, DoorOpen, LogIn, LogOut, Pencil, Search, Trash2, Users,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader.js'
 import {
@@ -20,6 +20,7 @@ import { itemVariants, listVariants } from '../lib/motion.js'
 import { isOpenEnded } from '../lib/derive.js'
 import { settleStay, type Settlement } from '../lib/stay.js'
 import type { Booking, BookingSource, BookingStatus, TenancyMode } from '../lib/types.js'
+import { BOOKING_STATUS_LABEL } from '../lib/labels.js'
 
 const SOURCE_LABEL: Record<BookingSource, string> = {
   direct: 'Direct', airbnb: 'Airbnb', booking_com: 'Booking.com', agency: 'Agency', corporate: 'Corporate',
@@ -42,10 +43,10 @@ const inResidence = (b: Booking) => !!b.arrivedOn && !b.departedOn
 
 const STATUS_CHIP: Record<BookingStatus, string> = {
   in_progress: 'bg-gold-soft text-gold-ink',
-  upcoming: 'bg-[rgb(var(--c-status-info)/0.12)] text-[rgb(var(--c-status-info))]',
-  pending: 'bg-[rgb(var(--c-status-serious)/0.16)] text-[rgb(var(--c-status-serious))]',
+  upcoming: 'bg-status-info-soft text-status-info-ink',
+  pending: 'bg-status-serious-soft text-status-serious-ink',
   completed: 'bg-surface-inset text-ink-secondary',
-  cancelled: 'bg-[rgb(var(--c-status-critical)/0.12)] text-[rgb(var(--c-status-critical))]',
+  cancelled: 'bg-status-critical-soft text-status-critical-ink',
 }
 
 export default function Bookings() {
@@ -175,9 +176,9 @@ export default function Bookings() {
               { value: 'all', label: 'All', count: counts.all },
               { value: 'to_arrive', label: 'To check in', count: counts.to_arrive },
               { value: 'in_residence', label: 'In residence', count: counts.in_residence },
-              { value: 'in_progress', label: 'In progress', count: counts.in_progress },
+              { value: 'in_progress', label: 'Running', count: counts.in_progress },
               { value: 'upcoming', label: 'Upcoming', count: counts.upcoming },
-              { value: 'pending', label: 'Pending', count: counts.pending },
+              { value: 'pending', label: 'Unconfirmed', count: counts.pending },
               { value: 'completed', label: 'Completed', count: counts.completed },
               { value: 'cancelled', label: 'Cancelled', count: counts.cancelled },
             ]}
@@ -210,17 +211,16 @@ export default function Bookings() {
       ) : (
         <Card className="overflow-hidden">
           <div className="scroll-x">
-            <table className="w-full min-w-[1000px] text-left text-[13px]">
+            <table className="w-full min-w-[860px] text-left text-[13px]">
               <thead className="text-ink-muted">
                 <tr className="border-b border-line bg-surface-inset/50">
                   <th scope="col" className="px-5 py-3 font-medium sm:px-6">Reference</th>
                   <th scope="col" className="px-4 py-3 font-medium">Client</th>
                   <th scope="col" className="px-4 py-3 font-medium">Property</th>
                   <th scope="col" className="px-4 py-3 font-medium">Term</th>
-                  <th scope="col" className="px-4 py-3 font-medium">Source</th>
                   <th scope="col" className="px-4 py-3 font-medium">Status</th>
-                  <th scope="col" className="px-4 py-3 font-medium">In the building</th>
-                  <th scope="col" className="px-5 py-3 text-right font-medium sm:px-6">Value</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Value</th>
+                  <th scope="col" className="whitespace-nowrap px-5 py-3 font-medium sm:px-6">Arrival</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[rgb(var(--c-border))]">
@@ -233,22 +233,30 @@ export default function Bookings() {
                     <tr key={b.id} className="cursor-pointer transition-colors hover:bg-surface-inset/60" onClick={() => setSelected(b)}>
                       <td className="px-5 py-3 sm:px-6">
                         <span className="block font-medium text-ink">{b.reference}</span>
-                        <span className="block text-[11.5px] text-ink-muted">{b.mode === 'short_stay' ? `${nights} nights` : b.mode === 'rental' ? `${b.advanceMonths}-month advance` : 'Fixed term'}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="flex items-center gap-2">
-                          <Avatar name={c?.name ?? '?'} size={26} tone="soft" />
-                          <span className="truncate text-ink-secondary">{c?.name}</span>
+                        {/* The source used to have a column of its own on a
+                            table already fighting for width — eight of them
+                            meant a long property name broke over three lines
+                            and every row stood four lines tall. It belongs
+                            here, beside the shape of the term. */}
+                        <span className="block whitespace-nowrap text-[11.5px] text-ink-muted">
+                          {b.mode === 'short_stay' ? `${nights} nights` : b.mode === 'rental' ? `${b.advanceMonths}-month advance` : 'Fixed term'}
+                          {' · '}{SOURCE_LABEL[b.source]}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-ink-secondary">{p?.name}</td>
-                      <td className="px-4 py-3 text-ink-secondary">
-                        {shortDate(b.start)} – {b.end ? shortDate(b.end) : <span className="text-gold">open-ended</span>}
+                      <td className="max-w-[190px] px-4 py-3">
+                        <span className="flex items-center gap-2">
+                          <Avatar name={c?.name ?? '?'} size={26} tone="soft" />
+                          <span className="truncate text-ink-secondary" title={c?.name}>{c?.name}</span>
+                        </span>
                       </td>
-                      <td className="px-4 py-3">
-                        <Chip className="bg-surface-inset text-ink-secondary"><Globe size={10} /> {SOURCE_LABEL[b.source]}</Chip>
+                      <td className="max-w-[180px] px-4 py-3 text-ink-secondary">
+                        <span className="block truncate" title={p?.name}>{p?.name}</span>
                       </td>
-                      <td className="px-4 py-3"><Chip className={STATUS_CHIP[b.status]}>{b.status.replace(/_/g, ' ')}</Chip></td>
+                      <td className="whitespace-nowrap px-4 py-3 text-ink-secondary">
+                        {shortDate(b.start)} – {b.end ? shortDate(b.end) : <span className="text-gold-text">open-ended</span>}
+                      </td>
+                      <td className="px-4 py-3"><Chip className={STATUS_CHIP[b.status]}>{BOOKING_STATUS_LABEL[b.status]}</Chip></td>
+                      <td className="tnum whitespace-nowrap px-4 py-3 text-right font-semibold text-ink">{money(value)}</td>
                       {/* Checking somebody in is the commonest thing anybody
                           does on this page, and it used to be two clicks
                           deep in a panel. It belongs on the row. */}
@@ -271,7 +279,6 @@ export default function Bookings() {
                           </span>
                         )}
                       </td>
-                      <td className="tnum px-5 py-3 text-right font-semibold text-ink sm:px-6">{money(value)}</td>
                     </tr>
                   )
                 })}
@@ -325,14 +332,14 @@ export default function Bookings() {
             <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface-inset/50 p-4">
               <Avatar name={selectedClient?.name ?? '?'} size={44} tone="navy" />
               <div className="min-w-0 flex-1">
-                <Link to={`/clients/${selected.clientId}`} className="block truncate text-[14px] font-semibold text-ink hover:text-gold">{selectedClient?.name}</Link>
+                <Link to={`/clients/${selected.clientId}`} className="block truncate text-[14px] font-semibold text-ink hover:text-gold-text">{selectedClient?.name}</Link>
                 <p className="truncate text-[12px] text-ink-muted">{selectedClient?.email}</p>
               </div>
-              <Chip className={STATUS_CHIP[selected.status]}>{selected.status.replace(/_/g, ' ')}</Chip>
+              <Chip className={STATUS_CHIP[selected.status]}>{BOOKING_STATUS_LABEL[selected.status]}</Chip>
             </div>
 
             <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-[13px]">
-              <Detail label="Property" value={<Link to={`/properties/${selected.propertyId}`} className="text-ink hover:text-gold">{selectedProperty?.name}</Link>} />
+              <Detail label="Property" value={<Link to={`/properties/${selected.propertyId}`} className="text-ink hover:text-gold-text">{selectedProperty?.name}</Link>} />
               <Detail label="District" value={selectedProperty?.address.district ?? '—'} />
               <Detail label="Starts" value={`${mediumDate(selected.start)} · ${selected.checkIn}`} />
               <Detail
@@ -397,14 +404,14 @@ export default function Bookings() {
                       <dt className="text-ink-secondary">
                         {Math.round(position.unusedDays)} day{Math.round(position.unusedDays) === 1 ? '' : 's'} paid for and unused
                       </dt>
-                      <dd className="tnum text-status-good">− {money(position.credit)}</dd>
+                      <dd className="tnum text-status-good-ink">− {money(position.credit)}</dd>
                     </div>
                   )}
                   <div className="flex justify-between gap-3 border-t border-line pt-2 font-semibold">
                     <dt className="text-ink">
                       {position.balance < 0 ? 'Owed back to them' : 'Outstanding'}
                     </dt>
-                    <dd className={cx('tnum', position.balance > 0 ? 'text-status-critical' : position.balance < 0 ? 'text-status-good' : 'text-ink')}>
+                    <dd className={cx('tnum', position.balance > 0 ? 'text-status-critical-ink' : position.balance < 0 ? 'text-status-good-ink' : 'text-ink')}>
                       {money(Math.abs(position.balance))}
                     </dd>
                   </div>
@@ -700,7 +707,7 @@ function SettlementPanel({
         {settle && credit > 0 && (
           <div className="flex justify-between gap-3 border-t border-line pt-2">
             <dt className="text-ink-secondary">{days(unusedDays)} not used — credited</dt>
-            <dd className="tnum text-status-good">− {money(credit)}</dd>
+            <dd className="tnum text-status-good-ink">− {money(credit)}</dd>
           </div>
         )}
         {settle && due > 0 && (
@@ -712,7 +719,7 @@ function SettlementPanel({
 
         <div className="flex justify-between gap-3 border-t border-line pt-2 font-semibold">
           <dt className="text-ink">{balance < 0 ? 'Owed back to them' : 'Still outstanding'}</dt>
-          <dd className={cx('tnum', balance > 0 ? 'text-status-critical' : balance < 0 ? 'text-status-good' : 'text-ink')}>
+          <dd className={cx('tnum', balance > 0 ? 'text-status-critical-ink' : balance < 0 ? 'text-status-good-ink' : 'text-ink')}>
             {money(Math.abs(balance))}
           </dd>
         </div>

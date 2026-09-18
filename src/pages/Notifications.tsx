@@ -28,9 +28,9 @@ const KIND_META: Record<NotificationKind, { label: string; icon: React.ReactNode
 }
 
 const PRIORITY_META: Record<NotificationPriority, { label: string; chip: string; bar: string }> = {
-  critical: { label: 'Critical', chip: 'bg-[rgb(var(--c-status-critical)/0.14)] text-[rgb(var(--c-status-critical))]', bar: 'bg-status-critical' },
-  high: { label: 'High', chip: 'bg-[rgb(var(--c-status-serious)/0.16)] text-[rgb(var(--c-status-serious))]', bar: 'bg-status-serious' },
-  normal: { label: 'Normal', chip: 'bg-[rgb(var(--c-status-info)/0.12)] text-[rgb(var(--c-status-info))]', bar: 'bg-status-info' },
+  critical: { label: 'Critical', chip: 'bg-status-critical-soft text-status-critical-ink', bar: 'bg-status-critical' },
+  high: { label: 'High', chip: 'bg-status-serious-soft text-status-serious-ink', bar: 'bg-status-serious' },
+  normal: { label: 'Normal', chip: 'bg-status-info-soft text-status-info-ink', bar: 'bg-status-info' },
   low: { label: 'Low', chip: 'bg-surface-inset text-ink-muted', bar: 'bg-line-strong' },
 }
 
@@ -107,7 +107,7 @@ export default function Notifications() {
         <motion.div variants={itemVariants} className="card card-pad relative overflow-hidden">
           <span className="absolute inset-y-0 left-0 w-[3px] bg-status-critical" aria-hidden />
           <p className="text-[12.5px] font-medium text-ink-secondary">Critical</p>
-          <p className="tnum mt-2 text-[26px] font-semibold leading-none text-[rgb(var(--c-status-critical))]">{critical}</p>
+          <p className="tnum mt-2 text-[26px] font-semibold leading-none text-status-critical-ink">{critical}</p>
           <p className="mt-2 text-[12px] text-ink-muted">need action today</p>
         </motion.div>
         <motion.div variants={itemVariants} className="card card-pad">

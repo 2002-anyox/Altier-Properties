@@ -71,6 +71,14 @@ jobs:
       - name: The forms let you finish typing
         run: npm run check:forms
 
+      # The light theme shipped with its most-used text colour at 3.08:1 on
+      # the inset surface, while the dark theme — built later and more
+      # carefully — passed everything. Nobody was measuring, so nobody knew.
+      # This reads the tokens out of the stylesheet and measures every word
+      # against every surface it can land on.
+      - name: Every word is readable on every surface
+        run: npm run check:contrast
+
       # A stay is priced before anybody has stayed in it, so the bill at the
       # end is arithmetic nobody notices is wrong until a guest disputes it
       # at the desk. This replays the real cases — left early, stayed on,

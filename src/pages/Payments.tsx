@@ -19,6 +19,7 @@ import { amountIn } from '../lib/money.js'
 import { ageingBuckets, chargeSign, computeKpis } from '../lib/derive.js'
 import { itemVariants, listVariants } from '../lib/motion.js'
 import type { ChargeType, Invoice, InvoiceStatus } from '../lib/types.js'
+import { CHARGE_TYPE_LABEL, PAYMENT_METHOD_LABEL, titleOf } from '../lib/labels.js'
 
 export default function Payments() {
   const { state, dispatch, toast } = useStore()
@@ -161,7 +162,7 @@ export default function Payments() {
         <motion.div variants={itemVariants} className="card card-pad relative overflow-hidden">
           <span className="absolute inset-y-0 left-0 w-[3px] bg-status-critical" aria-hidden />
           <p className="text-[12.5px] font-medium text-ink-secondary">Overdue</p>
-          <p className="tnum mt-2 text-[26px] font-semibold leading-none text-[rgb(var(--c-status-critical))]">{money(kpis.overdueAmount)}</p>
+          <p className="tnum mt-2 text-[26px] font-semibold leading-none text-status-critical-ink">{money(kpis.overdueAmount)}</p>
           <p className="mt-2 text-[12px] text-ink-muted">{kpis.overdueCount} invoices past due</p>
         </motion.div>
         <motion.div variants={itemVariants} className="card card-pad relative overflow-hidden">
@@ -297,14 +298,14 @@ export default function Payments() {
                       <td className="px-4 py-3 text-ink-secondary">{p?.name}</td>
                       <td className="px-4 py-3">
                         <span className="block text-ink-secondary">{shortDate(i.dueOn)}</span>
-                        <span className={cx('block text-[11.5px]', late > 0 ? 'text-[rgb(var(--c-status-critical))]' : 'text-ink-muted')}>
+                        <span className={cx('block text-[11.5px]', late > 0 ? 'text-status-critical-ink' : 'text-ink-muted')}>
                           {late > 0 ? `${late} days late` : relativeDay(i.dueOn)}
                         </span>
                       </td>
                       <td className="px-4 py-3"><InvoiceChip status={i.status} /></td>
                       <td className={cx(
                         'tnum px-4 py-3 text-right font-semibold',
-                        i.type === 'credit_note' ? 'text-status-good' : 'text-ink',
+                        i.type === 'credit_note' ? 'text-status-good-ink' : 'text-ink',
                       )}>
                         {/* A credit note is stored positive and counts the
                             other way, so the sign is put back on here — a
@@ -346,7 +347,7 @@ export default function Payments() {
         open={!!openInvoice}
         onClose={() => setOpenInvoice(null)}
         title={openInvoice?.number ?? ''}
-        subtitle={openInvoice && <span className="capitalize">{openInvoice.type.replace(/_/g, ' ')} · issued {mediumDate(openInvoice.issuedOn)}</span>}
+        subtitle={openInvoice && <span>{CHARGE_TYPE_LABEL[openInvoice.type]} · issued {mediumDate(openInvoice.issuedOn)}</span>}
         footer={
           openInvoice && can(state.role, 'edit:payments') && openInvoice.status !== 'paid' ? (
             <>
@@ -365,20 +366,20 @@ export default function Payments() {
               <p className="tnum mt-2 text-[34px] font-semibold leading-none text-ink">{money(openInvoice.amount - openInvoice.paidAmount)}</p>
               <div className="mt-3 flex justify-center"><InvoiceChip status={openInvoice.status} /></div>
               {openInvoice.status === 'overdue' && (
-                <p className="mt-3 inline-flex items-center gap-1.5 text-[12.5px] text-[rgb(var(--c-status-critical))]">
+                <p className="mt-3 inline-flex items-center gap-1.5 text-[12.5px] text-status-critical-ink">
                   <TriangleAlert size={13} /> {Math.abs(daysBetween(iso(TODAY), openInvoice.dueOn))} days past the due date
                 </p>
               )}
             </div>
 
             <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-[13px]">
-              <Detail label="Client" value={<Link to={`/clients/${openInvoice.clientId}`} className="text-ink hover:text-gold">{openClient?.name}</Link>} />
-              <Detail label="Property" value={<Link to={`/properties/${openInvoice.propertyId}`} className="text-ink hover:text-gold">{openProperty?.name}</Link>} />
+              <Detail label="Client" value={<Link to={`/clients/${openInvoice.clientId}`} className="text-ink hover:text-gold-text">{openClient?.name}</Link>} />
+              <Detail label="Property" value={<Link to={`/properties/${openInvoice.propertyId}`} className="text-ink hover:text-gold-text">{openProperty?.name}</Link>} />
               <Detail label="Issued" value={mediumDate(openInvoice.issuedOn)} />
               <Detail label="Due" value={`${mediumDate(openInvoice.dueOn)} · ${relativeDay(openInvoice.dueOn)}`} />
               <Detail label="Gross amount" value={money(openInvoice.amount)} />
               <Detail label="Received" value={money(openInvoice.paidAmount)} />
-              <Detail label="Method" value={openInvoice.method ? openInvoice.method.replace(/_/g, ' ') : 'Not yet paid'} />
+              <Detail label="Method" value={openInvoice.method ? titleOf(openInvoice.method, PAYMENT_METHOD_LABEL) : 'Not yet paid'} />
               <Detail label="Settled on" value={openInvoice.paidOn ? mediumDate(openInvoice.paidOn) : '—'} />
             </dl>
 

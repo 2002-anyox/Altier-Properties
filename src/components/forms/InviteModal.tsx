@@ -221,7 +221,7 @@ export function InviteModal({
               role="alert"
               className={upgrade
                 ? 'rounded-2xl border border-gold/30 bg-gold-soft/60 p-4'
-                : 'text-[12.5px] leading-relaxed text-[rgb(var(--c-status-critical))]'}
+                : 'text-[12.5px] leading-relaxed text-status-critical-ink'}
             >
               {upgrade ? (
                 <>

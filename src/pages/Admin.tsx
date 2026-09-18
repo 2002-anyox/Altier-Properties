@@ -11,7 +11,7 @@ import { admin, type AdminOrganization } from '../lib/api.js'
 const PLAN_CHIP: Record<string, string> = {
   starter: 'bg-surface-inset text-ink-secondary',
   professional: 'bg-gold-soft text-gold-ink',
-  enterprise: 'bg-status-info-soft text-status-info',
+  enterprise: 'bg-status-info-soft text-status-info-ink',
 }
 
 /**
@@ -57,7 +57,7 @@ export default function Admin() {
 
       {problem && (
         <Card className="card-pad mb-5" role="alert">
-          <p className="text-[13px] leading-relaxed text-[rgb(var(--c-status-critical))]">{problem}</p>
+          <p className="text-[13px] leading-relaxed text-status-critical-ink">{problem}</p>
         </Card>
       )}
 

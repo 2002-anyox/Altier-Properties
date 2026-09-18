@@ -17,6 +17,7 @@ import { ConfirmDelete } from '../components/forms/ConfirmDelete.js'
 import { can } from '../lib/rbac.js'
 import { mediumDate, money, relativeDay, shortDate } from '../lib/format.js'
 import { itemVariants, listVariants } from '../lib/motion.js'
+import { BOOKING_STATUS_LABEL, PAYMENT_METHOD_LABEL, titleOf } from '../lib/labels.js'
 
 type Tab = 'overview' | 'agreements' | 'payments' | 'documents' | 'communications'
 
@@ -108,7 +109,7 @@ export default function ClientDetail() {
             <div className="min-w-0">
               <p className="truncate text-[15px] font-semibold text-ink">{client.name}</p>
               <p className="mt-0.5 inline-flex items-center gap-1 text-[12px] text-ink-muted">
-                <Star size={11} className="fill-gold text-gold" /> {client.rating.toFixed(1)} · {client.status}
+                <Star size={11} className="fill-gold text-gold-text" /> {client.rating.toFixed(1)} · {client.status}
               </p>
             </div>
           </div>
@@ -127,7 +128,7 @@ export default function ClientDetail() {
           </motion.div>
           <motion.div variants={itemVariants} className="card card-pad">
             <p className="text-[12.5px] font-medium text-ink-secondary">Outstanding</p>
-            <p className={cx('tnum mt-2 text-[26px] font-semibold leading-none', outstanding > 0 ? 'text-[rgb(var(--c-status-critical))]' : 'text-ink')}>{money(outstanding)}</p>
+            <p className={cx('tnum mt-2 text-[26px] font-semibold leading-none', outstanding > 0 ? 'text-status-critical-ink' : 'text-ink')}>{money(outstanding)}</p>
             <p className="mt-2 text-[12px] text-ink-muted">{invoices.filter((i) => i.status === 'overdue').length} invoices overdue</p>
           </motion.div>
           <motion.div variants={itemVariants} className="card card-pad">
@@ -172,7 +173,7 @@ export default function ClientDetail() {
                     return (
                       <li key={p!.id} className="flex flex-wrap items-center gap-3 px-5 py-3.5 sm:px-6">
                         <Link to={`/properties/${p!.id}`} className="min-w-0 flex-1">
-                          <span className="block truncate text-[13.5px] font-medium text-ink hover:text-gold">{p!.name}</span>
+                          <span className="block truncate text-[13.5px] font-medium text-ink hover:text-gold-text">{p!.name}</span>
                           <span className="block truncate text-[12px] text-ink-muted">
                             {p!.address.district} · {money(p!.price)}{p!.mode === 'short_stay' ? '/night' : '/month'} asking
                           </span>
@@ -253,20 +254,20 @@ export default function ClientDetail() {
                         <tr key={b.id} className="transition-colors hover:bg-surface-inset/60">
                           <td className="px-5 py-3 font-medium text-ink sm:px-6">{b.reference}</td>
                           <td className="px-4 py-3">
-                            <Link to={`/properties/${b.propertyId}`} className="text-ink-secondary hover:text-gold">{p?.name}</Link>
+                            <Link to={`/properties/${b.propertyId}`} className="text-ink-secondary hover:text-gold-text">{p?.name}</Link>
                           </td>
                           <td className="px-4 py-3 text-ink-secondary">{b.mode === 'short_stay' ? 'Short stay' : b.mode === 'rental' ? 'Open-ended rental' : 'Fixed-term lease'}</td>
                           <td className="px-4 py-3 text-ink-secondary">
-                            {shortDate(b.start)} – {b.end ? shortDate(b.end) : <span className="text-gold">open-ended</span>}
+                            {shortDate(b.start)} – {b.end ? shortDate(b.end) : <span className="text-gold-text">open-ended</span>}
                           </td>
                           <td className="px-4 py-3">
                             <Chip className={
                               b.status === 'in_progress' ? 'bg-gold-soft text-gold-ink'
-                                : b.status === 'upcoming' ? 'bg-[rgb(var(--c-status-info)/0.12)] text-[rgb(var(--c-status-info))]'
-                                  : b.status === 'cancelled' ? 'bg-[rgb(var(--c-status-critical)/0.12)] text-[rgb(var(--c-status-critical))]'
+                                : b.status === 'upcoming' ? 'bg-status-info-soft text-status-info-ink'
+                                  : b.status === 'cancelled' ? 'bg-status-critical-soft text-status-critical-ink'
                                     : 'bg-surface-inset text-ink-secondary'
                             }>
-                              {b.status.replace(/_/g, ' ')}
+                              {BOOKING_STATUS_LABEL[b.status]}
                             </Chip>
                           </td>
                           <td className="tnum px-5 py-3 text-right font-semibold text-ink sm:px-6">
@@ -303,7 +304,7 @@ export default function ClientDetail() {
                       <td className="px-5 py-3 font-medium text-ink sm:px-6">{i.number}</td>
                       <td className="px-4 py-3 text-ink-secondary">{i.memo}</td>
                       <td className="px-4 py-3 text-ink-secondary">{shortDate(i.dueOn)}</td>
-                      <td className="px-4 py-3 capitalize text-ink-secondary">{i.method?.replace(/_/g, ' ') ?? '—'}</td>
+                      <td className="px-4 py-3 text-ink-secondary">{i.method ? titleOf(i.method, PAYMENT_METHOD_LABEL) : '—'}</td>
                       <td className="px-4 py-3"><InvoiceChip status={i.status} /></td>
                       <td className="tnum px-5 py-3 text-right font-semibold text-ink sm:px-6">{money(i.amount)}</td>
                     </tr>

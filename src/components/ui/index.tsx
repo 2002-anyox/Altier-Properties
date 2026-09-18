@@ -29,7 +29,13 @@ const BUTTON_VARIANTS: Record<NonNullable<ButtonProps['variant']>, string> = {
   danger: 'bg-status-critical text-white hover:brightness-95',
 }
 
-const BUTTON_SIZES = { sm: 'h-8 px-3 text-[13px]', md: 'h-10 px-4 text-sm', lg: 'h-12 px-6 text-[15px]' }
+/* Every size steps up on a phone: 32px is comfortable beside a pointer
+   and too small beside a thumb, and Apple asks for 44. */
+const BUTTON_SIZES = {
+  sm: 'h-10 sm:h-8 px-3 text-[13px]',
+  md: 'h-11 sm:h-10 px-4 text-sm',
+  lg: 'h-12 px-6 text-[15px]',
+}
 
 export function Button({ variant = 'secondary', size = 'md', icon, trailing, block, className, children, ...rest }: ButtonProps) {
   return (
@@ -49,7 +55,10 @@ export function IconButton({
       aria-label={label}
       title={label}
       className={cx(
-        'inline-flex h-9 w-9 items-center justify-center rounded-xl text-ink-secondary transition-colors duration-200 hover:bg-surface-inset hover:text-ink',
+        /* 44px under a finger, 36px under a pointer. The glyph does not
+           change size — only the area around it that counts as a press —
+           so a toolbar stays a toolbar and a thumb still lands. */
+        'inline-flex h-11 w-11 sm:h-9 sm:w-9 items-center justify-center rounded-xl text-ink-secondary transition-colors duration-200 hover:bg-surface-inset hover:text-ink',
         className,
       )}
       {...rest}
@@ -84,34 +93,34 @@ export function CardHeader({
 
 /* ------------------------------ Badges ----------------------------- */
 export const PROPERTY_STATUS_META: Record<PropertyStatus, { label: string; dot: string; chip: string }> = {
-  available: { label: 'Available', dot: 'bg-status-good', chip: 'bg-[rgb(var(--c-status-good)/0.12)] text-[rgb(var(--c-status-good))]' },
-  occupied: { label: 'Occupied', dot: 'bg-status-info', chip: 'bg-[rgb(var(--c-status-info)/0.12)] text-[rgb(var(--c-status-info))]' },
+  available: { label: 'Available', dot: 'bg-status-good', chip: 'bg-status-good-soft text-status-good-ink' },
+  occupied: { label: 'Occupied', dot: 'bg-status-info', chip: 'bg-status-info-soft text-status-info-ink' },
   reserved: { label: 'Reserved', dot: 'bg-gold', chip: 'bg-gold-soft text-gold-ink' },
-  maintenance: { label: 'Under maintenance', dot: 'bg-status-serious', chip: 'bg-[rgb(var(--c-status-serious)/0.16)] text-[rgb(var(--c-status-serious))]' },
+  maintenance: { label: 'Under maintenance', dot: 'bg-status-serious', chip: 'bg-status-serious-soft text-status-serious-ink' },
   inactive: { label: 'Inactive', dot: 'bg-ink-muted', chip: 'bg-surface-inset text-ink-muted' },
 }
 
 export const INVOICE_STATUS_META: Record<InvoiceStatus, { label: string; chip: string }> = {
-  paid: { label: 'Paid', chip: 'bg-[rgb(var(--c-status-good)/0.12)] text-[rgb(var(--c-status-good))]' },
+  paid: { label: 'Paid', chip: 'bg-status-good-soft text-status-good-ink' },
   pending: { label: 'Pending', chip: 'bg-gold-soft text-gold-ink' },
-  overdue: { label: 'Overdue', chip: 'bg-[rgb(var(--c-status-critical)/0.14)] text-[rgb(var(--c-status-critical))]' },
-  upcoming: { label: 'Upcoming', chip: 'bg-[rgb(var(--c-status-info)/0.12)] text-[rgb(var(--c-status-info))]' },
-  partial: { label: 'Part paid', chip: 'bg-[rgb(var(--c-status-serious)/0.16)] text-[rgb(var(--c-status-serious))]' },
+  overdue: { label: 'Overdue', chip: 'bg-status-critical-soft text-status-critical-ink' },
+  upcoming: { label: 'Upcoming', chip: 'bg-status-info-soft text-status-info-ink' },
+  partial: { label: 'Part paid', chip: 'bg-status-serious-soft text-status-serious-ink' },
 }
 
 export const PRIORITY_META: Record<MaintenancePriority, { label: string; chip: string }> = {
-  urgent: { label: 'Urgent', chip: 'bg-[rgb(var(--c-status-critical)/0.14)] text-[rgb(var(--c-status-critical))]' },
-  high: { label: 'High', chip: 'bg-[rgb(var(--c-status-serious)/0.16)] text-[rgb(var(--c-status-serious))]' },
+  urgent: { label: 'Urgent', chip: 'bg-status-critical-soft text-status-critical-ink' },
+  high: { label: 'High', chip: 'bg-status-serious-soft text-status-serious-ink' },
   medium: { label: 'Medium', chip: 'bg-gold-soft text-gold-ink' },
   low: { label: 'Low', chip: 'bg-surface-inset text-ink-secondary' },
 }
 
 export const MAINTENANCE_STATUS_META: Record<MaintenanceStatus, { label: string; chip: string }> = {
   reported: { label: 'Reported', chip: 'bg-surface-inset text-ink-secondary' },
-  scheduled: { label: 'Scheduled', chip: 'bg-[rgb(var(--c-status-info)/0.12)] text-[rgb(var(--c-status-info))]' },
+  scheduled: { label: 'Scheduled', chip: 'bg-status-info-soft text-status-info-ink' },
   in_progress: { label: 'In progress', chip: 'bg-gold-soft text-gold-ink' },
-  awaiting_parts: { label: 'Awaiting parts', chip: 'bg-[rgb(var(--c-status-serious)/0.16)] text-[rgb(var(--c-status-serious))]' },
-  completed: { label: 'Completed', chip: 'bg-[rgb(var(--c-status-good)/0.12)] text-[rgb(var(--c-status-good))]' },
+  awaiting_parts: { label: 'Awaiting parts', chip: 'bg-status-serious-soft text-status-serious-ink' },
+  completed: { label: 'Completed', chip: 'bg-status-good-soft text-status-good-ink' },
 }
 
 export function Chip({ className, children, dot }: { className?: string; children: React.ReactNode; dot?: string }) {
@@ -173,7 +182,7 @@ export function Field({
       {/* An error replaces the hint: two lines of small text under one
           field is where people stop reading either. */}
       {error
-        ? <p className="text-[11.5px] text-[rgb(var(--c-status-critical))]">{error}</p>
+        ? <p className="text-[11.5px] text-status-critical-ink">{error}</p>
         : hint && <p className="text-[11.5px] text-ink-muted">{hint}</p>}
     </div>
   )
@@ -182,7 +191,11 @@ export function Field({
 /* text-base below sm, text-sm above: iOS zooms the whole page when a
    focused input is under 16px, which shoves the form off-screen mid-typing. */
 const CONTROL =
-  'h-10 w-full rounded-xl border border-line bg-surface-card px-3 text-base sm:text-sm text-ink placeholder:text-ink-muted transition-colors duration-200 hover:border-line-strong focus:border-gold focus:outline-none'
+  /* `line-control`, not `line`: the edge is the only thing that says
+     where the field is — its fill is within 1.1:1 of the card behind it —
+     so it is a control boundary and owes 3:1. The hairline that separates
+     two cards owes nothing and stays `line`. */
+  'h-10 w-full rounded-xl border border-line-control bg-surface-card px-3 text-base sm:text-sm text-ink placeholder:text-ink-muted transition-colors duration-200 hover:border-gold focus:border-gold focus:outline-none'
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   ({ className, ...rest }, ref) => <input ref={ref} className={cx(CONTROL, className)} {...rest} />,
@@ -245,7 +258,7 @@ export function NumberInput({
           aria-label="Decrease"
           onClick={() => nudge(-step)}
           disabled={min !== undefined && value <= min}
-          className="h-10 w-10 shrink-0 rounded-l-xl border border-r-0 border-line text-ink-secondary transition-colors hover:bg-surface-inset hover:text-ink disabled:opacity-40"
+          className="h-10 w-10 shrink-0 rounded-l-xl border border-r-0 border-line-control text-ink-secondary transition-colors hover:bg-surface-inset hover:text-ink disabled:opacity-40"
         >
           −
         </button>
@@ -291,7 +304,7 @@ export function NumberInput({
           aria-label="Increase"
           onClick={() => nudge(step)}
           disabled={max !== undefined && value >= max}
-          className="h-10 w-10 shrink-0 rounded-r-xl border border-l-0 border-line text-ink-secondary transition-colors hover:bg-surface-inset hover:text-ink disabled:opacity-40"
+          className="h-10 w-10 shrink-0 rounded-r-xl border border-l-0 border-line-control text-ink-secondary transition-colors hover:bg-surface-inset hover:text-ink disabled:opacity-40"
         >
           +
         </button>
@@ -386,7 +399,7 @@ export function PasswordField({
         id={capsId}
         aria-live="polite"
         className={cx(
-          'mt-1.5 flex items-center gap-1.5 text-[11.5px] text-[rgb(var(--c-status-serious))]',
+          'mt-1.5 flex items-center gap-1.5 text-[11.5px] text-status-serious-ink',
           !caps && 'sr-only',
         )}
       >
@@ -430,7 +443,7 @@ export function SearchInput({
         className={cx(CONTROL, 'pl-9', shortcut && 'pr-12')}
       />
       {shortcut && (
-        <kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded-md border border-line bg-surface-inset px-1.5 py-0.5 text-[10.5px] font-medium text-ink-muted sm:block">
+        <kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded-md border border-line bg-surface-inset px-1.5 py-0.5 text-[11px] font-medium text-ink-muted sm:block">
           {shortcut}
         </kbd>
       )}
@@ -449,8 +462,13 @@ export function Toggle({
       aria-label={label}
       onClick={() => onChange(!checked)}
       className={cx(
+        /* 24px tall is the WCAG 2.2 floor and no more than that, so the
+           touch target is extended past the track rather than the track
+           being fattened — the switch keeps its proportions and the
+           finger gets its 44px. */
         'relative h-6 w-11 shrink-0 rounded-full border transition-colors duration-300 ease-premium',
-        checked ? 'border-transparent bg-gold' : 'border-line bg-surface-inset',
+        'after:absolute after:-inset-y-2.5 after:inset-x-0 after:content-[\'\']',
+        checked ? 'border-transparent bg-gold' : 'border-line-control bg-surface-inset',
       )}
     >
       <motion.span
@@ -538,7 +556,7 @@ export function Tabs<T extends string>({
             <span className="inline-flex items-center gap-1.5">
               {t.label}
               {t.count !== undefined && (
-                <span className="tnum rounded-full bg-surface-inset px-1.5 py-0.5 text-[10.5px] text-ink-muted">{t.count}</span>
+                <span className="tnum rounded-full bg-surface-inset px-1.5 py-0.5 text-[11px] text-ink-muted">{t.count}</span>
               )}
             </span>
             {active && (
@@ -673,7 +691,10 @@ export function Avatar({ name, size = 36, tone = 'navy' }: { name: string; size?
   return (
     <span
       className={cx('inline-flex shrink-0 items-center justify-center rounded-full font-semibold', tones[tone])}
-      style={{ height: size, width: size, fontSize: Math.max(10, size * 0.34) }}
+      /* The initials are a graphic — aria-hidden, because the name is
+         always beside them — but they are still read by eye, so they keep
+         the same 11px floor as everything else. */
+      style={{ height: size, width: size, fontSize: Math.max(11, size * 0.34) }}
       aria-hidden
     >
       {label}
@@ -716,7 +737,7 @@ export function Checkbox({
       <span
         className={cx(
           'flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md border transition-all duration-200',
-          checked ? 'border-gold bg-gold text-white' : 'border-line-strong bg-surface-card',
+          checked ? 'border-gold bg-gold text-white' : 'border-line-control bg-surface-card',
         )}
       >
         <AnimatePresence>

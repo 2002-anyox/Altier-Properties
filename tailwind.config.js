@@ -17,6 +17,9 @@ export default {
         line: {
           DEFAULT: rgb('--c-border'),
           strong: rgb('--c-border-strong'),
+          /* The edge of a field, which identifies a control and owes 3:1.
+             `line` and `line-strong` separate surfaces and owe nothing. */
+          control: rgb('--c-border-control'),
         },
         ink: {
           DEFAULT: rgb('--c-text-primary'),
@@ -26,7 +29,10 @@ export default {
           onrailmuted: rgb('--c-text-onrail-muted'),
         },
         gold: {
+          /* Fills, rules and the focus ring — non-text, 3:1 is the bar. */
           DEFAULT: rgb('--c-accent'),
+          /* Words. 4.5:1 on every surface, and it flips inside .on-dark. */
+          text: rgb('--c-accent-text'),
           soft: rgb('--c-accent-soft'),
           strong: rgb('--c-accent-strong'),
           ink: rgb('--c-accent-ink'),
@@ -36,12 +42,17 @@ export default {
           400: '#6B7889', 500: '#4A5768', 600: '#33404F', 700: '#24303F',
           800: '#1A2432', 850: '#131C27', 900: '#0F1620', 950: '#0A0F17',
         },
+        /* Three values per status: the fill behind a bar or stripe, the
+           soft ground of a chip, and the ink that goes on either. The
+           `-soft` classes were being used in eight places and had never
+           been defined here, so those chips compiled to no background at
+           all — `.bg-status-good-soft` is absent from the built CSS. */
         status: {
-          good: rgb('--c-status-good'),
-          warning: rgb('--c-status-warning'),
-          serious: rgb('--c-status-serious'),
-          critical: rgb('--c-status-critical'),
-          info: rgb('--c-status-info'),
+          good: { DEFAULT: rgb('--c-status-good'), soft: rgb('--c-status-good-soft'), ink: rgb('--c-status-good-ink') },
+          warning: { DEFAULT: rgb('--c-status-warning'), soft: rgb('--c-status-warning-soft'), ink: rgb('--c-status-warning-ink') },
+          serious: { DEFAULT: rgb('--c-status-serious'), soft: rgb('--c-status-serious-soft'), ink: rgb('--c-status-serious-ink') },
+          critical: { DEFAULT: rgb('--c-status-critical'), soft: rgb('--c-status-critical-soft'), ink: rgb('--c-status-critical-ink') },
+          info: { DEFAULT: rgb('--c-status-info'), soft: rgb('--c-status-info-soft'), ink: rgb('--c-status-info-ink') },
         },
       },
       fontFamily: {

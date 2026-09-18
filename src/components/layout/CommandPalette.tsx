@@ -154,7 +154,7 @@ export function CommandPalette() {
                 aria-label="Search or jump to"
                 className="h-14 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-ink-muted"
               />
-              <kbd className="hidden rounded-md border border-line bg-surface-inset px-1.5 py-0.5 text-[10.5px] text-ink-muted sm:block">Esc</kbd>
+              <kbd className="hidden rounded-md border border-line bg-surface-inset px-1.5 py-0.5 text-[11px] text-ink-muted sm:block">Esc</kbd>
             </div>
 
             <ul ref={listRef} className="max-h-[min(420px,52vh)] overflow-y-auto p-2">
@@ -165,7 +165,7 @@ export function CommandPalette() {
               )}
               {results.groups.map(([group, items]) => (
                 <li key={group} className="mb-1">
-                  <p className="px-3 py-1.5 text-[10.5px] font-semibold uppercase tracking-[0.13em] text-ink-muted">{group}</p>
+                  <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.13em] text-ink-muted">{group}</p>
                   <ul>
                     {items.map((c) => {
                       flatIndex += 1
@@ -182,7 +182,7 @@ export function CommandPalette() {
                               active ? 'bg-surface-inset' : 'hover:bg-surface-inset/60',
                             )}
                           >
-                            <span className={cx('shrink-0', active ? 'text-gold' : 'text-ink-muted')}>{c.icon}</span>
+                            <span className={cx('shrink-0', active ? 'text-gold-text' : 'text-ink-muted')}>{c.icon}</span>
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-[13.5px] font-medium text-ink">{c.label}</span>
                               <span className="block truncate text-[11.5px] text-ink-muted">{c.hint}</span>

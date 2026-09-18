@@ -219,7 +219,7 @@ export default function SignIn() {
               className={cx(
                 'rounded-xl border px-3.5 py-2.5 text-[13px] leading-relaxed outline-none',
                 shown
-                  ? 'border-[rgb(var(--c-status-critical)/0.35)] bg-[rgb(var(--c-status-critical)/0.08)] text-[rgb(var(--c-status-critical))]'
+                  ? 'border-[rgb(var(--c-status-critical)/0.35)] bg-status-critical-soft text-status-critical-ink'
                   : 'sr-only border-transparent',
               )}
             >

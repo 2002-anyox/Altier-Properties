@@ -200,8 +200,8 @@ export function BookingFormModal({
           </div>
 
           {blocking && blockedBy && client && (
-            <div className="flex gap-3 rounded-2xl border border-[rgb(var(--c-status-serious)/0.4)] bg-[rgb(var(--c-status-serious)/0.08)] p-4">
-              <AlertTriangle size={16} className="mt-0.5 shrink-0 text-[rgb(var(--c-status-serious))]" aria-hidden />
+            <div className="flex gap-3 rounded-2xl border border-[rgb(var(--c-status-serious)/0.4)] bg-status-serious-soft p-4">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0 text-status-serious-ink" aria-hidden />
               <div className="text-[12.5px] leading-relaxed text-ink-secondary">
                 <p className="font-semibold text-ink">Still in {blockedBy.name}</p>
                 <p className="mt-1">
