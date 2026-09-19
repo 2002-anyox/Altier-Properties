@@ -22,7 +22,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   return (
-    <div className="rail-gradient flex h-full flex-col">
+    <div className="on-dark rail-gradient flex h-full flex-col">
       <div className="px-5 pb-5 pt-5">
         <Wordmark />
       </div>
@@ -34,7 +34,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           if (!items.length) return null
           return (
             <div key={group.sectionKey} className="mb-5">
-              <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--c-text-onrail-muted))]">
+              <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--c-text-onrail-muted))]">
                 {t(group.sectionKey)}
               </p>
               <ul className="space-y-0.5">
@@ -69,14 +69,14 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                             className="absolute left-0 top-1/2 h-5 w-[2.5px] -translate-y-1/2 rounded-r-full bg-gold"
                           />
                         )}
-                        <Icon size={17} className={clsx('relative z-10 shrink-0 transition-colors', active ? 'text-gold' : 'text-current')} />
+                        <Icon size={17} className={clsx('relative z-10 shrink-0 transition-colors', active ? 'text-gold-text' : 'text-current')} />
                         <span className="relative z-10 flex-1 truncate">{t(item.labelKey)}</span>
                         {badge > 0 && (
                           <span
                             className={clsx(
-                              'tnum relative z-10 rounded-full px-1.5 py-0.5 text-[10.5px] font-semibold',
+                              'tnum relative z-10 rounded-full px-1.5 py-0.5 text-[11px] font-semibold',
                               item.badge === 'overdue' || item.badge === 'maintenance'
-                                ? 'bg-[rgb(var(--c-status-critical)/0.22)] text-[#F0A9A9]'
+                                ? 'bg-status-critical-soft text-status-critical-ink'
                                 : 'bg-gold text-navy-950',
                             )}
                           >

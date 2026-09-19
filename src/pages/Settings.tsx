@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  Check, Coins, Globe2, KeyRound, Link2, Moon, Palette, RotateCcw, ShieldCheck, Sun,
+  Check, Coins, Globe2, KeyRound, Laptop, Link2, Moon, Palette, RotateCcw, ShieldCheck, Sun,
   Unlink, Users2,
 } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader.js'
@@ -40,7 +40,7 @@ const PERMISSION_ROWS: Array<{ label: string; permission: Permission }> = [
 ]
 
 export default function Settings() {
-  const { state, dispatch, theme, toggleTheme, toast, refreshAccount } = useStore()
+  const { state, dispatch, theme, themeChoice, setThemeChoice, toast, refreshAccount } = useStore()
   const ssoProviders = useSsoProviders()
   const [unlinking, setUnlinking] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('profile')
@@ -102,7 +102,7 @@ export default function Settings() {
             {state.member && (
               <Card className="card-pad lg:col-span-2">
                 <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink">
-                  <KeyRound size={16} className="text-gold" /> Your password
+                  <KeyRound size={16} className="text-gold-text" /> Your password
                 </h3>
                 <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-ink-secondary">
                   {state.hasPassword
@@ -120,7 +120,7 @@ export default function Settings() {
                   </Field>
                 </div>
                 {pwError && (
-                  <p role="alert" className="mt-3 text-[12.5px] text-[rgb(var(--c-status-critical))]">{pwError}</p>
+                  <p role="alert" className="mt-3 text-[12.5px] text-status-critical-ink">{pwError}</p>
                 )}
                 <div className="mt-5 flex justify-end">
                   <Button
@@ -153,7 +153,7 @@ export default function Settings() {
             {state.member && ssoProviders.length > 0 && (
               <Card className="card-pad lg:col-span-2">
                 <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink">
-                  <Link2 size={16} className="text-gold" /> Linked sign-in accounts
+                  <Link2 size={16} className="text-gold-text" /> Linked sign-in accounts
                 </h3>
                 <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-ink-secondary">
                   A linked account is another way into <em>this</em> account — it never creates a
@@ -255,8 +255,8 @@ export default function Settings() {
                   <dt className="text-ink-muted">Data source</dt>
                   <dd>
                     {live
-                      ? <Chip className="bg-[rgb(var(--c-status-good)/0.12)] text-[rgb(var(--c-status-good))]" dot="bg-status-good">Live database</Chip>
-                      : <Chip className="bg-[rgb(var(--c-status-critical)/0.12)] text-[rgb(var(--c-status-critical))]" dot="bg-status-critical">Not connected</Chip>}
+                      ? <Chip className="bg-status-good-soft text-status-good-ink" dot="bg-status-good">Live database</Chip>
+                      : <Chip className="bg-status-critical-soft text-status-critical-ink" dot="bg-status-critical">Not connected</Chip>}
                   </dd>
                 </div>
               </dl>
@@ -288,7 +288,7 @@ export default function Settings() {
           <div className="grid gap-4 lg:grid-cols-3">
             <Card className="card-pad lg:col-span-2">
               <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink">
-                <Globe2 size={16} className="text-gold" /> Where you operate
+                <Globe2 size={16} className="text-gold-text" /> Where you operate
               </h3>
               <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-ink-secondary">
                 Region sets how dates and numbers are written; currency sets what every amount is shown in.
@@ -357,7 +357,7 @@ export default function Settings() {
 
             <Card className="card-pad">
               <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink">
-                <Coins size={16} className="text-gold" /> Conversion
+                <Coins size={16} className="text-gold-text" /> Conversion
               </h3>
               <p className="mt-2 text-[13px] leading-relaxed text-ink-secondary">
                 The portfolio is priced in Ugandan shillings. Amounts are converted for display only —
@@ -393,7 +393,7 @@ export default function Settings() {
         {tab === 'roles' && (
           <div className="grid gap-4">
             <Card className="card-pad">
-              <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink"><ShieldCheck size={16} className="text-gold" /> Role-based access</h3>
+              <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink"><ShieldCheck size={16} className="text-gold-text" /> Role-based access</h3>
               <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-ink-secondary">
                 Your role comes from your account. The server enforces the same matrix it
                 draws below, so a permission you do not hold is refused there and not
@@ -531,38 +531,57 @@ export default function Settings() {
         {tab === 'appearance' && (
           <div className="grid gap-4 lg:grid-cols-2">
             <Card className="card-pad">
-              <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink"><Palette size={16} className="text-gold" /> Theme</h3>
+              <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink"><Palette size={16} className="text-gold-text" /> Theme</h3>
               <p className="mt-2 text-[13px] leading-relaxed text-ink-secondary">
                 Both themes use the same validated palette, stepped for their own surface — charts stay legible and colour-blind safe in either.
               </p>
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                {(['light', 'dark'] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => { if (theme !== t) toggleTheme() }}
-                    className={cx(
-                      'rounded-2xl border p-4 text-left transition-all duration-200',
-                      theme === t ? 'border-gold ring-2 ring-gold/25' : 'border-line hover:border-line-strong',
-                    )}
-                  >
-                    <span className="flex items-center gap-2 text-[13px] font-medium text-ink">
-                      {t === 'light' ? <Sun size={15} /> : <Moon size={15} />}
-                      {t === 'light' ? 'Ivory' : 'Midnight'}
-                    </span>
-                    <span className={cx('mt-3 flex h-14 overflow-hidden rounded-lg border border-line', t === 'light' ? 'bg-[#F3EFE7]' : 'bg-[#0A0F17]')}>
-                      <span className={cx('w-1/3', t === 'light' ? 'bg-[#0F1620]' : 'bg-[#151C27]')} />
-                      <span className="flex-1 p-2">
-                        <span className={cx('block h-2 w-3/4 rounded', t === 'light' ? 'bg-[#D8CFBE]' : 'bg-[#283342]')} />
-                        <span className="mt-1.5 block h-2 w-1/2 rounded bg-gold/70" />
+              {/* Three choices, not two. "System" is the default and the
+                  way back: without it, one tap on the toolbar toggle used
+                  to pin an appearance for good, and a laptop that dimmed
+                  itself at dusk was ignored from then on. */}
+              <div
+                role="radiogroup"
+                aria-label="Appearance"
+                className="mt-5 grid grid-cols-3 gap-3"
+              >
+                {(['system', 'light', 'dark'] as const).map((choice) => {
+                  const chosen = themeChoice === choice
+                  const shows = choice === 'system' ? theme : choice
+                  return (
+                    <button
+                      key={choice}
+                      role="radio"
+                      aria-checked={chosen}
+                      onClick={() => setThemeChoice(choice)}
+                      className={cx(
+                        'rounded-2xl border p-4 text-left transition-all duration-200',
+                        chosen ? 'border-gold ring-2 ring-gold/25' : 'border-line hover:border-line-strong',
+                      )}
+                    >
+                      <span className="flex items-center gap-2 text-[13px] font-medium text-ink">
+                        {choice === 'system' ? <Laptop size={15} /> : choice === 'light' ? <Sun size={15} /> : <Moon size={15} />}
+                        {choice === 'system' ? 'System' : choice === 'light' ? 'Ivory' : 'Midnight'}
                       </span>
-                    </span>
-                  </button>
-                ))}
+                      <span className={cx('mt-3 flex h-14 overflow-hidden rounded-lg border border-line', shows === 'light' ? 'bg-[#F3EFE7]' : 'bg-[#0A0F17]')}>
+                        <span className={cx('w-1/3', shows === 'light' ? 'bg-[#0F1620]' : 'bg-[#151C27]')} />
+                        <span className="flex-1 p-2">
+                          <span className={cx('block h-2 w-3/4 rounded', shows === 'light' ? 'bg-[#D8CFBE]' : 'bg-[#283342]')} />
+                          <span className="mt-1.5 block h-2 w-1/2 rounded bg-gold/70" />
+                        </span>
+                      </span>
+                      {choice === 'system' && (
+                        <span className="mt-2 block text-[12px] text-ink-muted">
+                          Follows your device — currently {theme === 'dark' ? 'Midnight' : 'Ivory'}.
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
             </Card>
 
             <Card className="card-pad">
-              <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink"><Users2 size={16} className="text-gold" /> Accessibility</h3>
+              <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink"><Users2 size={16} className="text-gold-text" /> Accessibility</h3>
               <ul className="mt-4 space-y-3 text-[13px] text-ink-secondary">
                 {[
                   'Motion follows your system reduced-motion setting. Animation never gates an action.',
@@ -620,7 +639,7 @@ function PermissionBox({
         className={cx(
           'inline-flex h-5 w-5 items-center justify-center rounded-md',
           allowed
-            ? 'bg-[rgb(var(--c-status-good)/0.14)] text-[rgb(var(--c-status-good))]'
+            ? 'bg-status-good-soft text-status-good-ink'
             : 'bg-surface-inset',
           locked && 'ring-1 ring-gold/40',
         )}
@@ -648,7 +667,7 @@ function PermissionBox({
         'inline-flex h-5 w-5 items-center justify-center rounded-md transition-colors',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold',
         allowed
-          ? 'bg-[rgb(var(--c-status-good)/0.14)] text-[rgb(var(--c-status-good))] hover:bg-[rgb(var(--c-status-good)/0.24)]'
+          ? 'bg-status-good-soft text-status-good-ink hover:bg-status-good-soft'
           : 'bg-surface-inset hover:bg-line',
       )}
     >

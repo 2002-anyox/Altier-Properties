@@ -80,7 +80,7 @@ export default function Portal() {
       </header>
 
       <main className="mx-auto max-w-3xl px-5 pb-20 pt-8 sm:px-6">
-        <p className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-gold">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-text">
           {longDate(today)}
         </p>
         <h1 className="mt-1.5 font-display text-[26px] font-semibold leading-tight text-ink sm:text-[30px]">
@@ -100,7 +100,7 @@ export default function Portal() {
         {/* --------------------------- what is owed --------------------- */}
         <section className="mt-8" aria-labelledby="portal-charges">
           <h2 id="portal-charges" className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-ink">
-            <Receipt size={16} className="text-gold" /> What you owe
+            <Receipt size={16} className="text-gold-text" /> What you owe
           </h2>
 
           {owing.length === 0 ? (
@@ -150,7 +150,7 @@ export default function Portal() {
         {/* --------------------------- agreements ----------------------- */}
         <section className="mt-8" aria-labelledby="portal-stays">
           <h2 id="portal-stays" className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-ink">
-            <CalendarDays size={16} className="text-gold" /> Your agreements
+            <CalendarDays size={16} className="text-gold-text" /> Your agreements
           </h2>
 
           {current.length === 0 && upcoming.length === 0 && past.length === 0 ? (
@@ -174,7 +174,7 @@ export default function Portal() {
         {/* --------------------------- documents ------------------------ */}
         <section className="mt-8" aria-labelledby="portal-docs">
           <h2 id="portal-docs" className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-ink">
-            <FileText size={16} className="text-gold" /> Your documents
+            <FileText size={16} className="text-gold-text" /> Your documents
           </h2>
           <Card className="overflow-hidden">
             {(me?.idDocuments ?? []).length === 0 ? (
@@ -237,7 +237,7 @@ function Stay({ booking, name, today }: { booking: Booking; name: string; today:
             {ends ? ` — ${mediumDate(ends)}` : ' — open-ended'}
           </p>
         </div>
-        <Chip className={running ? 'bg-status-good-soft text-status-good' : 'bg-status-info-soft text-status-info'}>
+        <Chip className={running ? 'bg-status-good-soft text-status-good-ink' : 'bg-status-info-soft text-status-info-ink'}>
           {running ? 'Current' : 'Upcoming'}
         </Chip>
       </div>
@@ -340,7 +340,7 @@ function ChangePassword() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="flex items-center gap-2 text-[15px] font-semibold text-ink">
-              <KeyRound size={16} className="text-gold" /> Your sign-in
+              <KeyRound size={16} className="text-gold-text" /> Your sign-in
             </h2>
             <p className="mt-1 text-[12.5px] text-ink-secondary">
               {state.member?.email}
@@ -368,7 +368,7 @@ function ChangePassword() {
               />
             </Field>
             {problem && (
-              <p role="alert" className="text-[12.5px] text-[rgb(var(--c-status-critical))]">{problem}</p>
+              <p role="alert" className="text-[12.5px] text-status-critical-ink">{problem}</p>
             )}
             <Button type="submit" variant="primary" disabled={next.length < 10 || busy}>
               {busy ? 'Saving…' : 'Change password'}

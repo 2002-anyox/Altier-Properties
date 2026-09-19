@@ -21,8 +21,21 @@ export function Frame({
   label, children, className,
 }: { label: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className={cx('overflow-hidden rounded-2xl border border-line bg-surface-card shadow-lift', className)}>
-      <div className="flex items-center gap-2 border-b border-line bg-surface-inset/70 px-4 py-2.5">
+    /* A picture of the product, so it is declared as one. Everything
+       inside is a miniature — type down at 10px, figures with no context,
+       a chart with no axis labels — which is right for an illustration
+       and wrong for content. Saying so lets the small type stay small,
+       and stops a screen reader reading out a pile of fragments that mean
+       nothing away from the picture they came from. */
+    <div
+      role="img"
+      aria-label={`Illustration: the ${label} screen in Altier Properties`}
+      /* `on-light`: this frame carries the page's own card surface, and it
+         floats inside a band that is dark in both themes. Without it the
+         inverted text values from .on-dark land on ivory. */
+      className={cx('on-light overflow-hidden rounded-2xl border border-line bg-surface-card shadow-lift', className)}
+    >
+      <div aria-hidden className="flex items-center gap-2 border-b border-line bg-surface-inset/70 px-4 py-2.5">
         <span className="flex gap-1.5" aria-hidden>
           <span className="h-2 w-2 rounded-full bg-line-strong" />
           <span className="h-2 w-2 rounded-full bg-line-strong" />
@@ -30,7 +43,7 @@ export function Frame({
         </span>
         <span className="ml-1 truncate text-[11.5px] font-medium text-ink-muted">{label}</span>
       </div>
-      {children}
+      <div aria-hidden>{children}</div>
     </div>
   )
 }
@@ -40,9 +53,9 @@ function Tile({
 }: { label: string; value: string; note?: string; tone?: 'ink' | 'good' | 'gold' | 'critical' }) {
   const tones = {
     ink: 'text-ink',
-    good: 'text-[rgb(var(--c-status-good))]',
+    good: 'text-status-good-ink',
     gold: 'text-gold-ink',
-    critical: 'text-[rgb(var(--c-status-critical))]',
+    critical: 'text-status-critical-ink',
   }
   return (
     <div className="rounded-xl border border-line bg-surface p-3">
@@ -55,10 +68,10 @@ function Tile({
 
 function Pill({ children, tone }: { children: React.ReactNode; tone: 'good' | 'gold' | 'info' | 'critical' | 'muted' }) {
   const tones = {
-    good: 'bg-[rgb(var(--c-status-good)/0.12)] text-[rgb(var(--c-status-good))]',
+    good: 'bg-status-good-soft text-status-good-ink',
     gold: 'bg-gold-soft text-gold-ink',
-    info: 'bg-[rgb(var(--c-status-info)/0.12)] text-[rgb(var(--c-status-info))]',
-    critical: 'bg-[rgb(var(--c-status-critical)/0.12)] text-[rgb(var(--c-status-critical))]',
+    info: 'bg-status-info-soft text-status-info-ink',
+    critical: 'bg-status-critical-soft text-status-critical-ink',
     muted: 'bg-surface-inset text-ink-muted',
   }
   return (
@@ -179,9 +192,9 @@ const CALENDAR = [
 const UNITS = ['Kololo 4B', 'Riverside 2A', 'Garden Court', 'Hillside 7']
 const CELL = [
   'bg-surface-inset',
-  'bg-[rgb(var(--c-status-info)/0.55)]',
+  'bg-status-info-soft',
   'bg-gold/60',
-  'bg-[rgb(var(--c-status-serious)/0.5)]',
+  'bg-status-serious-soft',
 ]
 const CELL_LABEL = ['free', 'let', 'reserved', 'turnaround']
 

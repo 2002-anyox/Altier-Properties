@@ -248,7 +248,7 @@ export function PinPicker({
           )}
         </div>
       )}
-      {missed && <p className="text-[11.5px] text-[rgb(var(--c-status-critical))]">{missed}</p>}
+      {missed && <p className="text-[11.5px] text-status-critical-ink">{missed}</p>}
     </div>
   )
 }

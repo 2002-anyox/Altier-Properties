@@ -53,7 +53,7 @@ export function TrialBanner() {
         className={cx(
           'flex items-center gap-3 border-b px-4 py-2.5 text-[13px] sm:px-6',
           over
-            ? 'border-[rgb(var(--c-status-critical)/0.3)] bg-[rgb(var(--c-status-critical)/0.08)] text-[rgb(var(--c-status-critical))]'
+            ? 'border-[rgb(var(--c-status-critical)/0.3)] bg-status-critical-soft text-status-critical-ink'
             : 'border-line bg-gold-soft text-gold-ink',
         )}
       >

@@ -29,6 +29,21 @@ export function buildNotifications(
 
   invoices.forEach((inv) => {
     const gap = daysBetween(today, inv.dueOn)
+    /* A credit note is money going the other way. Running it through the
+       rules below would have announced "payment due — 600,000 from Grace"
+       for a refund she is owed, and then chased her for it. */
+    if (inv.type === 'credit_note') {
+      if (inv.paidAmount < inv.amount) {
+        out.push({
+          id: `n-inv-${inv.id}`, kind: 'payment_due', priority: 'normal',
+          title: `Refund owed · ${formatMoney(inv.amount - inv.paidAmount)}`,
+          body: `${clientOf(inv.clientId)} — ${nameOf(inv.propertyId)}. ${inv.memo}`,
+          createdAt: inv.issuedOn, read: false,
+          entity: { type: 'invoice', id: inv.id }, actionLabel: 'Return it',
+        })
+      }
+      return
+    }
     if (inv.status === 'overdue') {
       out.push({
         id: `n-inv-${inv.id}`, kind: 'payment_overdue', priority: Math.abs(gap) > 14 ? 'critical' : 'high',

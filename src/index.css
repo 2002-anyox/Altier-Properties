@@ -20,22 +20,49 @@
   --c-border: 226 218 204;         /* #E2DACC */
   --c-border-strong: 208 197 178;  /* #D0C5B2 */
 
-  --c-text-primary: 15 22 32;      /* #0F1620 */
-  --c-text-secondary: 71 84 100;   /* #475464 */
-  --c-text-muted: 122 132 145;     /* #7A8491 */
-  --c-text-onrail: 244 239 230;    /* #F4EFE6 */
+  --c-text-primary: 15 22 32;      /* #0F1620  17.4:1 on card */
+  --c-text-secondary: 71 84 100;   /* #475464   7.4:1 */
+  /* Was #7A8491, which is 3.08:1 on the inset surface — below the 4.5:1
+     body threshold, on the colour this interface uses more than any
+     other. Every figure in this block is measured against the worst of
+     the three light surfaces (card #FCFAF6, page #F3EFE7, inset #EDE7DC). */
+  --c-text-muted: 94 104 117;      /* #5E6875   4.60:1 worst */
+  --c-text-onrail: 244 239 230;    /* #F4EFE6  15.9:1 on the rail */
   --c-text-onrail-muted: 154 166 181;
 
-  --c-accent: 168 124 34;          /* #A87C22  gold — text-safe */
+  /* Gold has two jobs and they need two values. As a fill, a rule or a
+     focus ring it only has to clear 3:1 against what is behind it, and
+     the brand gold does. As a word it has to clear 4.5:1, and the brand
+     gold reaches only 3.06:1 on the inset surface. */
+  --c-accent: 168 124 34;          /* #A87C22  fills, rules, focus ring */
+  --c-accent-text: 126 90 20;      /* #7E5A14  5.08:1 worst — words */
   --c-accent-strong: 138 100 24;   /* #8A6418 */
   --c-accent-soft: 236 224 200;    /* #ECE0C8 */
-  --c-accent-ink: 92 66 14;        /* #5C420E */
+  --c-accent-ink: 92 66 14;        /* #5C420E  7.2:1 on accent-soft */
 
-  --c-status-good: 12 163 12;
-  --c-status-warning: 250 178 25;
-  --c-status-serious: 236 131 90;
-  --c-status-critical: 208 59 59;
-  --c-status-info: 42 111 214;
+  /* Status has three jobs: a fill (a bar, a dot, a stripe), a soft chip
+     ground, and the word on either. Amber and coral can carry a stripe
+     and cannot carry a word — #FAB219 is 1.76:1 on a card — so the word
+     gets its own value rather than being quietly illegible. */
+  --c-status-good: 10 110 36;          /* #0A6E24  5.22:1 */
+  --c-status-good-soft: 223 237 226;   /* #DFEDE2 */
+  --c-status-good-ink: 10 110 36;      /* #0A6E24  5.31:1 on its chip */
+  --c-status-warning: 250 178 25;      /* #FAB219  fill only */
+  --c-status-warning-soft: 246 231 198;/* #F6E7C6 */
+  --c-status-warning-ink: 122 86 0;    /* #7A5600  5.40:1 / 5.43:1 on chip */
+  --c-status-serious: 236 131 90;      /* #EC835A  fill only */
+  --c-status-serious-soft: 247 224 214;/* #F7E0D6 */
+  --c-status-serious-ink: 168 71 31;   /* #A8471F  4.76:1 / 4.63:1 on chip */
+  --c-status-critical: 181 43 43;      /* #B52B2B  5.10:1 */
+  --c-status-critical-soft: 247 222 222;/* #F7DEDE */
+  --c-status-critical-ink: 181 43 43;  /* #B52B2B  4.92:1 on its chip */
+  --c-status-info: 29 85 168;          /* #1D55A8  5.85:1 */
+  --c-status-info-soft: 221 231 247;   /* #DDE7F7 */
+  --c-status-info-ink: 29 85 168;      /* #1D55A8  5.78:1 on its chip */
+
+  /* A field is identified by its edge, so the edge is a control boundary
+     and owes 3:1 — the hairline that separates cards owes nothing. */
+  --c-border-control: 156 141 112; /* #9C8D70  3.12:1 on card */
 
   /* chart roles — validated categorical set (light, surface #FCFAF6) */
   --viz-1: #2a6fd6;
@@ -61,27 +88,44 @@
   --c-surface-card: 21 28 39;      /* #151C27 */
   --c-surface-raised: 28 37 50;    /* #1C2532 */
   --c-surface-inset: 16 22 31;     /* #10161F */
-  --c-surface-rail: 8 12 19;       /* #080C13 */
+  /* Lighter than the page, not darker. At #080C13 the rail sat 1.02:1
+     from the content behind it and simply vanished — the one gesture the
+     light theme is built on, gone for everybody in dark mode. A panel in
+     front of the page reads as a panel. */
+  --c-surface-rail: 26 36 50;      /* #1A2432  1.23:1 from the page */
 
   --c-border: 40 51 66;            /* #283342 */
   --c-border-strong: 58 72 91;     /* #3A485B */
 
-  --c-text-primary: 246 242 234;   /* #F6F2EA */
-  --c-text-secondary: 178 189 202; /* #B2BDCA */
-  --c-text-muted: 137 148 162;     /* #8994A2 */
+  --c-text-primary: 246 242 234;   /* #F6F2EA  15.3:1 on card */
+  --c-text-secondary: 178 189 202; /* #B2BDCA   9.0:1 */
+  --c-text-muted: 137 148 162;     /* #8994A2   5.56:1 */
   --c-text-onrail: 246 242 234;
   --c-text-onrail-muted: 146 158 173;
 
-  --c-accent: 203 168 95;          /* #CBA85F */
+  --c-accent: 203 168 95;          /* #CBA85F   7.6:1 */
+  --c-accent-text: 203 168 95;     /* the same: on a dark ground it reads */
   --c-accent-strong: 225 195 130;  /* #E1C382 */
   --c-accent-soft: 46 40 27;       /* #2E281B */
   --c-accent-ink: 240 226 196;
 
-  --c-status-good: 44 190 76;
-  --c-status-warning: 250 178 25;
-  --c-status-serious: 236 131 90;
-  --c-status-critical: 232 96 96;
-  --c-status-info: 74 141 232;
+  --c-status-good: 44 190 76;          /* #2CBE4C  6.99:1 */
+  --c-status-good-soft: 18 48 33;      /* #123021 */
+  --c-status-good-ink: 95 217 122;     /* #5FD97A  7.95:1 on its chip */
+  --c-status-warning: 250 178 25;      /* #FAB219  9.33:1 */
+  --c-status-warning-soft: 51 40 17;   /* #332811 */
+  --c-status-warning-ink: 250 196 81;  /* #FAC451  9.01:1 on its chip */
+  --c-status-serious: 236 131 90;      /* #EC835A  6.49:1 */
+  --c-status-serious-soft: 58 35 24;   /* #3A2318 */
+  --c-status-serious-ink: 242 161 131; /* #F2A183  7.12:1 on its chip */
+  --c-status-critical: 232 96 96;      /* #E86060  5.11:1 */
+  --c-status-critical-soft: 58 29 29;  /* #3A1D1D */
+  --c-status-critical-ink: 240 138 138;/* #F08A8A  6.34:1 on its chip */
+  --c-status-info: 74 141 232;         /* #4A8DE8  5.11:1 */
+  --c-status-info-soft: 21 39 64;      /* #152740 */
+  --c-status-info-ink: 127 178 240;    /* #7FB2F0  6.83:1 on its chip */
+
+  --c-border-control: 101 119 145; /* #657791  3.75:1 on card */
 
   /* chart roles — validated categorical set (dark, surface #151C27) */
   --viz-1: #4a8de8;
@@ -128,6 +172,44 @@
 
   ::selection { background: rgb(var(--c-accent) / 0.22); }
 
+  /* Regions that are dark in both themes — the navigation rail, the navy
+     hero panel, the landing page's dark bands. Gold has to go the other
+     way on those: the value that reads on ivory is 2.4:1 on navy, and the
+     value that reads on navy is 3.1:1 on ivory. Scoping it here means a
+     component can say `text-gold-text` once and be right in both places. */
+  .on-dark {
+    --c-accent-text: 203 168 95;   /* #CBA85F  8.7:1 on the rail */
+    --c-text-muted: 154 166 181;   /* #9AA6B5  7.4:1 on the rail */
+    --c-status-good-ink: 123 216 143;
+    --c-status-critical-ink: 240 169 169;
+  }
+
+  /*
+   * ...and the islands of ordinary page inside those dark bands: the
+   * product mockups floating over the landing hero, the pricing cards on
+   * the dark pricing band. They carry the theme's own card surface, which
+   * in light mode is ivory — so the inverted values above land pale text
+   * on a pale ground. Measured before this existed: 2.37:1 and 2.16:1.
+   *
+   * The values are the root ones restated rather than inherited, because
+   * a custom property cannot be told to ignore the nearest declaration
+   * and go back to :root. Kept honest by check:contrast, which measures
+   * both of these blocks against the surfaces they land on.
+   */
+  .on-dark .on-light {
+    --c-accent-text: 126 90 20;    /* #7E5A14 */
+    --c-text-muted: 94 104 117;    /* #5E6875 */
+    --c-status-good-ink: 10 110 36;
+    --c-status-critical-ink: 181 43 43;
+  }
+
+  :root[data-theme='dark'] .on-dark .on-light {
+    --c-accent-text: 203 168 95;
+    --c-text-muted: 137 148 162;
+    --c-status-good-ink: 95 217 122;
+    --c-status-critical-ink: 240 138 138;
+  }
+
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
@@ -143,7 +225,9 @@
   .card {
     @apply bg-surface-card border border-line rounded-2xl shadow-card;
   }
-  .card-pad { @apply p-5 sm:p-6; }
+  /* Tighter on a phone: the type scale steps up below `sm`, so identical
+     padding there costs a great deal more of a short screen. */
+  .card-pad { @apply p-4 sm:p-6; }
 
   .hairline { @apply border-line; }
 
@@ -159,6 +243,12 @@
     background: linear-gradient(90deg, transparent, rgb(var(--c-accent) / 0.55), transparent);
   }
 
+  /* Reserved for genuinely floating layers over moving content — the
+     landing page's nav over a scrolling hero. It is not for the app's
+     toolbar: that sits over a page which barely scrolls beneath it, so
+     the blur cost a compositing layer and bought a faint ivory haze on
+     an ivory page. Built on the card surface, it is also the reason the
+     landing nav once put ivory text on an ivory pane at 2:1. */
   .glass {
     background: rgb(var(--c-surface-card) / 0.82);
     backdrop-filter: saturate(160%) blur(14px);
@@ -194,6 +284,36 @@
     transition: background-size 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   }
   .link-underline:hover { background-size: 100% 1px; }
+}
+
+/* ------------------------------------------------------------------ *
+ * The phone is not a narrow desktop
+ *
+ * This interface was sized for a pointer: the most common size in it is
+ * 12.5px, and 13px reads comfortably in a window a metre from your face.
+ * Held at arm's length on a 390pt phone it does not, and Apple's own
+ * default for that device is 17.
+ *
+ * Rather than a breakpoint on each of four hundred call sites, the scale
+ * itself is lifted below the `sm` breakpoint. A component says what a
+ * thing is — meta, support, body — by choosing a size, and the size means
+ * something different on a phone than it does on a desk. Anything added
+ * later inherits this without having to remember it.
+ *
+ * Display sizes are left alone: the landing headlines already carry their
+ * own responsive steps, and the figures on a stat tile are big on purpose
+ * at every width.
+ * ------------------------------------------------------------------- */
+@media (max-width: 639px) {
+  .text-\[11px\]    { font-size: 12.5px; }
+  .text-\[11\.5px\] { font-size: 13px; }
+  .text-\[12px\]    { font-size: 14px; }
+  .text-\[12\.5px\] { font-size: 14.5px; }
+  .text-\[13px\]    { font-size: 15px; }
+  .text-\[13\.5px\] { font-size: 15.5px; }
+  .text-\[14px\]    { font-size: 16px; }
+  .text-\[14\.5px\] { font-size: 16.5px; }
+  .text-\[15px\]    { font-size: 16.5px; }
 }
 
 /* Motion is a garnish, never a gate. */

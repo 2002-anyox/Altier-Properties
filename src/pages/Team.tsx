@@ -18,10 +18,10 @@ import { workspace, type OpenInvitation, type SeatUsage } from '../lib/api.js'
 import type { TeamMember } from '../lib/types.js'
 
 const STATUS_COPY: Record<SeatUsage['status'], { label: string; chip: string }> = {
-  trialing: { label: 'On trial', chip: 'bg-status-info-soft text-status-info' },
-  active: { label: 'Active', chip: 'bg-status-good-soft text-status-good' },
-  past_due: { label: 'Payment overdue', chip: 'bg-status-critical-soft text-status-critical' },
-  cancelled: { label: 'Cancelled', chip: 'bg-status-critical-soft text-status-critical' },
+  trialing: { label: 'On trial', chip: 'bg-status-info-soft text-status-info-ink' },
+  active: { label: 'Active', chip: 'bg-status-good-soft text-status-good-ink' },
+  past_due: { label: 'Payment overdue', chip: 'bg-status-critical-soft text-status-critical-ink' },
+  cancelled: { label: 'Cancelled', chip: 'bg-status-critical-soft text-status-critical-ink' },
 }
 
 /**
@@ -114,7 +114,7 @@ export default function Team() {
 
       {loadError && (
         <Card className="card-pad mb-5" role="alert">
-          <p className="text-[13px] leading-relaxed text-[rgb(var(--c-status-critical))]">{loadError}</p>
+          <p className="text-[13px] leading-relaxed text-status-critical-ink">{loadError}</p>
         </Card>
       )}
 
@@ -271,11 +271,11 @@ export default function Team() {
 /** What one person's role and assignments actually let them open. */
 function Reach({ member, total }: { member: TeamMember; total: number }) {
   if (member.role === 'owner' || member.role === 'accountant') {
-    return <span className="inline-flex items-center gap-1.5"><ShieldCheck size={13} className="text-gold" /> The whole portfolio</span>
+    return <span className="inline-flex items-center gap-1.5"><ShieldCheck size={13} className="text-gold-text" /> The whole portfolio</span>
   }
   const n = member.propertyIds?.length ?? 0
   if (n === 0) {
-    return <span className="text-[rgb(var(--c-status-critical))]">Nothing assigned yet</span>
+    return <span className="text-status-critical-ink">Nothing assigned yet</span>
   }
   return <span className="tnum">{n} of {total} properties</span>
 }
@@ -290,7 +290,7 @@ function PlanCard({ seats }: { seats: SeatUsage }) {
     <Card className="card-pad">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-gold">Subscription</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-text">Subscription</p>
           <h2 className="mt-1.5 flex items-center gap-2.5 font-display text-[21px] font-semibold text-ink">
             {seats.planLabel}
             <Chip className={status.chip}>{status.label}</Chip>
@@ -338,7 +338,7 @@ function PlanCard({ seats }: { seats: SeatUsage }) {
       </dl>
 
       {seats.status === 'past_due' && (
-        <p className="mt-5 rounded-xl border border-[rgb(var(--c-status-critical)/0.3)] bg-[rgb(var(--c-status-critical)/0.08)] px-3.5 py-3 text-[12.5px] leading-relaxed text-ink-secondary">
+        <p className="mt-5 rounded-xl border border-[rgb(var(--c-status-critical)/0.3)] bg-status-critical-soft px-3.5 py-3 text-[12.5px] leading-relaxed text-ink-secondary">
           There is an unpaid invoice on this workspace. Everything here keeps working,
           but nobody new can be added until it is settled.
         </p>

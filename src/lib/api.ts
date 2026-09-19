@@ -423,10 +423,15 @@ export const api = {
      at exactly that moment. */
   checkIn: (id: string, on?: string) =>
     request(`/bookings/${id}/check-in`, { method: 'POST', body: JSON.stringify({ on }) }),
-  checkOut: (id: string, on?: string) =>
+  checkOut: (id: string, on?: string, settle = true) =>
     send(`/bookings/${id}/check-out`, {
-      method: 'POST', body: JSON.stringify({ on }),
-    }) as Promise<Portfolio & { settled: { outstanding: number; deposit: number } }>,
+      method: 'POST', body: JSON.stringify({ on, settle }),
+    }) as Promise<Portfolio & {
+      settled: {
+        outstanding: number; deposit: number
+        credit: number; due: number; daysStayed: number; adjusted: number
+      }
+    }>,
   addBooking: (booking: Booking, invoices: Invoice[]) =>
     request('/bookings', { method: 'POST', body: JSON.stringify({ booking, invoices }) }),
   updateClient: (client: Client) =>

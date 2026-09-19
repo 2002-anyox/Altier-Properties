@@ -153,7 +153,7 @@ export default function Tenants() {
                   </span>
 
                   {login ? (
-                    <Chip className="bg-status-good-soft text-status-good">
+                    <Chip className="bg-status-good-soft text-status-good-ink">
                       {login.hasPassword ? 'Can sign in' : 'Login not set up'}
                     </Chip>
                   ) : (
@@ -292,7 +292,7 @@ function GrantModal({
         </Field>
 
         {problem && (
-          <p role="alert" className="text-[12.5px] leading-relaxed text-[rgb(var(--c-status-critical))]">{problem}</p>
+          <p role="alert" className="text-[12.5px] leading-relaxed text-status-critical-ink">{problem}</p>
         )}
       </div>
     </Modal>

@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { TODAY, dayOffset, iso } from './dates.js'
+import { titleOf } from './labels.js'
 import { buildNotifications } from './notify.js'
 import {
   api, auth, emptyPortfolio, isSignedOut, loadPortfolio,
@@ -16,6 +17,21 @@ import type {
   Portfolio, Property, PropertyStatus, ReminderSettings, Role, TeamMember,
 } from './types.js'
 
+/**
+ * What the viewer asked for, which is not the same as what is on screen.
+ *
+ * 'system' is the default and the thing most people want: the operating
+ * system already knows whether it is night, and an app that ignores it is
+ * an app that is wrong twice a day. The two explicit values are for the
+ * people who want to override it.
+ *
+ * This used to be two values with no way back. The first load read
+ * prefers-color-scheme, correctly — and then the first tap on the toggle
+ * pinned a choice to localStorage permanently, with no listener for a
+ * system change and nothing in the interface to undo it.
+ */
+type ThemeChoice = 'system' | 'light' | 'dark'
+/** What is actually painted. */
 type Theme = 'light' | 'dark'
 
 interface State {
@@ -83,7 +99,10 @@ type Action =
   | { type: 'update-booking'; booking: Booking }
   | { type: 'end-booking'; booking: Booking }
   | { type: 'check-in'; id: string; on: string }
-  | { type: 'check-out'; id: string; on: string }
+  /* The settlement charges ride along so the ledger moves under the
+     press. The server works them out again from its own copy and its
+     answer replaces these; it never takes an amount from here. */
+  | { type: 'check-out'; id: string; on: string; settle: boolean; invoices: Invoice[] }
   | { type: 'reassign-maintenance'; id: string; assigneeId: string }
   | { type: 'set-permission'; role: Role; permission: Permission; allowed: boolean }
   | { type: 'reset-permissions'; role?: Role }
@@ -250,7 +269,7 @@ function reducer(state: State, action: Action): State {
                 /* Not the estimate. A guess in the column the spend
                    figure sums is worse than an honest blank. */
                 actualCost: action.actualCost === undefined ? m.actualCost : action.actualCost,
-                timeline: [...m.timeline, { at: iso(TODAY), label: `Status changed to ${action.status.replace(/_/g, ' ')}`, by: 'You' }],
+                timeline: [...m.timeline, { at: iso(TODAY), label: `Status changed to ${titleOf(action.status)}`, by: 'You' }],
               }
             : m,
         ),
@@ -311,6 +330,7 @@ function reducer(state: State, action: Action): State {
           (p.id === state.bookings.find((b) => b.id === action.id)?.propertyId
             ? { ...p, status: 'available' as const, availableFrom: action.on }
             : p)),
+        invoices: [...action.invoices, ...state.invoices],
       }
     case 'reassign-maintenance':
       return {
@@ -506,6 +526,9 @@ interface Ctx {
   state: State
   dispatch: React.Dispatch<Action>
   theme: Theme
+  /** What the viewer asked for: 'system' unless they overrode it. */
+  themeChoice: ThemeChoice
+  setThemeChoice: (choice: ThemeChoice) => void
   toggleTheme: () => void
   toasts: Toast[]
   toast: (t: Omit<Toast, 'id'>) => void
@@ -548,23 +571,28 @@ const StoreContext = createContext<Ctx | null>(null)
 const THEME_KEY = 'altier.theme'
 const PREFS_KEY = 'altier.prefs'
 
-function readStoredTheme(): Theme {
-  /* Precedence: what this viewer last chose, then a theme the host document
-     has already stamped on <html>, then the operating system. */
+function readThemeChoice(): ThemeChoice {
   try {
     const v = localStorage.getItem(THEME_KEY)
-    if (v === 'light' || v === 'dark') return v
+    if (v === 'light' || v === 'dark' || v === 'system') return v
   } catch {
     /* storage unavailable — fall through */
   }
+  /* A theme the host document stamped on <html> before React booted is a
+     deliberate choice by whatever embedded this, so it is honoured. */
   const stamped = document.documentElement.getAttribute('data-theme')
   if (stamped === 'light' || stamped === 'dark') return stamped
+  return 'system'
+}
+
+const systemTheme = (): Theme => {
   try {
     return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   } catch {
     return 'light'
   }
 }
+
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, () => {
@@ -598,7 +626,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const stateRef = useRef(state)
   stateRef.current = state
 
-  const [theme, setTheme] = useState<Theme>(readStoredTheme)
+  const [themeChoice, setThemeChoice] = useState<ThemeChoice>(readThemeChoice)
+  const [systemIs, setSystemIs] = useState<Theme>(systemTheme)
+  const theme: Theme = themeChoice === 'system' ? systemIs : themeChoice
+
+  /* Follow the system while it is the one being followed. Without this a
+     workspace left open across sunset stays in whichever theme it booted
+     into, however the laptop feels about it. */
+  useEffect(() => {
+    const mq = window.matchMedia?.('(prefers-color-scheme: dark)')
+    if (!mq) return
+    const onChange = (e: MediaQueryListEvent) => setSystemIs(e.matches ? 'dark' : 'light')
+    mq.addEventListener?.('change', onChange)
+    return () => mq.removeEventListener?.('change', onChange)
+  }, [])
   const [toasts, setToasts] = useState<Toast[]>([])
   const [paletteOpen, setPaletteOpen] = useState(false)
   /* How many writes are in the air, and when the last one landed. */
@@ -609,9 +650,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.setAttribute('data-theme', theme)
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0A0F17' : '#F3EFE7')
     try {
-      localStorage.setItem(THEME_KEY, theme)
+      /* The choice is stored, not the result — otherwise 'system' would
+         collapse into whatever it happened to resolve to on this load and
+         could never be got back. */
+      localStorage.setItem(THEME_KEY, themeChoice)
     } catch { /* ignore */ }
-  }, [theme])
+  }, [theme, themeChoice])
 
   useEffect(() => {
     try {
@@ -784,7 +828,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       case 'update-booking': return () => api.updateBooking(action.booking)
       case 'end-booking': return () => api.updateBooking(action.booking)
       case 'check-in': return () => api.checkIn(action.id, action.on)
-      case 'check-out': return () => api.checkOut(action.id, action.on)
+      case 'check-out': return () => api.checkOut(action.id, action.on, action.settle)
       case 'reassign-maintenance':
         return () => api.reassignMaintenance(action.id, action.assigneeId)
       case 'set-permission':
@@ -846,7 +890,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       state,
       dispatch: dispatchWithSync,
       theme,
-      toggleTheme: () => setTheme((t) => (t === 'dark' ? 'light' : 'dark')),
+      themeChoice,
+      setThemeChoice,
+      /* The toolbar button and ⌘K still just flip it. Flipping away from
+         'system' lands on the opposite of whatever it is showing, which is
+         what somebody pressing it is asking for. */
+      toggleTheme: () => setThemeChoice(theme === 'dark' ? 'light' : 'dark'),
       toasts,
       toast,
       dismissToast,
@@ -863,7 +912,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       saving: inFlight > 0,
       savedAt,
     }),
-    [state, theme, toasts, toast, dismissToast, paletteOpen, dispatchWithSync, signIn, signOut,
+    [state, theme, themeChoice, toasts, toast, dismissToast, paletteOpen, dispatchWithSync, signIn, signOut,
      switchWorkspace, createOwner, signUp, refreshAccount, ssoError, clearSsoError,
      inFlight, savedAt],
   )

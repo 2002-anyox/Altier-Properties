@@ -131,10 +131,10 @@ export default function Properties() {
             icon={<SlidersHorizontal size={15} />}
             onClick={() => setFiltersOpen((v) => !v)}
             aria-expanded={filtersOpen}
-            className={cx(activeFilters > 0 && 'border-gold text-gold')}
+            className={cx(activeFilters > 0 && 'border-gold text-gold-text')}
           >
             Filters
-            {activeFilters > 0 && <span className="tnum ml-0.5 rounded-full bg-gold px-1.5 text-[10.5px] font-bold text-white">{activeFilters}</span>}
+            {activeFilters > 0 && <span className="tnum ml-0.5 rounded-full bg-gold px-1.5 text-[11px] font-bold text-white">{activeFilters}</span>}
           </Button>
           <Select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sort properties" className="w-auto min-w-[164px]">
             <option value="name">Sort: name</option>
@@ -271,7 +271,7 @@ function PropertyCard({ property: p, managerName }: { property: Property; manage
         <div className="absolute left-3 top-3"><StatusChip status={p.status} onImage /></div>
         <div className="absolute bottom-3 right-3">
           <Chip className="bg-navy-950/70 text-white backdrop-blur-sm">
-            <Star size={11} className="fill-gold text-gold" /> {p.rating.toFixed(1)}
+            <Star size={11} className="fill-gold text-gold-text" /> {p.rating.toFixed(1)}
           </Chip>
         </div>
       </div>
@@ -284,7 +284,7 @@ function PropertyCard({ property: p, managerName }: { property: Property; manage
               <MapPin size={12} className="shrink-0" aria-hidden /> {p.address.district}, {p.address.city}
             </p>
           </div>
-          <span className="shrink-0 rounded-lg bg-surface-inset px-2 py-1 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-muted">
+          <span className="shrink-0 rounded-lg bg-surface-inset px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-muted">
             {p.code}
           </span>
         </div>
@@ -333,7 +333,7 @@ function ListView({ properties, team }: { properties: Property[]; team: Array<{ 
                   <Link to={`/properties/${p.id}`} className="flex items-center gap-3">
                     <PropertyImage seed={p.photoSeed} type={p.type} className="h-10 w-14 shrink-0" rounded="rounded-lg" />
                     <span className="min-w-0">
-                      <span className="block truncate font-medium text-ink group-hover:text-gold">{p.name}</span>
+                      <span className="block truncate font-medium text-ink group-hover:text-gold-text">{p.name}</span>
                       <span className="block text-[11.5px] text-ink-muted">{p.code} · {p.bedrooms > 0 ? `${p.bedrooms} bed · ` : ''}{p.sizeSqm} m²</span>
                     </span>
                   </Link>

@@ -174,7 +174,7 @@ export default function Reports() {
         </motion.div>
         <motion.div variants={itemVariants} className="card card-pad">
           <p className="text-[12.5px] font-medium text-ink-secondary">Overdue exposure</p>
-          <p className="tnum mt-2 text-[26px] font-semibold leading-none text-[rgb(var(--c-status-critical))]">{money(kpis.overdueAmount)}</p>
+          <p className="tnum mt-2 text-[26px] font-semibold leading-none text-status-critical-ink">{money(kpis.overdueAmount)}</p>
           <p className="mt-3 text-[12px] text-ink-muted">{kpis.overdueCount} invoices across {new Set(state.invoices.filter((i) => i.status === 'overdue').map((i) => i.clientId)).size} clients</p>
         </motion.div>
       </motion.div>
@@ -349,14 +349,14 @@ export default function Reports() {
               {ranked.map((r) => (
                 <tr key={r.property.id} className="transition-colors hover:bg-surface-inset/60">
                   <td className="px-5 py-3 sm:px-6">
-                    <Link to={`/properties/${r.property.id}`} className="font-medium text-ink hover:text-gold">{r.property.name}</Link>
+                    <Link to={`/properties/${r.property.id}`} className="font-medium text-ink hover:text-gold-text">{r.property.name}</Link>
                     <span className="block text-[11.5px] text-ink-muted">{r.property.code} · {r.property.mode === 'short_stay' ? 'Short stay' : r.property.mode === 'rental' ? 'Open rental' : 'Fixed lease'}</span>
                   </td>
                   <td className="px-4 py-3 text-ink-secondary">{r.property.address.district}</td>
                   <td className="tnum px-4 py-3 text-right text-ink">{money(r.revenue)}</td>
                   <td className="tnum px-4 py-3 text-right text-ink-secondary">{money(r.costs)}</td>
-                  <td className={cx('tnum px-4 py-3 text-right font-semibold', r.net >= 0 ? 'text-ink' : 'text-[rgb(var(--c-status-critical))]')}>{money(r.net)}</td>
-                  <td className={cx('tnum px-4 py-3 text-right', r.outstanding > 0 ? 'text-[rgb(var(--c-status-critical))]' : 'text-ink-muted')}>{money(r.outstanding)}</td>
+                  <td className={cx('tnum px-4 py-3 text-right font-semibold', r.net >= 0 ? 'text-ink' : 'text-status-critical-ink')}>{money(r.net)}</td>
+                  <td className={cx('tnum px-4 py-3 text-right', r.outstanding > 0 ? 'text-status-critical-ink' : 'text-ink-muted')}>{money(r.outstanding)}</td>
                   <td className="px-5 py-3 sm:px-6">
                     <span className="flex items-center gap-2">
                       <Meter value={r.collection} tone={r.collection > 95 ? 'good' : r.collection > 80 ? 'gold' : 'critical'} className="w-20" label={`Collection ${r.collection.toFixed(0)}%`} />
@@ -398,10 +398,10 @@ export default function Reports() {
                 {clientActivity.map((r) => (
                   <tr key={r.client.id} className="transition-colors hover:bg-surface-inset/60">
                     <td className="px-5 py-3 sm:px-6">
-                      <Link to={`/clients/${r.client.id}`} className="font-medium text-ink hover:text-gold">{r.client.name}</Link>
+                      <Link to={`/clients/${r.client.id}`} className="font-medium text-ink hover:text-gold-text">{r.client.name}</Link>
                     </td>
                     <td className="tnum px-4 py-3 text-right text-ink">{money(r.paid)}</td>
-                    <td className={cx('tnum px-4 py-3 text-right', r.due > 0 ? 'text-[rgb(var(--c-status-critical))]' : 'text-ink-muted')}>{money(r.due)}</td>
+                    <td className={cx('tnum px-4 py-3 text-right', r.due > 0 ? 'text-status-critical-ink' : 'text-ink-muted')}>{money(r.due)}</td>
                     <td className="tnum px-5 py-3 text-right text-ink-secondary sm:px-6">{r.messages}</td>
                   </tr>
                 ))}

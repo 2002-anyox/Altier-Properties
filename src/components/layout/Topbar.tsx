@@ -20,7 +20,7 @@ const PRIORITY_DOT: Record<NotificationPriority, string> = {
   low: 'bg-ink-muted',
 }
 
-export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
+export function Topbar() {
   const { state, dispatch, theme, toggleTheme, setPaletteOpen, toast, signOut, switchWorkspace } = useStore()
   const [bellOpen, setBellOpen] = useState(false)
   const [roleOpen, setRoleOpen] = useState(false)
@@ -40,19 +40,26 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
   const me = currentMember(state)
 
   return (
-    <header className="glass sticky top-0 z-40 border-b border-line">
+    <header className="sticky top-0 z-40 border-b border-line bg-surface-card">
       <div className="mx-auto flex h-16 w-full max-w-full items-center gap-2 px-4 sm:gap-3 sm:px-6">
-        <IconButton label={t('action.openNav')} onClick={onOpenNav} className="lg:hidden">
-          <Menu size={19} />
-        </IconButton>
+        {/* The drawer now has exactly one way in, and it is the More tab
+            at the bottom of the screen rather than a control in the corner
+            furthest from the hand holding the phone. Two controls opening
+            the same drawer was one too many, and this row had five things
+            competing for a 390pt line. */}
 
         <button
           onClick={() => setPaletteOpen(true)}
-          className="group flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-line bg-surface-card px-3 text-left text-sm text-ink-muted transition-colors duration-200 hover:border-line-strong sm:max-w-md"
+          /* A button, and now it looks like one. Dressed as a field with a
+             control border it was indistinguishable from the search field
+             most pages carry a few pixels below it, and nothing said which
+             one searched what. The inset well and the absent control edge
+             are the difference. */
+          className="group flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-xl bg-surface-inset px-3 text-left text-sm text-ink-muted transition-colors duration-200 hover:bg-surface-inset hover:text-ink-secondary sm:h-10 sm:max-w-xs"
         >
           <Search size={15} className="shrink-0" aria-hidden />
           <span className="flex-1 truncate">{t('action.search')}</span>
-          <kbd className="hidden rounded-md border border-line bg-surface-inset px-1.5 py-0.5 text-[10.5px] font-medium sm:block">⌘K</kbd>
+          <kbd className="hidden rounded-md border border-line bg-surface-inset px-1.5 py-0.5 text-[11px] font-medium sm:block">⌘K</kbd>
         </button>
 
         <SaveState />
@@ -82,7 +89,10 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={spring}
-                  className="tnum absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold px-1 text-[9.5px] font-bold text-white dark:text-navy-950"
+                  /* Navy on gold, not white on gold: 11px bold is not "large" text,
+                     so it owes 4.5:1, and white on the brand gold is 3.77:1.
+                     Navy is 5.09:1 and reads as a stamp rather than a blot. */
+                  className="tnum absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-gold px-1 text-[11px] font-bold leading-none text-navy-950"
                 >
                   {unread.length > 9 ? '9+' : unread.length}
                 </motion.span>
@@ -150,7 +160,7 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
               <Avatar name={state.member?.name ?? me.name} size={28} tone="navy" />
               <span className="hidden text-left leading-tight sm:block">
                 <span className="block text-[12.5px] font-medium text-ink">{(state.member?.name ?? me.name).split(' ')[0]}</span>
-                <span className="block text-[10.5px] text-ink-muted">{roleLabel(state.role)}</span>
+                <span className="block text-[11px] text-ink-muted">{roleLabel(state.role)}</span>
               </span>
               <ChevronDown size={14} className={clsx('text-ink-muted transition-transform duration-200', roleOpen && 'rotate-180')} />
             </button>
@@ -187,7 +197,7 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
                             offering a choice of one is noise. */}
                         {state.workspaces.length > 1 && (
                           <>
-                            <p className="px-3 pb-1 pt-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
+                            <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
                               Workspaces
                             </p>
                             {state.workspaces.map((w) => (
@@ -209,7 +219,7 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
                                 <Building2 size={15} />
                                 <span className="min-w-0 flex-1 truncate">{w.organizationName}</span>
                                 {w.organizationId === state.workspace?.organizationId
-                                  && <Check size={15} className="shrink-0 text-gold" />}
+                                  && <Check size={15} className="shrink-0 text-gold-text" />}
                               </button>
                             ))}
                             <span className="my-1.5 block h-px bg-line" aria-hidden />
@@ -252,7 +262,7 @@ export function Topbar({ onOpenNav }: { onOpenNav: () => void }) {
                               <span className="block text-[13px] font-medium text-ink">{r.label}</span>
                               <span className="mt-0.5 block text-[11.5px] leading-snug text-ink-muted">{r.blurb}</span>
                             </span>
-                            {state.role === r.id && <Check size={15} className="mt-0.5 shrink-0 text-gold" />}
+                            {state.role === r.id && <Check size={15} className="mt-0.5 shrink-0 text-gold-text" />}
                           </button>
                         </li>
                       ))}
@@ -309,7 +319,7 @@ function SaveState() {
             </>
           ) : (
             <>
-              <Check size={12} className="text-status-good" aria-hidden />
+              <Check size={12} className="text-status-good-ink" aria-hidden />
               Saved
             </>
           )}

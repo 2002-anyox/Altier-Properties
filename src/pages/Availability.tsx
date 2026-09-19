@@ -139,10 +139,10 @@ function Timeline({ properties, bookings, days }: { properties: Property[]; book
                   className={cx('shrink-0 border-r border-line/60 py-2 text-center last:border-r-0', d.weekend && 'bg-surface-inset/50')}
                   style={{ width: colWidth }}
                 >
-                  <p className={cx('text-[9.5px] uppercase tracking-wider', d.isToday ? 'text-gold' : 'text-ink-muted')}>
+                  <p className={cx('text-[11px] uppercase tracking-wider', d.isToday ? 'text-gold-text' : 'text-ink-muted')}>
                     {d.date.toLocaleDateString('en-GB', { weekday: 'narrow' })}
                   </p>
-                  <p className={cx('tnum mt-0.5 text-[12px] font-medium', d.isToday ? 'text-gold' : 'text-ink-secondary')}>{d.date.getDate()}</p>
+                  <p className={cx('tnum mt-0.5 text-[12px] font-medium', d.isToday ? 'text-gold-text' : 'text-ink-secondary')}>{d.date.getDate()}</p>
                 </div>
               ))}
             </div>
@@ -157,8 +157,8 @@ function Timeline({ properties, bookings, days }: { properties: Property[]; book
                   <div className="sticky left-0 z-10 flex w-[232px] shrink-0 items-center gap-2.5 border-r border-line bg-surface-card px-4 py-2.5">
                     <span className={cx('h-2 w-2 shrink-0 rounded-full', PROPERTY_STATUS_META[p.status].dot)} aria-hidden />
                     <Link to={`/properties/${p.id}`} className="min-w-0 flex-1">
-                      <span className="block truncate text-[12.5px] font-medium text-ink hover:text-gold">{p.name}</span>
-                      <span className="block truncate text-[10.5px] text-ink-muted">{p.address.district}</span>
+                      <span className="block truncate text-[12.5px] font-medium text-ink hover:text-gold-text">{p.name}</span>
+                      <span className="block truncate text-[11px] text-ink-muted">{p.address.district}</span>
                     </Link>
                   </div>
                   <div className="relative" style={{ width: gridWidth, height: 46 }}>
@@ -189,7 +189,7 @@ function Timeline({ properties, bookings, days }: { properties: Property[]; book
                             b.status === 'upcoming'
                               ? 'bg-gold-soft text-gold-ink ring-1 ring-gold/40'
                               : isShort
-                                ? 'bg-[rgb(var(--c-status-info)/0.16)] text-[rgb(var(--c-status-info))] ring-1 ring-[rgb(var(--c-status-info)/0.35)]'
+                                ? 'bg-status-info-soft text-status-info-ink ring-1 ring-[rgb(var(--c-status-info)/0.35)]'
                                 : openEnded
                                   ? 'bg-gold text-white dark:text-navy-950'
                                   : 'bg-navy-900 text-white dark:bg-navy-700',
@@ -213,7 +213,7 @@ function Timeline({ properties, bookings, days }: { properties: Property[]; book
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line px-5 py-3">
         <Legend className="bg-navy-900 dark:bg-navy-700" label="Fixed-term lease" />
         <Legend className="bg-gold rounded-r-none" label="Open-ended rental (runs until notice)" />
-        <Legend className="bg-[rgb(var(--c-status-info)/0.4)]" label="Short stay" />
+        <Legend className="bg-status-info-soft" label="Short stay" />
         <Legend className="bg-gold-soft ring-1 ring-gold/40" label="Confirmed, not started" />
         <Legend className="bg-gold/20" label="Today" />
       </div>
@@ -263,7 +263,7 @@ function MonthView({ properties, bookings }: { properties: Property[]; bookings:
 
         <div className="mt-4 grid grid-cols-7 border-t border-line">
           {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
-            <div key={d} className="border-b border-line px-2 py-2 text-center text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-muted">{d}</div>
+            <div key={d} className="border-b border-line px-2 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-muted">{d}</div>
           ))}
           {grid.map((g) => {
             const data = byDay.get(g.date)!
@@ -285,12 +285,12 @@ function MonthView({ properties, bookings }: { properties: Property[]; bookings:
                 {g.inMonth && (
                   <span className="mt-1 flex flex-col gap-1">
                     {data.in.length > 0 && (
-                      <span className="truncate rounded bg-[rgb(var(--c-status-good)/0.14)] px-1 py-0.5 text-[9.5px] font-medium text-[rgb(var(--c-status-good))]">
+                      <span className="truncate rounded bg-status-good-soft px-1 py-0.5 text-[11px] font-medium text-status-good-ink">
                         {data.in.length} in
                       </span>
                     )}
                     {data.out.length > 0 && (
-                      <span className="truncate rounded bg-surface-inset px-1 py-0.5 text-[9.5px] font-medium text-ink-secondary">
+                      <span className="truncate rounded bg-surface-inset px-1 py-0.5 text-[11px] font-medium text-ink-secondary">
                         {data.out.length} out
                       </span>
                     )}
@@ -328,7 +328,7 @@ function MovementRow({ booking, kind, properties }: { booking: Booking; kind: 'i
   const c = state.clients.find((x) => x.id === booking.clientId)
   return (
     <li className="flex items-center gap-3 px-5 py-3 sm:px-6">
-      <span className={cx('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', kind === 'in' ? 'bg-[rgb(var(--c-status-good)/0.12)] text-[rgb(var(--c-status-good))]' : 'bg-surface-inset text-ink-secondary')} aria-hidden>
+      <span className={cx('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', kind === 'in' ? 'bg-status-good-soft text-status-good-ink' : 'bg-surface-inset text-ink-secondary')} aria-hidden>
         <DoorOpen size={15} />
       </span>
       <span className="min-w-0 flex-1">

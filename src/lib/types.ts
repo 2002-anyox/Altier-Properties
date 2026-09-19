@@ -197,6 +197,13 @@ export type ChargeType =
   | 'service_fee'
   | 'late_fee'
   | 'maintenance_recharge'
+  /**
+   * Money owed back to the client, as a positive amount that counts the
+   * other way. Raised when a settlement finds that a charge bought days
+   * nobody stayed — the original charge is never rewritten, because a
+   * bill that quietly changes after it was sent is not a bill.
+   */
+  | 'credit_note'
 
 export interface Invoice {
   id: string

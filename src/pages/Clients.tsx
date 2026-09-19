@@ -141,7 +141,7 @@ export default function Clients() {
                     </div>
                     <Chip
                       className={cx(
-                        c.status === 'active' ? 'bg-[rgb(var(--c-status-good)/0.12)] text-[rgb(var(--c-status-good))]'
+                        c.status === 'active' ? 'bg-status-good-soft text-status-good-ink'
                           : c.status === 'prospect' ? 'bg-gold-soft text-gold-ink' : 'bg-surface-inset text-ink-muted',
                       )}
                     >
@@ -170,7 +170,7 @@ export default function Clients() {
                     <div className="shrink-0 text-right">
                       <p className="tnum text-[15px] font-semibold text-ink">{money(c.lifetimeValue, true)}</p>
                       <p className="mt-0.5 inline-flex items-center gap-1 text-[11.5px] text-ink-muted">
-                        <Star size={10} className="fill-gold text-gold" /> {c.rating.toFixed(1)}
+                        <Star size={10} className="fill-gold text-gold-text" /> {c.rating.toFixed(1)}
                       </p>
                     </div>
                   </div>

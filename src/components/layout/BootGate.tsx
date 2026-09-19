@@ -37,7 +37,7 @@ function Unreachable() {
         </div>
         <div className="card card-pad" role="alert">
           <span
-            className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-[rgb(var(--c-status-critical)/0.12)] text-[rgb(var(--c-status-critical))]"
+            className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-status-critical-soft text-status-critical-ink"
             aria-hidden
           >
             <AlertTriangle size={19} />

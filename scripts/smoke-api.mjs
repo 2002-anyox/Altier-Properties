@@ -517,6 +517,129 @@ try {
   ok(typeof afterDeparture.settled?.outstanding === 'number',
      `check-out says what is still owed (${afterDeparture.settled?.outstanding})`)
 
+  /* ------------------ the bill follows the days spent ---------------- *
+   * A stay is priced before anybody has stayed in it. What somebody
+   * actually owes is knowable only at the door on the way out, so a
+   * departure reconciles the two — and does it by raising a new document
+   * rather than editing a charge that was already sent.
+   * ------------------------------------------------------------------- */
+  const stayProperty = {
+    ...property, id: `p-stay-${stamp}`, code: `STAY-${stamp}`,
+    status: 'available', mode: 'short_stay', price: 200_000,
+  }
+  await get('/properties', json(stayProperty))
+
+  const runStay = async (label, { nights, leaveAfter, rate = 200_000 }) => {
+    const from = plusDays(today, -nights)
+    const stayBooking = {
+      id: `b-${label}-${stamp}`, reference: `${label.toUpperCase()}-${stamp}`,
+      propertyId: stayProperty.id, clientId: third.id, mode: 'short_stay',
+      status: 'in_progress', start: from, end: plusDays(from, nights),
+      rate, deposit: 0, advanceMonths: 0, paidThrough: null, noticeDays: 0,
+      guests: 2, source: 'direct', checkIn: '15:00', checkOut: '11:00',
+      notes: '', createdAt: today,
+    }
+    const stayCharge = {
+      id: `i-${label}-${stamp}`, number: `${label.toUpperCase()}-INV-${stamp}`,
+      propertyId: stayProperty.id, clientId: third.id, bookingId: stayBooking.id,
+      type: 'booking', issuedOn: from, dueOn: from, amount: rate * nights,
+      earnsFrom: from, earnsTo: plusDays(from, nights),
+      paidAmount: 0, status: 'pending', method: null, paidOn: null,
+      memo: `${nights}-night stay`,
+    }
+    await get('/bookings', json({ booking: stayBooking, invoices: [stayCharge] }))
+    await get(`/bookings/${stayBooking.id}/check-in`, json({ on: from }))
+    const out = await get(`/bookings/${stayBooking.id}/check-out`, json({ on: plusDays(from, leaveAfter) }))
+    const body = await out.json()
+    return {
+      booking: stayBooking,
+      settled: body.settled,
+      raised: (body.invoices ?? []).filter(
+        (i) => i.bookingId === stayBooking.id && i.id !== stayCharge.id,
+      ),
+    }
+  }
+
+  /* Seven nights booked, three slept. Four nights of somebody else's
+     money is sitting on the ledger and has to come back. */
+  const early = await runStay('early', { nights: 7, leaveAfter: 3 })
+  ok(early.settled?.credit === 800_000,
+     `leaving four nights early credits those four nights (${early.settled?.credit})`)
+  ok(early.settled?.due === 0, `and charges nothing further (${early.settled?.due})`)
+  ok(early.settled?.daysStayed === 3, `three nights in residence (${early.settled?.daysStayed})`)
+  const creditNote = early.raised.find((i) => i.type === 'credit_note')
+  ok(!!creditNote, `a credit note is raised, not an edit to the original charge (${early.raised.length} raised)`)
+  ok(creditNote?.amount === 800_000, `carrying the four nights (${creditNote?.amount})`)
+  ok(creditNote?.amount > 0, 'stored as a positive amount, as the column requires')
+  ok(creditNote?.bookingId === early.booking.id, 'and tied to the agreement it adjusts')
+  ok(early.settled?.outstanding === 600_000,
+     `the account nets down to the nights actually slept (${early.settled?.outstanding})`)
+
+  /* The original charge is untouched. A bill that quietly changes after
+     it was sent is not a bill, and this is the assertion that keeps it
+     that way. */
+  const ledger = await get('/portfolio').then((r) => r.json())
+  const original = ledger.invoices.find((i) => i.id === `i-early-${stamp}`)
+  ok(original?.amount === 1_400_000,
+     `the charge that was sent still says what it said (${original?.amount})`)
+
+  /* Booked four nights, stayed six. The two nights nobody paid for are
+     charged at the rate that was already running. */
+  const over = await runStay('over', { nights: 4, leaveAfter: 6 })
+  ok(over.settled?.due === 400_000, `two nights beyond the agreement are charged (${over.settled?.due})`)
+  ok(over.settled?.credit === 0, `and nothing is refunded (${over.settled?.credit})`)
+  const extra = over.raised.find((i) => i.type !== 'credit_note')
+  ok(extra?.amount === 400_000, `the extra charge carries the two nights (${extra?.amount})`)
+  ok(over.settled?.outstanding === 1_200_000,
+     `and the account comes to all six nights (${over.settled?.outstanding})`)
+
+  /* A departure the manager decides not to reconcile — a late
+     cancellation nobody is refunding. The flag is the whole decision;
+     the amount is never taken from the browser. */
+  const waivedFrom = plusDays(today, -7)
+  const waivedBooking = {
+    id: `b-waived-${stamp}`, reference: `WAIVED-${stamp}`,
+    propertyId: stayProperty.id, clientId: third.id, mode: 'short_stay',
+    status: 'in_progress', start: waivedFrom, end: plusDays(waivedFrom, 7),
+    rate: 200_000, deposit: 0, advanceMonths: 0, paidThrough: null, noticeDays: 0,
+    guests: 2, source: 'direct', checkIn: '15:00', checkOut: '11:00',
+    notes: '', createdAt: today,
+  }
+  const waivedCharge = {
+    id: `i-waived-${stamp}`, number: `WAIVED-INV-${stamp}`,
+    propertyId: stayProperty.id, clientId: third.id, bookingId: waivedBooking.id,
+    type: 'booking', issuedOn: waivedFrom, dueOn: waivedFrom, amount: 1_400_000,
+    earnsFrom: waivedFrom, earnsTo: plusDays(waivedFrom, 7),
+    paidAmount: 0, status: 'pending', method: null, paidOn: null, memo: '7-night stay',
+  }
+  await get('/bookings', json({ booking: waivedBooking, invoices: [waivedCharge] }))
+  await get(`/bookings/${waivedBooking.id}/check-in`, json({ on: waivedFrom }))
+  const waived = await get(`/bookings/${waivedBooking.id}/check-out`,
+                           json({ on: plusDays(waivedFrom, 2), settle: false })).then((r) => r.json())
+  ok(waived.settled?.credit === 0, `settling can be waived (${waived.settled?.credit})`)
+  ok(waived.settled?.adjusted === 0, 'and then nothing at all is raised')
+  ok(waived.settled?.outstanding === 1_400_000,
+     `the agreed figure stands (${waived.settled?.outstanding})`)
+  ok(waived.settled?.daysStayed === 2,
+     `and the days are still counted and reported, just not billed on (${waived.settled?.daysStayed})`)
+
+  /* An amount proposed by the caller is ignored: the settlement is worked
+     out from the ledger, or it is worth nothing. */
+  const forgedFrom = plusDays(today, -7)
+  const forgedBooking = { ...waivedBooking, id: `b-forged-${stamp}`, reference: `FORGED-${stamp}`, start: forgedFrom, end: plusDays(forgedFrom, 7) }
+  const forgedCharge = { ...waivedCharge, id: `i-forged-${stamp}`, number: `FORGED-INV-${stamp}`, bookingId: forgedBooking.id, issuedOn: forgedFrom, dueOn: forgedFrom, earnsFrom: forgedFrom, earnsTo: plusDays(forgedFrom, 7) }
+  await get('/bookings', json({ booking: forgedBooking, invoices: [forgedCharge] }))
+  await get(`/bookings/${forgedBooking.id}/check-in`, json({ on: forgedFrom }))
+  const forged = await get(`/bookings/${forgedBooking.id}/check-out`, json({
+    on: plusDays(forgedFrom, 3), settle: true, credit: 99_000_000, due: 0,
+  })).then((r) => r.json())
+  ok(forged.settled?.credit === 800_000,
+     `a credit the caller asked for is ignored in favour of the days (${forged.settled?.credit})`)
+
+  for (const id of [`b-early-${stamp}`, `b-over-${stamp}`, `b-waived-${stamp}`, `b-forged-${stamp}`]) {
+    await get(`/bookings/${id}`, { method: 'DELETE' })
+  }
+
   /* And now that they have actually moved out, the home that was refused
      a moment ago is theirs to take. That is the whole rule: not "one
      home ever", but "one at a time". */

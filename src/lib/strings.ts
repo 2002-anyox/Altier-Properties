@@ -40,6 +40,12 @@ const en: Dict = {
   'nav.settings': 'Settings',
   'nav.internal': 'Altier internal',
   'nav.support': 'Support',
+  /* Tab-bar labels. A tab is a word wide, so the two names that read well
+     down the rail get a shorter one along the bottom edge. */
+  'nav.tab.bookings': 'Bookings',
+  'nav.tab.team': 'Team',
+  'nav.tab.tenants': 'Tenants',
+  'nav.more': 'More',
 
   'action.search': 'Search properties, clients, invoices…',
   'action.viewAs': 'View as',
@@ -78,6 +84,10 @@ const sw: Dict = {
   'nav.team': 'Timu na ufikiaji',
   'nav.tenants': 'Wapangaji na wageni',
   'nav.settings': 'Mipangilio',
+  'nav.tab.bookings': 'Mikataba',
+  'nav.tab.team': 'Timu',
+  'nav.tab.tenants': 'Wapangaji',
+  'nav.more': 'Zaidi',
   'nav.internal': 'Altier ndani',
   'nav.support': 'Msaada',
 

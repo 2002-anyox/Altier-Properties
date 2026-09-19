@@ -30,7 +30,7 @@ export function PageHeader({
           </nav>
         )}
         {eyebrow && (
-          <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.18em] text-gold">{eyebrow}</p>
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-text">{eyebrow}</p>
         )}
         <motion.h1
           initial={{ opacity: 0, y: 6 }}

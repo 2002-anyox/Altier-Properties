@@ -296,6 +296,93 @@ if (staff) {
   )
 }
 
+/* ------------------------------------------------------------------ *
+ * Two workspaces may hold the same reference number
+ *
+ * Every generator in the app counts up from a fixed floor — ALT-P-001,
+ * ALT-4001, ALT-INV-5001 — and continues from the highest number it can
+ * already see. What it can see is its own workspace, because that is all
+ * the policies above will show it. So every workspace starts at the same
+ * number, and while those columns were globally unique the second
+ * customer to create anything was refused by a duplicate key on a number
+ * they had never seen.
+ *
+ * One customer never noticed. Two do, on their first agreement.
+ * ------------------------------------------------------------------- */
+async function sharedNumbering() {
+  const taken = await one(`SELECT p.code, p.organization_id AS org, p.manager_id AS mgr
+    FROM properties p WHERE p.organization_id <> 'org-rival' LIMIT 1`)
+
+  const accepts = async (label, sql, params) => {
+    try {
+      await client.query('BEGIN')
+      await client.query(sql, params)
+      await client.query('ROLLBACK')
+      check(label, true)
+    } catch (e) {
+      await client.query('ROLLBACK')
+      check(label, false, e.message.split('\n')[0])
+    }
+  }
+
+  await accepts(
+    'a second workspace may use a property code the first already has',
+    `INSERT INTO properties (
+       id, organization_id, code, name, type, mode, status, address_line1, district,
+       city, country, map_x, map_y, bedrooms, bathrooms, size_sqm, price, manager_id,
+       rating, acquired_on, yield_pct, notes, photo_seed)
+     VALUES ('p-rival-same-code', 'org-rival', $1, 'Same Code', 'villa', 'long_term',
+       'available', '2 Rival Road', 'Nakasero', 'Kampala', 'Uganda', 41, 41, 2, 1, 90,
+       1000000, 'om-rival-owner', 4, CURRENT_DATE, 7, '', 2)`,
+    [taken.code],
+  )
+
+  const charge = await one(`SELECT i.number, i.property_id AS prop, i.client_id AS cli
+    FROM invoices i WHERE i.organization_id <> 'org-rival' LIMIT 1`)
+  await client.query(`
+    INSERT INTO clients (
+      id, organization_id, name, kind, email, phone, nationality, since, status,
+      notes, emergency_contact, lifetime_value, rating)
+    VALUES ('c-rival-num', 'org-rival', 'Rival Client', 'tenant', 'num@rival.example',
+      '', 'Uganda', CURRENT_DATE, 'active', '', '', 0, 5)
+    ON CONFLICT DO NOTHING`)
+
+  await accepts(
+    'and a charge number the first already has',
+    `INSERT INTO invoices (
+       id, organization_id, number, property_id, client_id, booking_id, type,
+       issued_on, due_on, amount, earns_from, earns_to, paid_amount, status, memo)
+     VALUES ('i-rival-same', 'org-rival', $1, 'p-rival-01', 'c-rival-num', NULL, 'rent',
+       CURRENT_DATE, CURRENT_DATE, 1000, CURRENT_DATE, CURRENT_DATE + 30, 0, 'pending', 'same number')`,
+    [charge.number],
+  )
+
+  /* And within one workspace it is still a duplicate, which is the half
+     of the rule that was never the problem and must not be lost. A
+     unique violation this time, not a policy refusal — different code,
+     so the check has to name which one it wants. */
+  try {
+    await client.query('BEGIN')
+    await client.query(
+      `INSERT INTO properties (
+         id, organization_id, code, name, type, mode, status, address_line1, district,
+         city, country, map_x, map_y, bedrooms, bathrooms, size_sqm, price, manager_id,
+         rating, acquired_on, yield_pct, notes, photo_seed)
+       VALUES ('p-dup-code', $1, $2, 'Duplicate', 'villa', 'long_term',
+         'available', '3 Road', 'X', 'Kampala', 'Uganda', 1, 1, 1, 1, 10, 1,
+         $3, 1, CURRENT_DATE, 1, '', 1)`,
+      [taken.org, taken.code, taken.mgr],
+    )
+    await client.query('ROLLBACK')
+    check('but one workspace still refuses its own duplicate', false, 'it was accepted')
+  } catch (error) {
+    await client.query('ROLLBACK')
+    check('but one workspace still refuses its own duplicate', error.code === '23505',
+          `${error.code}: ${error.message.split('\n')[0]}`)
+  }
+}
+await sharedNumbering()
+
 await client.end()
 console.log(failures === 0 ? '\nISOLATION CHECK CLEAN\n' : `\n${failures} ISOLATION CHECK(S) FAILED\n`)
 process.exit(failures === 0 ? 0 : 1)

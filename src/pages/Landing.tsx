@@ -338,20 +338,27 @@ export default function Landing() {
           <div className="ml-auto flex items-center gap-2 lg:ml-3">
             <button
               onClick={signIn}
-              className="hidden h-9 items-center rounded-xl border border-white/15 px-3.5 text-[13.5px] font-medium text-[rgb(var(--c-text-onrail))] transition-colors duration-200 hover:border-white/30 hover:bg-white/5 sm:inline-flex"
+              className="hidden h-11 items-center rounded-xl border border-white/15 px-3.5 text-[13.5px] font-medium text-[rgb(var(--c-text-onrail))] transition-colors duration-200 hover:border-white/30 hover:bg-white/5 sm:inline-flex sm:h-9"
             >
               Sign In
             </button>
             <button
               onClick={startFree}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-gold px-4 text-[13.5px] font-semibold text-navy-950 shadow-card transition-[background-color,transform] duration-200 hover:bg-gold-strong active:scale-[0.985]"
+              className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-gold px-4 text-[13.5px] font-semibold text-navy-950 shadow-card transition-[background-color,transform] duration-200 hover:bg-gold-strong active:scale-[0.985] sm:h-9"
             >
               Start Free
             </button>
             <button
               onClick={() => setMenuOpen(true)}
               aria-label="Open menu"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-[rgb(var(--c-text-onrail))] transition-colors hover:bg-white/10 lg:hidden"
+              /* A disclosure announces whether it is open. Without this a
+                 screen reader reads "Open menu, button" whether the menu
+                 is showing or not. */
+              aria-expanded={menuOpen}
+              aria-controls="landing-menu"
+              /* The only control on this bar that a thumb has to find, so
+                 it gets the full 44 rather than the 36 a pointer needs. */
+              className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-[rgb(var(--c-text-onrail))] transition-colors hover:bg-white/10 lg:hidden"
             >
               <Menu size={19} />
             </button>
@@ -368,7 +375,10 @@ export default function Landing() {
           />
           <motion.div
             initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24, ease: EASE }}
-            className="absolute inset-x-3 top-3 overflow-hidden rounded-2xl bg-surface-card p-2 shadow-lift"
+            id="landing-menu"
+            /* A light panel inside a band that is dark in both themes — see
+               .on-light in index.css. */
+            className="on-light absolute inset-x-3 top-3 overflow-hidden rounded-2xl bg-surface-card p-2 shadow-lift"
             role="dialog" aria-modal="true" aria-label="Menu"
           >
             <div className="flex items-center justify-between px-3 py-2">
@@ -400,7 +410,7 @@ export default function Landing() {
 
       <main id="main" tabIndex={-1}>
         {/* ---------------------------- hero --------------------------- */}
-        <section id="top" tabIndex={-1} className="rail-gradient relative overflow-hidden bg-surface-rail pb-20 pt-[104px] sm:pb-28 sm:pt-[128px]">
+        <section id="top" tabIndex={-1} className="on-dark rail-gradient relative overflow-hidden bg-surface-rail pb-20 pt-[104px] sm:pb-28 sm:pt-[128px]">
           {/* A single warm bloom behind the headline — the same one the
               nav rail carries, so the two read as one surface. */}
           <div
@@ -422,7 +432,7 @@ export default function Landing() {
 
               <h1 className="mt-6 font-display text-[38px] font-semibold leading-[1.06] tracking-[-0.02em] text-[rgb(var(--c-text-onrail))] sm:text-[56px] lg:text-[68px]">
                 Property management,{' '}
-                <span className="relative whitespace-nowrap text-gold">
+                <span className="relative whitespace-nowrap text-gold-text">
                   elevated.
                   <motion.span
                     className="absolute inset-x-0 -bottom-1.5 h-px gold-rule"
@@ -651,7 +661,7 @@ export default function Landing() {
         </section>
 
         {/* -------------------------- security ------------------------- */}
-        <section className="relative overflow-hidden border-y border-line bg-surface-rail py-20 sm:py-28">
+        <section className="on-dark relative overflow-hidden border-y border-line bg-surface-rail py-20 sm:py-28">
           <div
             className="pointer-events-none absolute inset-0 opacity-60"
             style={{ background: 'radial-gradient(70% 60% at 20% 0%, rgb(203 168 95 / 0.12), transparent 65%)' }}
@@ -660,7 +670,7 @@ export default function Landing() {
           <div className="relative mx-auto w-full max-w-6xl px-5 sm:px-8">
             <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
               <Reveal>
-                <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-gold">Your workspace</p>
+                <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-gold-text">Your workspace</p>
                 <h2 className="mt-3 font-display text-[28px] font-semibold leading-tight tracking-[-0.015em] text-[rgb(var(--c-text-onrail))] sm:text-[38px]">
                   Your data is isolated by the database itself.
                 </h2>
@@ -690,7 +700,7 @@ export default function Landing() {
                     variants={revealItem}
                     className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 transition-colors duration-300 hover:border-white/20 hover:bg-white/[0.07]"
                   >
-                    <span className="mb-3.5 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gold/15 text-gold">
+                    <span className="mb-3.5 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gold/15 text-gold-text">
                       <Icon size={17} aria-hidden />
                     </span>
                     <h3 className="text-[14px] font-semibold text-[rgb(var(--c-text-onrail))]">{title}</h3>
@@ -723,14 +733,16 @@ export default function Landing() {
                   key={plan.name}
                   variants={revealItem}
                   className={cx(
-                    'relative flex h-full flex-col rounded-2xl border p-6 transition-[transform,box-shadow] duration-300 ease-premium sm:p-7',
+                    /* A card of ordinary page surface on a dark band — see
+                       .on-light in index.css. */
+                    'on-light relative flex h-full flex-col rounded-2xl border p-6 transition-[transform,box-shadow] duration-300 ease-premium sm:p-7',
                     plan.featured
                       ? 'border-gold/45 bg-surface-card shadow-lift lg:-mt-4 lg:pb-10'
                       : 'border-line bg-surface-card shadow-card hover:-translate-y-0.5 hover:shadow-lift',
                   )}
                 >
                   {plan.featured && (
-                    <span className="absolute -top-3 left-6 rounded-full bg-gold px-3 py-1 text-[10.5px] font-bold uppercase tracking-[0.1em] text-navy-950">
+                    <span className="absolute -top-3 left-6 rounded-full bg-gold px-3 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-navy-950">
                       Most chosen
                     </span>
                   )}
@@ -812,7 +824,7 @@ export default function Landing() {
         </section>
 
         {/* -------------------------- final cta ------------------------ */}
-        <section className="relative overflow-hidden bg-surface-rail py-24 sm:py-32">
+        <section className="on-dark relative overflow-hidden bg-surface-rail py-24 sm:py-32">
           <div
             className="pointer-events-none absolute inset-0"
             style={{ background: 'radial-gradient(55% 70% at 50% 110%, rgb(203 168 95 / 0.20), transparent 70%)' }}
@@ -840,7 +852,7 @@ export default function Landing() {
         </section>
 
         {/* ---------------------------- footer ------------------------- */}
-        <footer className="border-t border-white/10 bg-surface-rail pb-10 pt-16">
+        <footer className="on-dark border-t border-white/10 bg-surface-rail pb-10 pt-16">
           <div className="mx-auto w-full max-w-6xl px-5 sm:px-8">
             <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))]">
               <div>

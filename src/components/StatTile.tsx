@@ -43,14 +43,14 @@ export function StatTile({
         <p className="text-[12.5px] font-medium text-ink-secondary">{label}</p>
         {icon && <span className="shrink-0 text-ink-muted">{icon}</span>}
       </div>
-      <p className="mt-2.5 text-[26px] font-semibold leading-none tracking-[-0.02em] text-ink">{display}</p>
+      <p className="mt-2 text-[22px] font-semibold leading-none tracking-[-0.02em] text-ink sm:mt-2.5 sm:text-[26px]">{display}</p>
       <div className="mt-3 flex items-end justify-between gap-3">
         <div className="min-w-0">
           {delta !== undefined && (
             <span
               className={clsx(
                 'inline-flex items-center gap-1 text-[12px] font-medium',
-                good ? 'text-[rgb(var(--c-status-good))]' : 'text-[rgb(var(--c-status-critical))]',
+                good ? 'text-status-good-ink' : 'text-status-critical-ink',
               )}
             >
               {delta >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
