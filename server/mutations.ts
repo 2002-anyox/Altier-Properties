@@ -500,9 +500,14 @@ const propertyColumns = (p: Property, organizationId: string) => ({
 })
 
 /** Replaces a property's amenity set; they are rows, not an array column. */
-async function writeAmenities(db: Db, w: Workspace, propertyId: string, amenities: string[]) {
+async function writeAmenities(db: Db, w: Workspace, propertyId: string, amenities: unknown) {
+  /* A list of names. A string used to be iterated a letter at a time —
+     "Pool" was saved as P, o, o, l — so anything else is refused. */
+  if (!Array.isArray(amenities) || amenities.some((a) => typeof a !== 'string')) {
+    throw new BadInput('Amenities have to be a list of names.')
+  }
   await db.delete(t.propertyAmenities).where(eq(t.propertyAmenities.propertyId, propertyId))
-  const rows = [...new Set(amenities)]
+  const rows = [...new Set(amenities.map((a: string) => a.trim()).filter(Boolean))]
     .map((amenity) => ({ organizationId: w.organizationId, propertyId, amenity }))
   if (rows.length) await db.insert(t.propertyAmenities).values(rows)
 }
@@ -514,9 +519,9 @@ export async function addProperty(db: Db, w: Workspace, property: Property) {
      it — so before anything else is written against it, it is theirs.
      The function decides; for an owner or accountant it does nothing. */
   await db.execute(sql`select altier_claim_property(${property.id})`)
-  await writeAmenities(db, w, property.id, property.amenities)
-  if (property.maintenanceNotes.length) {
-    await db.insert(t.propertyNotes).values(property.maintenanceNotes.map((note, i) => ({
+  await writeAmenities(db, w, property.id, property.amenities ?? [])
+  if ((property.maintenanceNotes ?? []).length) {
+    await db.insert(t.propertyNotes).values((property.maintenanceNotes ?? []).map((note, i) => ({
       id: `${property.id}-note-${i}`, organizationId: w.organizationId,
       propertyId: property.id, position: i, note,
     })))
@@ -534,7 +539,9 @@ export async function updateProperty(db: Db, w: Workspace, id: string, property:
   const { id: _ignored, code: _code, organizationId: _org, ...columns } =
     propertyColumns(property, w.organizationId)
   await db.update(t.properties).set(columns).where(eq(t.properties.id, id))
-  await writeAmenities(db, w, id, property.amenities)
+  /* Left alone when the edit does not mention them. An edit that only
+     changed the price used to wipe every amenity on the unit. */
+  if (property.amenities !== undefined) await writeAmenities(db, w, id, property.amenities)
 }
 
 export async function addClient(db: Db, w: Workspace, client: Client) {
@@ -562,15 +569,15 @@ export async function addClient(db: Db, w: Workspace, client: Client) {
        not a figure anybody earned. */
     lifetimeValue: 0, rating: Math.max(0, Math.min(5, Number(client.rating) || 0)),
   })
-  if (client.propertyIds.length) {
+  if (wanted.length) {
     await db.insert(t.clientProperties).values(
-      [...new Set(client.propertyIds)].map((propertyId) => ({
+      wanted.map((propertyId) => ({
         organizationId: w.organizationId, clientId: client.id, propertyId,
       })),
     )
   }
-  if (client.communications.length) {
-    await db.insert(t.communications).values(client.communications.map((c) => ({
+  if ((client.communications ?? []).length) {
+    await db.insert(t.communications).values((client.communications ?? []).map((c) => ({
       id: c.id, organizationId: w.organizationId,
       clientId: client.id, channel: c.channel, direction: c.direction,
       subject: c.subject, preview: c.preview, at: c.at, author: c.author,

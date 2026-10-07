@@ -154,7 +154,10 @@ export async function readPortfolio(
         id: m.id, channel: m.channel, direction: m.direction,
         subject: m.subject, preview: m.preview, at: m.at, author: m.author,
       }))
-      .sort((a, b) => (a.at < b.at ? 1 : -1)),
+      /* Ties broken on id, which encodes the time it was written. The
+         comparator never returned 0, so several notes from one day came
+         back in whatever order the sort happened to leave them. */
+      .sort((a, b) => (a.at !== b.at ? (a.at < b.at ? 1 : -1) : (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))),
     /* What this client has actually paid, net of anything returned and
        not counting deposits, which are theirs — read off the charges this
        viewer can see. The column it replaces was written once, from the

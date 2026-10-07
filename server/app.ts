@@ -845,7 +845,11 @@ export function createApp(db: Db, driver: string) {
 
   app.patch('/api/properties/:id/status', requirePermission('edit:properties'),
     inWorkspace(async (tx, w, req, res) => {
-      await setPropertyStatus(tx, w, param(req, 'id'), req.body?.status)
+      const status = req.body?.status
+      if (typeof status !== 'string' || !status) {
+        throw new BadRequest('Say which status to set.')
+      }
+      await setPropertyStatus(tx, w, param(req, 'id'), status as Property['status'])
       return withPortfolio(tx, w, res, req)
     }))
 
@@ -881,6 +885,11 @@ export function createApp(db: Db, driver: string) {
 
   app.post('/api/clients/:id/notes', requirePermission('edit:clients'),
     inWorkspace(async (tx, w, req, res) => {
+      /* A string, not whatever coerces to one: an object used to be
+         saved as "[object Object]". */
+      if (req.body?.text !== undefined && typeof req.body.text !== 'string') {
+        throw new BadRequest('A note has to be text.')
+      }
       const text = String(req.body?.text ?? '').trim()
       if (!text) return res.status(400).json({ error: 'A note cannot be empty.' })
       await addNote(tx, w, param(req, 'id'), text)
