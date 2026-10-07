@@ -294,6 +294,20 @@ if (staff) {
      VALUES ('om-trespass', 'org-rival', $1, 'owner', 'Owner', 'active', CURRENT_DATE)`,
     [home.p], home.p, home.o,
   )
+  /* The flag every policy defers to. A request could update its own
+     profile row, and nothing below the routes stopped that update naming
+     this column. */
+  await refusedWrite(
+    'and nobody can make themselves a super admin',
+    `UPDATE profiles SET is_super_admin = true WHERE id = $1`,
+    [home.p], home.p, home.o,
+  )
+  await refusedWrite(
+    'nor create an account that already is one',
+    `INSERT INTO profiles (id, name, email, is_super_admin)
+     VALUES ('pr-crowned', 'Crowned', 'crowned@example.com', true)`,
+    [], home.p, home.o,
+  )
 }
 
 /* ------------------------------------------------------------------ *
