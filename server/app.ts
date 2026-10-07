@@ -22,14 +22,15 @@ import { readPortfolio } from './db/read.js'
 import { missingMigrations } from './db/applied.js'
 import { classify, explain, rootCause } from './db/fault.js'
 import {
-  Conflict, NotFound, addBooking, addClient, addMaintenance, addMember, addNote,
+  BadInput, Conflict, NotFound, addBooking, addClient, addMaintenance, addMember, addNote,
   addProperty, checkIn, checkOut, deleteBooking, deleteClient, deleteMember, deleteProperty,
   grantPortalAccess, recordPayment, revokePortalAccess, sendReminder,
   reassignMaintenance, setMaintenanceStatus, setPropertyStatus, updateBooking, updateClient,
   updateMember,
   updateProperty, updateReminders, type Workspace,
 } from './mutations.js'
-import type { Booking, Client, Invoice, Property, TeamMember } from '../src/lib/types.js'
+import type { Booking, Client, Invoice, PaymentMethod, Property, TeamMember } from '../src/lib/types.js'
+import { PAYMENT_METHODS } from '../src/lib/types.js'
 import { ALL_PERMISSIONS, type Permission } from '../src/lib/rbac.js'
 import {
   Forbidden, LastWayIn, NotLinked, OAUTH_COOKIE, MIN_PASSWORD,
@@ -726,9 +727,33 @@ export function createApp(db: Db, driver: string) {
   app.get('/api/portfolio', requirePermission('view:dashboard'),
     inWorkspace((tx, w, req, res) => withPortfolio(tx, w, res, req)))
 
+  /* An amount, a method and a date may be given; each falls back to what
+     the one-press "Record payment" in the ledger has always meant —
+     settle the rest of it, today, however it was last paid. Only the
+     figures are read from the body; what the charge is worth is the
+     ledger's business. */
   app.post('/api/invoices/:id/payment', requirePermission('edit:payments'),
     inWorkspace(async (tx, w, req, res) => {
-      await recordPayment(tx, w, param(req, 'id'))
+      const body = (req.body ?? {}) as Record<string, unknown>
+      const amount = body.amount === undefined || body.amount === null
+        ? undefined
+        : Number(body.amount)
+      if (amount !== undefined && !Number.isFinite(amount)) {
+        throw new BadRequest('A payment amount has to be a number.')
+      }
+      const method = body.method === undefined || body.method === null
+        ? undefined
+        : String(body.method)
+      if (method !== undefined && !PAYMENT_METHODS.includes(method as PaymentMethod)) {
+        throw new BadRequest(`A payment method has to be one of ${PAYMENT_METHODS.join(', ')}.`)
+      }
+      await recordPayment(tx, w, param(req, 'id'), {
+        amount,
+        method: method as PaymentMethod | undefined,
+        paidOn: body.paidOn === undefined || body.paidOn === null
+          ? undefined
+          : String(body.paidOn),
+      })
       return withPortfolio(tx, w, res, req)
     }))
 
@@ -1176,7 +1201,7 @@ export function createApp(db: Db, driver: string) {
     }
     // A refusal the caller can act on: the request was well formed, the
     // state of the portfolio is what stands in the way.
-    if (err instanceof BadPermission) {
+    if (err instanceof BadInput || err instanceof BadPermission) {
       res.status(400).json({ error: err.message })
       return
     }

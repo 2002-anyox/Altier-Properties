@@ -9,7 +9,7 @@ import {
   Button, Card, Chip, Drawer, EmptyState, Field, Input, MAINTENANCE_STATUS_META, MaintenanceChip,
   Modal, NumberInput, PRIORITY_META, PriorityChip, SearchInput, SegmentedControl, Select, Textarea, cx,
 } from '../components/ui'
-import { acceptable } from '../lib/numeric.js'
+import { acceptable, readNumber } from '../lib/numeric.js'
 import { currentMember, useStore } from '../lib/store.js'
 import { can, roleLabel } from '../lib/rbac.js'
 import { TODAY, dayOffset, daysBetween, iso } from '../lib/dates.js'
@@ -390,8 +390,10 @@ export default function Maintenance() {
               variant="primary"
               onClick={() => {
                 if (!closing) return
-                const trimmed = finalCost.trim()
-                const cost = trimmed === '' ? null : Math.max(0, Math.round(Number(trimmed)))
+                /* Read as money, so a figure typed with its separators —
+                   2,500,000 — is the figure and not NaN. */
+                const typed = readNumber(finalCost, true)
+                const cost = typed === null ? null : Math.max(0, typed)
                 dispatch({
                   type: 'set-maintenance-status',
                   id: closing.id,
@@ -425,18 +427,20 @@ export default function Maintenance() {
               id="job-final" type="text" inputMode="decimal" autoFocus
               className="tnum"
               value={finalCost}
-              onChange={(e) => { if (acceptable(e.target.value)) setFinalCost(e.target.value) }}
+              onChange={(e) => { if (acceptable(e.target.value, true)) setFinalCost(e.target.value) }}
               placeholder={closing ? String(closing.estimatedCost || '') : ''}
             />
           </Field>
           {closing && closing.estimatedCost > 0 && (
             <p className="rounded-xl border border-line bg-surface-inset/50 px-3.5 py-3 text-[12.5px] leading-relaxed text-ink-secondary">
               Estimated at {money(closing.estimatedCost)}.
-              {finalCost.trim() !== '' && Number(finalCost) > closing.estimatedCost
-                ? ` That is ${money(Number(finalCost) - closing.estimatedCost)} over.`
-                : finalCost.trim() !== '' && Number(finalCost) < closing.estimatedCost
-                  ? ` That is ${money(closing.estimatedCost - Number(finalCost))} under.`
-                  : ''}
+              {(() => {
+                const typed = readNumber(finalCost, true)
+                if (typed === null) return ''
+                if (typed > closing.estimatedCost) return ` That is ${money(typed - closing.estimatedCost)} over.`
+                if (typed < closing.estimatedCost) return ` That is ${money(closing.estimatedCost - typed)} under.`
+                return ''
+              })()}
             </p>
           )}
         </div>
@@ -481,7 +485,7 @@ export default function Maintenance() {
               hint="What you expect it to come to. It is what the board commits."
             >
               <NumberInput
-                id="job-estimate" min={0} step={10_000}
+                id="job-estimate" money min={0} step={10_000}
                 value={draft.estimatedCost}
                 onChange={(v) => setDraft({ ...draft, estimatedCost: v })}
               />

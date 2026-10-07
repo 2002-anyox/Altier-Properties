@@ -226,10 +226,14 @@ export interface Invoice {
   earnsTo: string
   paidAmount: number
   status: InvoiceStatus
-  method: 'bank_transfer' | 'card' | 'mobile_money' | 'cash' | null
+  method: PaymentMethod | null
   paidOn: string | null
   memo: string
 }
+
+/** How money moved. Named, so a route can check one against the list. */
+export const PAYMENT_METHODS = ['bank_transfer', 'card', 'mobile_money', 'cash'] as const
+export type PaymentMethod = typeof PAYMENT_METHODS[number]
 
 export type MaintenancePriority = 'urgent' | 'high' | 'medium' | 'low'
 export type MaintenanceStatus =

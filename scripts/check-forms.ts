@@ -17,7 +17,7 @@
 
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { acceptable, clampNumber, commitNumber, readNumber } from '../src/lib/numeric.js'
+import { acceptable, clampNumber, commitNumber, groupDigits, readNumber } from '../src/lib/numeric.js'
 import { advanceFloor, emptyBookingDraft, newBooking } from '../src/lib/create.js'
 import { fieldsFor, modeSummary } from '../src/lib/agreement.js'
 import { holdBlocking, holdsOf, isHolding, whyBlocked } from '../src/lib/occupancy.js'
@@ -40,16 +40,16 @@ class Field {
   text: string
   reported: number
 
-  constructor(start: number, private bounds: Bounds) {
+  constructor(start: number, private bounds: Bounds, private money = false) {
     this.text = String(start)
     this.reported = start
   }
 
   /** A keystroke. `raw` is what the box would contain afterwards. */
   type(raw: string) {
-    if (!acceptable(raw)) return this
+    if (!acceptable(raw, this.money)) return this
     this.text = raw
-    const parsed = readNumber(raw)
+    const parsed = readNumber(raw, this.money)
     if (parsed !== null) this.reported = parsed
     return this
   }
@@ -80,7 +80,7 @@ class Field {
 
   /** Leaving the field — the one moment the bounds apply. */
   blur() {
-    this.reported = commitNumber(this.text, this.bounds)
+    this.reported = commitNumber(this.text, this.bounds, this.money)
     this.text = String(this.reported)
     return this
   }
@@ -158,6 +158,54 @@ console.log('\nOther numeric fields\n')
   size.clear().append('92.5').blur()
   check('a decimal can be typed through its point', size.reported === 92.5, `got ${size.reported}`)
 }
+
+/* A money field is whole shillings, so the separators in it are grouping.
+   Read as a decimal point — which is what used to happen, one at most —
+   a rent typed the way it is written became two and a half shillings,
+   with the Create button still lit. */
+console.log('\nMoney fields, typed the way money is written\n')
+
+{
+  const rent = new Field(0, { min: 0 }, true)
+  rent.clear().append('2,500,000').blur()
+  check('a rent typed with its separators is that rent',
+        rent.reported === 2_500_000, `got ${rent.reported}`)
+}
+
+{
+  const rent = new Field(0, { min: 0 }, true)
+  rent.clear().append('2 500 000').blur()
+  check('spaces group it too', rent.reported === 2_500_000, `got ${rent.reported}`)
+}
+
+{
+  const rent = new Field(0, { min: 0 }, true)
+  rent.clear().append('2500000').blur()
+  check('and so does typing it bare', rent.reported === 2_500_000, `got ${rent.reported}`)
+}
+
+{
+  const rent = new Field(0, { min: 0 }, true)
+  rent.clear().append('2,500,000')
+  check('every prefix on the way there is accepted, so the box never sticks',
+        rent.text === '2,500,000', `left showing ${rent.text}`)
+}
+
+{
+  const price = new Field(0, { min: 0 }, true)
+  price.clear().append('1,5').blur()
+  check('a stray separator groups rather than dividing by ten',
+        price.reported === 15, `got ${price.reported}`)
+}
+
+{
+  const rent = new Field(1_000_000, { min: 0 }, true)
+  rent.type('2a')
+  check('letters are still refused', rent.text === '1000000', `left showing ${rent.text}`)
+}
+
+check('a committed figure is shown grouped', groupDigits(2_500_000) === '2,500,000')
+check('and a small one is left alone', groupDigits(950) === '950')
 
 {
   const f = new Field(3, { min: floor })

@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import clsx from 'clsx'
 import { Check, ChevronDown, Eye, EyeOff, Search, X } from 'lucide-react'
 import { drawerVariants, popVariants, spring, swift } from '../../lib/motion.js'
-import { acceptable, clampNumber, commitNumber, readNumber } from '../../lib/numeric.js'
+import { acceptable, clampNumber, commitNumber, groupDigits, readNumber } from '../../lib/numeric.js'
 import { t } from '../../lib/strings.js'
 import type { InvoiceStatus, MaintenancePriority, MaintenanceStatus, PropertyStatus } from '../../lib/types.js'
 
@@ -216,7 +216,7 @@ Input.displayName = 'Input'
  * clear it, think, and type something else.
  */
 export function NumberInput({
-  value, onChange, min, max, step = 1, stepper, suffix, className, id, ...rest
+  value, onChange, min, max, step = 1, stepper, suffix, money, className, id, ...rest
 }: Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'min' | 'max' | 'step' | 'type'> & {
   value: number
   onChange: (value: number) => void
@@ -227,26 +227,32 @@ export function NumberInput({
   stepper?: boolean
   /** A unit shown inside the field, e.g. "months".  */
   suffix?: string
+  /**
+   * Holds money, so a '.' or ',' is grouping rather than a decimal point,
+   * and the committed figure is shown grouped. Shillings have no subunit
+   * anybody uses; a separator here is somebody reading a written figure.
+   */
+  money?: boolean
 }) {
-  const [text, setText] = useState(() => String(value))
+  const [text, setText] = useState(() => (money ? groupDigits(value) : String(value)))
   const [editing, setEditing] = useState(false)
 
   /* While somebody is typing, what they have typed is the truth. Once they
      leave, the record is — including a correction the caller made. */
-  useEffect(() => { if (!editing) setText(String(value)) }, [value, editing])
+  useEffect(() => { if (!editing) setText(money ? groupDigits(value) : String(value)) }, [value, editing, money])
 
   const bounds = { min, max }
 
   const commit = () => {
     setEditing(false)
-    const next = commitNumber(text, bounds)
-    setText(String(next))
+    const next = commitNumber(text, bounds, money)
+    setText(money ? groupDigits(next) : String(next))
     if (next !== value) onChange(next)
   }
 
   const nudge = (by: number) => {
-    const next = clampNumber((readNumber(text) ?? min ?? 0) + by, bounds)
-    setText(String(next))
+    const next = clampNumber((readNumber(text, money) ?? min ?? 0) + by, bounds)
+    setText(money ? groupDigits(next) : String(next))
     onChange(next)
   }
 
@@ -271,11 +277,11 @@ export function NumberInput({
         onFocus={(e) => { setEditing(true); e.currentTarget.select() }}
         onChange={(e) => {
           const raw = e.target.value
-          if (!acceptable(raw)) return
+          if (!acceptable(raw, money)) return
           setText(raw)
           /* Reported unclamped so a half-typed "1" on the way to "12" is not
              pulled up to the floor under the cursor. commit() squares it up. */
-          const parsed = readNumber(raw)
+          const parsed = readNumber(raw, money)
           if (parsed !== null) onChange(parsed)
         }}
         onBlur={commit}

@@ -161,7 +161,7 @@ export function PropertyFormModal({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={rateLabel} id="pf-price" hint={`Held in ${BASE_CURRENCY}, shown in your chosen currency.`}>
-            <NumberInput id="pf-price" min={0} step={10_000} value={draft.price} onChange={(v) => set('price', v)} />
+            <NumberInput id="pf-price" money min={0} step={10_000} value={draft.price} onChange={(v) => set('price', v)} />
           </Field>
           <Field label="Assigned manager" id="pf-manager">
             <Select id="pf-manager" value={draft.managerId} onChange={(e) => set('managerId', e.target.value)}>

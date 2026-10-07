@@ -247,10 +247,10 @@ export function BookingFormModal({
                 ? `${chosen.name} is listed at ${money(chosen.price)} ${shape.rateUnit}.`
                 : 'Taken from the property. Change it here if this agreement differs.'}
             >
-              <NumberInput id="bf-rate" min={0} step={10_000} value={draft.rate} onChange={(v) => set('rate', v)} />
+              <NumberInput id="bf-rate" money min={0} step={10_000} value={draft.rate} onChange={(v) => set('rate', v)} />
             </Field>
             <Field label="Deposit" id="bf-deposit" hint="Refundable; never counted as revenue.">
-              <NumberInput id="bf-deposit" min={0} step={10_000} value={draft.deposit} onChange={(v) => set('deposit', v)} />
+              <NumberInput id="bf-deposit" money min={0} step={10_000} value={draft.deposit} onChange={(v) => set('deposit', v)} />
             </Field>
           </div>
 

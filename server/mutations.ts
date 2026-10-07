@@ -17,8 +17,8 @@ import { holdBlocking, whyBlocked } from '../src/lib/occupancy.js'
 import { stayWindow } from '../src/lib/stay.js'
 import { assertSeatAvailable } from './workspace.js'
 import type {
-  Booking, Client, Invoice, MaintenancePriority, MaintenanceStatus, Property,
-  PropertyStatus, ReminderSettings, Role, TeamMember,
+  Booking, Client, Invoice, MaintenancePriority, MaintenanceStatus, PaymentMethod,
+  Property, PropertyStatus, ReminderSettings, Role, TeamMember,
 } from '../src/lib/types.js'
 
 /**
@@ -53,25 +53,158 @@ export interface Workspace {
 
 export class NotFound extends Error {}
 
+/**
+ * The agreement, held for the rest of the transaction.
+ *
+ * Every arrival and departure is a read, a guard on what the read said,
+ * and then a write — and the guard is worthless if another request can
+ * read the same row in between. It could: scope.ts opens an ordinary
+ * READ COMMITTED transaction, so two check-outs both saw departedOn as
+ * null, both passed, and both raised a settlement. Two credit notes for
+ * one departure, which a double-click was enough to produce.
+ *
+ * `for update` makes the second caller wait for the first to commit, so
+ * it reads the departure that just happened and refuses on it. Safe to
+ * use everywhere here: inWorkspace has already opened the transaction
+ * this takes its lifetime from.
+ */
+async function lockBooking(db: Db, w: Workspace, id: string) {
+  return requireOne(
+    await db.select().from(t.bookings)
+      .where(and(eq(t.bookings.id, id), eq(t.bookings.organizationId, w.organizationId)))
+      .for('update'),
+    `agreement ${id}`,
+  )
+}
+
+/**
+ * A figure or a date the caller got wrong.
+ *
+ * The routes check the shape of a body themselves; this is for the
+ * refusals that need the records to decide — an amount larger than the
+ * charge owes, a payment dated tomorrow — and so can only be made down
+ * here. Answered as 400, the same as its counterpart upstairs.
+ */
+export class BadInput extends Error {}
+
 async function requireOne<T>(rows: T[], what: string): Promise<T> {
   const row = rows[0]
   if (!row) throw new NotFound(`${what} not found`)
   return row
 }
 
-/** Settle an invoice in full. */
-export async function recordPayment(db: Db, w: Workspace, invoiceId: string) {
+export interface Payment {
+  /** Omitted settles whatever is still outstanding, which is what the
+   *  one-press "Record payment" in the ledger means. */
+  amount?: number
+  method?: PaymentMethod
+  /** The day the money moved, which may be before today and never after. */
+  paidOn?: string
+}
+
+/**
+ * Money against a charge.
+ *
+ * Takes an amount rather than assuming the whole thing: a part payment is
+ * ordinary, and recording it as settled in full loses the arrears. The
+ * figures are the server's — the request may say how much was received,
+ * never what the charge was worth.
+ *
+ * A credit note is the same operation pointing the other way: paying one
+ * is money leaving. So it carries a ceiling the others do not, because a
+ * refund can only return what actually came in — see below.
+ */
+export async function recordPayment(
+  db: Db, w: Workspace, invoiceId: string, payment: Payment = {},
+) {
   const invoice = await requireOne(
     await db.select().from(t.invoices)
       .where(and(eq(t.invoices.id, invoiceId), eq(t.invoices.organizationId, w.organizationId))),
     `invoice ${invoiceId}`,
   )
+
+  const outstanding = invoice.amount - invoice.paidAmount
+  if (outstanding <= 0) {
+    throw new Conflict(`${invoice.number} is already settled in full.`)
+  }
+
+  let amount = payment.amount ?? outstanding
+  if (!Number.isInteger(amount) || amount <= 0) {
+    throw new BadInput('A payment has to be a whole number of shillings above zero.')
+  }
+  if (amount > outstanding) {
+    throw new BadInput(
+      `${invoice.number} has ${outstanding} outstanding, so ${amount} is more than it owes.`,
+    )
+  }
+
+  /* The one ceiling that is not just arithmetic on this row.
+     A credit note offsets a charge, and its face value is the right
+     offset whether or not the charge was ever collected — that is what
+     makes the two net to nothing when a stay is cancelled unpaid. But
+     *paying* a credit note is cash going back out of the door, and there
+     is nothing to send back until some came in. Unguarded, a guest who
+     booked ten nights, paid nothing and left on the first day could be
+     refunded the whole ten, while still owing them. */
+  if (invoice.type === 'credit_note') {
+    const { refundable, returned } = await refundableAgainst(db, w, invoice)
+    if (refundable <= 0) {
+      throw new Conflict(returned > 0
+        ? `Everything collected on this agreement has already been returned (${returned}).`
+        : `Nothing has been collected on this agreement, so there is nothing to refund. `
+          + `${invoice.number} already cancels what was charged.`)
+    }
+    if (amount > refundable) {
+      throw new BadInput(
+        `Only ${refundable} has been collected on this agreement, so ${amount} is more `
+        + 'than there is to return.',
+      )
+    }
+  }
+
+  const paidOn = payment.paidOn ?? today(w)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(paidOn)) {
+    throw new BadInput('A payment date has to be a calendar date, as YYYY-MM-DD.')
+  }
+  if (paidOn > today(w)) {
+    throw new BadInput('A payment cannot be recorded for a day that has not happened yet.')
+  }
+
+  const paidAmount = invoice.paidAmount + amount
   await db.update(t.invoices).set({
-    status: 'paid',
-    paidAmount: invoice.amount,
-    paidOn: today(w),
-    method: invoice.method ?? 'bank_transfer',
+    status: paidAmount >= invoice.amount ? 'paid' : 'partial',
+    paidAmount,
+    paidOn,
+    method: payment.method ?? invoice.method ?? 'bank_transfer',
   }).where(eq(t.invoices.id, invoiceId))
+}
+
+/**
+ * What can still be sent back.
+ *
+ * Everything collected on the agreement the credit note belongs to, less
+ * everything already returned against it. Scoped to the agreement when
+ * the note names one and to the client when it does not, so a note left
+ * unlinked by a deleted agreement still has a ledger to answer to.
+ */
+async function refundableAgainst(
+  db: Db, w: Workspace, note: typeof t.invoices.$inferSelect,
+): Promise<{ refundable: number; returned: number }> {
+  const scope = note.bookingId
+    ? eq(t.invoices.bookingId, note.bookingId)
+    : eq(t.invoices.clientId, note.clientId)
+  const [sums] = await db.select({
+    collected: sql<number>`coalesce(sum(
+      case when ${t.invoices.type} <> 'credit_note' then ${t.invoices.paidAmount} else 0 end
+    ), 0)::int`,
+    returned: sql<number>`coalesce(sum(
+      case when ${t.invoices.type} = 'credit_note' then ${t.invoices.paidAmount} else 0 end
+    ), 0)::int`,
+  }).from(t.invoices)
+    .where(and(eq(t.invoices.organizationId, w.organizationId), scope))
+  const collected = sums?.collected ?? 0
+  const returned = sums?.returned ?? 0
+  return { refundable: Math.max(0, collected - returned), returned }
 }
 
 /** Chase an unpaid invoice, logged against the client's thread. */
@@ -392,11 +525,16 @@ export async function addBooking(db: Db, w: Workspace, booking: Booking, invoice
     )),
     `property ${booking.propertyId}`,
   )
+  /* Held for the transaction, because the one-home rule below is a read
+     of this client's agreements followed by an insert, and without the
+     lock two requests arriving together both read "not housed" and both
+     went ahead — reproducibly, four times out of four. The client is the
+     right row to serialise on: the rule is about them, not the unit. */
   const client = await requireOne(
     await db.select({ id: t.clients.id, name: t.clients.name }).from(t.clients).where(and(
       eq(t.clients.id, booking.clientId),
       eq(t.clients.organizationId, w.organizationId),
-    )),
+    )).for('update'),
     `client ${booking.clientId}`,
   )
 
@@ -538,11 +676,7 @@ export async function updateClient(db: Db, w: Workspace, id: string, client: Cli
 }
 
 export async function updateBooking(db: Db, w: Workspace, id: string, booking: Booking) {
-  const existing = await requireOne(
-    await db.select().from(t.bookings)
-      .where(and(eq(t.bookings.id, id), eq(t.bookings.organizationId, w.organizationId))),
-    `agreement ${id}`,
-  )
+  const existing = await lockBooking(db, w, id)
   /* Which unit and which client an agreement is for decides what was
      already charged against it, so an edit may not move either. */
   if (booking.propertyId !== existing.propertyId || booking.clientId !== existing.clientId) {
@@ -582,11 +716,7 @@ export async function updateBooking(db: Db, w: Workspace, id: string, booking: B
  * days late did not arrive on the day the agreement says.
  */
 export async function checkIn(db: Db, w: Workspace, id: string, on?: string) {
-  const booking = await requireOne(
-    await db.select().from(t.bookings)
-      .where(and(eq(t.bookings.id, id), eq(t.bookings.organizationId, w.organizationId))),
-    `agreement ${id}`,
-  )
+  const booking = await lockBooking(db, w, id)
   if (booking.status === 'cancelled') {
     throw new Conflict('That agreement was cancelled, so nobody is arriving on it.')
   }
@@ -632,11 +762,7 @@ export async function checkIn(db: Db, w: Workspace, id: string, on?: string) {
 export async function checkOut(
   db: Db, w: Workspace, id: string, on?: string, settle = true,
 ) {
-  const booking = await requireOne(
-    await db.select().from(t.bookings)
-      .where(and(eq(t.bookings.id, id), eq(t.bookings.organizationId, w.organizationId))),
-    `agreement ${id}`,
-  )
+  const booking = await lockBooking(db, w, id)
   if (!booking.arrivedOn) {
     throw new Conflict('Nobody has checked in on that agreement yet.')
   }
@@ -862,11 +988,7 @@ export async function deleteClient(db: Db, w: Workspace, id: string) {
 }
 
 export async function deleteBooking(db: Db, w: Workspace, id: string) {
-  const booking = await requireOne(
-    await db.select().from(t.bookings)
-      .where(and(eq(t.bookings.id, id), eq(t.bookings.organizationId, w.organizationId))),
-    `agreement ${id}`,
-  )
+  const booking = await lockBooking(db, w, id)
   /* A charge that was actually paid is a record of money that moved, so it
      survives the agreement, unlinked. One that was never paid was only ever
      an expectation this agreement created, and goes with it — otherwise a
