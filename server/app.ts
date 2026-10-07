@@ -22,7 +22,7 @@ import { readPortfolio } from './db/read.js'
 import { missingMigrations } from './db/applied.js'
 import { classify, explain, rootCause } from './db/fault.js'
 import {
-  BadInput, Conflict, NotFound, addBooking, addClient, addMaintenance, addMember, addNote,
+  BadInput, Conflict, NotFound, raiseDueRent, addBooking, addClient, addMaintenance, addMember, addNote,
   addProperty, checkIn, checkOut, deleteBooking, deleteClient, deleteMember, deleteProperty,
   grantPortalAccess, recordPayment, revokePortalAccess, sendReminder,
   reassignMaintenance, setMaintenanceStatus, setPropertyStatus, updateBooking, updateClient,
@@ -804,7 +804,16 @@ export function createApp(db: Db, driver: string) {
       return withPortfolio(tx, w, res, req)
     }))
 
-  app.get('/api/portfolio', requirePermission('view:dashboard'),
+  /* Rent that has come due is raised before the portfolio is read, so
+     what the page shows is what is owed today. */
+  const catchUpRent = (req: Request, _res: Response, next: NextFunction) => {
+    const viewer = (req as Authed).viewer
+    if (!viewer?.membership) { next(); return }
+    raiseDueRent(db, viewer.membership.organizationId, dayIn(viewer.timezone))
+      .then(() => next(), next)
+  }
+
+  app.get('/api/portfolio', requirePermission('view:dashboard'), catchUpRent,
     inWorkspace((tx, w, req, res) => withPortfolio(tx, w, res, req)))
 
   /* An amount, a method and a date may be given; each falls back to what

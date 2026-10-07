@@ -11,6 +11,7 @@
 
 import { dayIn } from '../../src/lib/dates.js'
 import { chargeSign, invoiceStatusOn } from '../../src/lib/derive.js'
+import { paidThroughOf } from '../../src/lib/create.js'
 import { sql } from 'drizzle-orm'
 import { INVOICES } from '../../scripts/fixture/portfolio.js'
 import { DEFAULT_REMINDERS, DEFAULT_TIMEZONE } from '../../src/lib/defaults.js'
@@ -113,7 +114,12 @@ console.log(`integrity check: ${orphanCount} orphaned links`)
 
 /* 8. The constraints actually reject. Valid data passing proves nothing
       about enforcement — each of these must be refused by the database. */
-const sample = rows[0]
+/* A rent charge with its agreement link taken off, so a copy of it is a
+   valid row in its own right. A straight copy would now be a second rent
+   charge for the same period on the same agreement, which 0017 refuses —
+   and the control below has to be a row with nothing wrong with it. */
+const rentRow = rows.find((r) => r.type === 'rent') ?? rows[0]
+const sample = { ...rentRow, bookingId: null }
 const rejects = async (label: string, row: Record<string, unknown>) => {
   try {
     await db.insert(t.invoices).values({ ...sample, id: `probe-${label}`, number: `PROBE-${label}`, ...row } as any)
@@ -143,6 +149,7 @@ await rejects('dated-without-payment', { amount: 1000, paidAmount: 0, paidOn: '2
 try {
   await db.insert(t.invoices).values({
     ...sample, id: 'probe-credit-ok', number: 'PROBE-CREDIT-OK', type: 'credit_note',
+    bookingId: rentRow.bookingId,
     amount: 1000, paidAmount: 0, paidOn: null, status: 'pending', method: null,
   } as any)
   await db.delete(t.invoices).where(sql`${t.invoices.id} = 'probe-credit-ok'`)
@@ -155,7 +162,10 @@ try {
 await rejects('credit-without-agreement', { type: 'credit_note', bookingId: null })
 /* And the sign lives in the type, not in the column: a negative amount
    would sail through every sum in the app unnoticed. */
-await rejects('negative-credit', { type: 'credit_note', amount: -1000 })
+await rejects('negative-credit', { type: 'credit_note', amount: -1000, bookingId: rentRow.bookingId })
+/* The same period of rent twice on one agreement — the copy is otherwise
+   exactly a row the database already holds. */
+await rejects('rent-period-twice', { bookingId: rentRow.bookingId })
 
 const badBooking = async () => {
   const b = (await db.select().from(t.bookings).limit(1))[0]
@@ -224,11 +234,13 @@ for (const i of data.INVOICES) {
   collected.set(i.clientId, (collected.get(i.clientId) ?? 0) + chargeSign(i.type) * i.paidAmount)
 }
 const expectedClients = data.CLIENTS.map((c) => ({ ...c, lifetimeValue: collected.get(c.id) ?? 0 }))
+/* paidThrough too: the end of the unbroken run of periods paid in full. */
+const expectedBookings = data.BOOKINGS.map((b) => ({ ...b, paidThrough: paidThroughOf(data.INVOICES, b.id) }))
 
 for (const [name, fromDb, fromMemory] of [
   ['properties', portfolio.properties, data.PROPERTIES],
   ['clients', portfolio.clients, expectedClients],
-  ['bookings', portfolio.bookings, data.BOOKINGS],
+  ['bookings', portfolio.bookings, expectedBookings],
   ['invoices', portfolio.invoices, expectedInvoices],
   ['maintenance', portfolio.maintenance, data.MAINTENANCE],
   ['team', portfolio.team, data.TEAM],

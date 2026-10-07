@@ -11,6 +11,7 @@ import { and, asc, eq, ne } from 'drizzle-orm'
 import { DEFAULT_REMINDERS, DEFAULT_TIMEZONE } from '../../src/lib/defaults.js'
 import { dayIn } from '../../src/lib/dates.js'
 import { chargeSign, invoiceStatusOn } from '../../src/lib/derive.js'
+import { paidThroughOf } from '../../src/lib/create.js'
 import { permissionMatrix } from '../workspace.js'
 import type { Db } from './client.js'
 import * as t from './schema.js'
@@ -171,7 +172,11 @@ export async function readPortfolio(
     id: b.id, reference: b.reference, propertyId: b.propertyId, clientId: b.clientId,
     mode: b.mode, status: b.status, start: b.startsOn, end: b.endsOn,
     rate: b.rate, deposit: b.deposit, advanceMonths: b.advanceMonths,
-    paidThrough: b.paidThrough, noticeDays: b.noticeDays, guests: b.guests,
+    /* Derived from the charges: the end of the unbroken run of
+         periods paid in full. The column was set to null when an
+         agreement was made and never written again, so every "rent
+         lapsed" alert that reads it stayed silent. */
+      paidThrough: paidThroughOf(invoiceRows as unknown as Invoice[], b.id), noticeDays: b.noticeDays, guests: b.guests,
     source: b.source, checkIn: hhmm(b.checkIn), checkOut: hhmm(b.checkOut),
     arrivedOn: b.arrivedOn, departedOn: b.departedOn,
     notes: b.notes, createdAt: b.createdAt,

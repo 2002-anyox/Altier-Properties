@@ -1546,4 +1546,33 @@ CREATE TRIGGER role_permissions_owner_ceiling
   END IF;
 END $mig_16$;
 
+-- ---------------------------------------------------------------
+-- migration: 0017_recurring_rent
+-- ---------------------------------------------------------------
+DO $mig_17$
+BEGIN
+  IF EXISTS (SELECT 1 FROM "drizzle"."__drizzle_migrations" WHERE hash = 'f2b325ba3f2b57f600ae7cf3d0f0f63f34630ad6854d6332f44760a3c6dd5dd7') THEN
+    RAISE NOTICE 'already applied: 0017_recurring_rent';
+  ELSE
+    EXECUTE $mig_17_sql$
+/* ------------------------------------------------------------------ *
+ * One rent charge per agreement per period.
+ *
+ * Rent is now raised as it comes due, on demand rather than by a job —
+ * the API runs serverless, with no process alive between requests to run
+ * one. So two people opening the app in the same minute can both find
+ * October unbilled. A lock serialises them in the ordinary case; this is
+ * what makes a second October impossible in every case.
+ * ------------------------------------------------------------------ */
+
+CREATE UNIQUE INDEX invoices_rent_period
+  ON invoices (booking_id, earns_from)
+  WHERE type = 'rent' AND booking_id IS NOT NULL;
+    $mig_17_sql$;
+    INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at)
+    VALUES ('f2b325ba3f2b57f600ae7cf3d0f0f63f34630ad6854d6332f44760a3c6dd5dd7', 1788332900000);
+    RAISE NOTICE 'applied: 0017_recurring_rent';
+  END IF;
+END $mig_17$;
+
 -- Done. Redeploy so the app picks up the code that uses this schema.

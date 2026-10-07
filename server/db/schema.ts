@@ -565,6 +565,10 @@ export const invoices = pgTable('invoices', {
   index('invoices_property_idx').on(t.propertyId),
   index('invoices_client_idx').on(t.clientId),
   index('invoices_status_idx').on(t.status),
+  /* One rent charge per agreement per period: rent is raised on demand,
+     and two requests in the same minute must not both raise October. */
+  uniqueIndex('invoices_rent_period').on(t.bookingId, t.earnsFrom)
+    .where(sql`type = 'rent' AND booking_id IS NOT NULL`),
   index('invoices_due_idx').on(t.dueOn),
   index('invoices_paid_on_idx').on(t.paidOn),
   index('invoices_earns_idx').on(t.earnsFrom, t.earnsTo),

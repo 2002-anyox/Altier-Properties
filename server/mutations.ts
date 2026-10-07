@@ -11,7 +11,7 @@ import { randomUUID } from 'node:crypto'
 import { and, eq, inArray, ne, sql } from 'drizzle-orm'
 import type { Db } from './db/client.js'
 import * as t from './db/schema.js'
-import { openingCharges, settlementCharges } from '../src/lib/create.js'
+import { openingCharges, rentFallingDue, settlementCharges } from '../src/lib/create.js'
 import { dayIn } from '../src/lib/dates.js'
 import { holdBlocking, whyBlocked } from '../src/lib/occupancy.js'
 import { stayWindow } from '../src/lib/stay.js'
@@ -736,6 +736,74 @@ export async function addBooking(db: Db, w: Workspace, booking: Booking, invoice
       propertyId: booking.propertyId,
     })
     .onConflictDoNothing()
+}
+
+/**
+ * Raises the rent that has come due across one workspace.
+ *
+ * Called as the portfolio is read, because the API is serverless and no
+ * process lives between requests to run a schedule. Runs as the service
+ * rather than as the viewer — keeping the books current is not something
+ * a viewer does, and a tenant's own load should not be refused for it —
+ * so every query names the workspace explicitly.
+ *
+ * Its own short transaction, holding a lock on the workspace for its
+ * length, so two loads in the same minute raise October once between
+ * them; the unique index on (agreement, period) is the backstop. Kept out
+ * of the request's transaction on purpose: a check-out in flight holds
+ * its agreement for update, and an insert referencing that agreement from
+ * inside the same request would wait on itself.
+ */
+export async function raiseDueRent(db: Db, organizationId: string, today: string) {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'rent:' + organizationId}))`)
+
+    const [settings] = await tx.select({ lead: t.reminderSettings.rentDueLeadDays })
+      .from(t.reminderSettings).where(eq(t.reminderSettings.organizationId, organizationId))
+    const leadDays = Math.max(0, Math.min(60, Number(settings?.lead ?? 0)))
+
+    const live = await tx.select().from(t.bookings).where(and(
+      eq(t.bookings.organizationId, organizationId),
+      inArray(t.bookings.mode, ['long_term', 'rental']),
+      ne(t.bookings.status, 'cancelled'),
+      sql`${t.bookings.departedOn} is null`,
+      sql`${t.bookings.startsOn} <= ${today}::date + ${leadDays}::int`,
+    ))
+    if (!live.length) return 0
+
+    const charges = await tx.select().from(t.invoices).where(and(
+      eq(t.invoices.organizationId, organizationId),
+      inArray(t.invoices.bookingId, live.map((b) => b.id)),
+    ))
+    const numbers = (await tx.select({ number: t.invoices.number }).from(t.invoices)
+      .where(eq(t.invoices.organizationId, organizationId))).map((r) => r.number)
+
+    const raised: Invoice[] = []
+    for (const b of live) {
+      const due = rentFallingDue(
+        {
+          id: b.id, reference: b.reference, propertyId: b.propertyId, clientId: b.clientId,
+          mode: b.mode, status: b.status, rate: b.rate, start: b.startsOn, end: b.endsOn,
+          departedOn: b.departedOn,
+        },
+        charges as unknown as Invoice[],
+        today,
+        [...numbers, ...raised.map((i) => i.number)],
+        leadDays,
+      )
+      raised.push(...due)
+    }
+    if (!raised.length) return 0
+
+    await tx.insert(t.invoices).values(raised.map((i) => ({
+      id: i.id, organizationId, number: i.number, propertyId: i.propertyId,
+      clientId: i.clientId, bookingId: i.bookingId, type: i.type,
+      issuedOn: i.issuedOn, dueOn: i.dueOn, amount: i.amount,
+      earnsFrom: i.earnsFrom, earnsTo: i.earnsTo, paidAmount: 0, status: 'pending' as const,
+      method: null, paidOn: null, memo: i.memo,
+    }))).onConflictDoNothing()
+    return raised.length
+  })
 }
 
 /**

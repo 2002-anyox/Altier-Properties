@@ -402,6 +402,105 @@ export function openingCharges(booking: Booking, existing: Invoice[]): Invoice[]
 }
 
 /**
+ * The rent that has come due on an agreement since its charges were last
+ * raised.
+ *
+ * An agreement used to raise its opening charge and nothing else, ever:
+ * a twelve-month lease billed one month, and a rental its advance. No job
+ * ran, no route raised a charge, and the sample data hid it by arriving
+ * with a year of invoices already written.
+ *
+ * Periods step from the start by whole months — the anchor, never the
+ * previous period, so a lease begun on the 31st stays on the last day of
+ * each month — and each is raised `leadDays` before it begins, so the
+ * reminder about it has something to point at. A fixed term stops at its
+ * end, prorating a last part-month by days; an open-ended rental runs
+ * until somebody leaves. A short stay is billed in full when it is booked
+ * and never here. Nothing is raised once a departure is recorded: from
+ * then the settlement decides what the days were worth.
+ *
+ * Pure, so the arithmetic can be checked without a database; the server
+ * writes what it returns.
+ */
+export function rentFallingDue(
+  booking: Pick<Booking, 'id' | 'reference' | 'propertyId' | 'clientId' | 'mode' | 'status'
+    | 'rate' | 'start' | 'end' | 'departedOn'>,
+  invoices: Invoice[],
+  today: string,
+  existingNumbers: string[],
+  leadDays = 0,
+): Invoice[] {
+  if (booking.mode === 'short_stay' || booking.status === 'cancelled' || booking.departedOn) return []
+  if (!(booking.rate > 0)) return []
+
+  const charges = timeCharges(invoices, booking.id)
+  if (!charges.length) return []
+  const covered = charges.reduce((latest, c) => (c.earnsTo > latest ? c.earnsTo : latest), charges[0].earnsTo)
+  const horizon = iso(addDays(today, leadDays))
+  const covers = (day: string) => charges.some((c) => c.earnsFrom <= day && day < c.earnsTo)
+
+  let n = nextNumber(existingNumbers, /^ALT-INV-(\d+)$/, 5000)
+  const out: Invoice[] = []
+
+  /* The first period that starts at or after what is already covered. */
+  let k = 0
+  while (addMonths(booking.start, k) < covered && k < 1200) k += 1
+
+  for (let guard = 0; guard < 240; guard += 1, k += 1) {
+    const from = addMonths(booking.start, k)
+    if (from > horizon) break
+    if (booking.end && from >= booking.end) break
+    const full = addMonths(booking.start, k + 1)
+    const to = booking.end && booking.end < full ? booking.end : full
+    if (covers(from)) continue
+
+    const days = Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000)
+    const whole = Math.round((Date.parse(full) - Date.parse(from)) / 86_400_000)
+    const amount = to === full ? booking.rate : Math.round(booking.rate * (days / whole))
+    if (amount <= 0) continue
+
+    const month = new Date(`${from}T00:00:00Z`)
+      .toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    out.push({
+      id: uid('i'),
+      number: `ALT-INV-${n++}`,
+      propertyId: booking.propertyId,
+      clientId: booking.clientId,
+      bookingId: booking.id,
+      type: 'rent',
+      issuedOn: from,
+      dueOn: from,
+      amount,
+      earnsFrom: from,
+      earnsTo: to,
+      paidAmount: 0,
+      status: 'pending',
+      method: null,
+      paidOn: null,
+      memo: to === full
+        ? `Rent for ${month} — ${booking.reference}`
+        : `Rent for ${month}, ${days} of ${whole} days — ${booking.reference}`,
+    })
+  }
+  return out
+}
+
+/**
+ * How far an agreement's rent is paid: the end of the unbroken run of
+ * periods paid in full from the start. A month paid out of order does not
+ * stretch it, because the one before it is still owed.
+ */
+export function paidThroughOf(invoices: Invoice[], bookingId: string): string | null {
+  let through: string | null = null
+  for (const c of timeCharges(invoices, bookingId)) {
+    if (c.paidAmount < c.amount) break
+    if (through !== null && c.earnsFrom > through) break
+    if (through === null || c.earnsTo > through) through = c.earnsTo
+  }
+  return through
+}
+
+/**
  * The charges that bring an agreement into line with the days actually spent.
  *
  * Raised at check-out, and never by editing what was already billed — an

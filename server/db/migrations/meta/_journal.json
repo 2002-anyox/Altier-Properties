@@ -120,6 +120,13 @@
       "when": 1788246500000,
       "tag": "0016_owner_ceiling",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1788332900000,
+      "tag": "0017_recurring_rent",
+      "breakpoints": true
     }
   ]
 }

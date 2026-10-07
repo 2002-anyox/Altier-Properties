@@ -14,7 +14,7 @@
 import { earnedInMonth, chargeSign } from '../src/lib/derive.js'
 import { computeKpis } from '../src/lib/derive.js'
 import { settleStay, stayWindow, valueOver, timeCharges, gapsIn, mergeWindows } from '../src/lib/stay.js'
-import { settlementCharges } from '../src/lib/create.js'
+import { paidThroughOf, rentFallingDue, settlementCharges } from '../src/lib/create.js'
 import type { Booking, Invoice, Property } from '../src/lib/types.js'
 import { addMonths } from '../src/lib/dates.js'
 
@@ -357,6 +357,64 @@ ok(addMonths('2026-12-15', 1) === '2027-01-15', 'and the year turns over')
   const s = settleStay(b, [advance], '2026-02-14')
   ok(s.credit === 1_400_000,
      `leaving halfway through February returns half of February, not 14 of 31 days (${s.credit})`)
+}
+
+/* --------------------------- rent that recurs ------------------------ *
+ * An agreement used to raise its opening charge and nothing after it: a
+ * year-long lease billed one month. These hold the periods to the start
+ * date, the end date, the lead time and each other.
+ * ------------------------------------------------------------------- */
+{
+  const lease = { id: 'b-l', reference: 'AGR-L', propertyId: 'p', clientId: 'c', mode: 'long_term' as const,
+    status: 'in_progress' as const, rate: 1_200_000, start: '2026-07-01', end: '2027-07-01', departedOn: null }
+  const first = charge({ id: 'i-1', bookingId: 'b-l', type: 'rent', amount: 1_200_000,
+    earnsFrom: '2026-07-01', earnsTo: '2026-08-01' })
+  const due = rentFallingDue(lease, [first], '2026-10-07', ['ALT-INV-5001'], 5)
+  ok(due.map((i) => i.earnsFrom).join() === '2026-08-01,2026-09-01,2026-10-01',
+     `a lease begun in July and read in October has August, September and October raised (${due.map((i) => i.earnsFrom).join()})`)
+  ok(due.every((i) => i.amount === 1_200_000 && i.type === 'rent' && i.paidAmount === 0),
+     'each a full month of rent, unpaid')
+  ok(new Set(due.map((i) => i.number)).size === 3 && due[0].number === 'ALT-INV-5002',
+     `numbered on from the highest already taken (${due.map((i) => i.number).join()})`)
+  ok(rentFallingDue(lease, [first, ...due], '2026-10-07', [], 5).length === 0,
+     'and reading again raises nothing more')
+  ok(rentFallingDue(lease, [first, ...due], '2026-10-27', [], 5)[0]?.earnsFrom === '2026-11-01',
+     'November is raised five days before it begins')
+
+  const monthEnd = { ...lease, id: 'b-m', start: '2026-01-31', end: null }
+  const jan = charge({ id: 'i-m', bookingId: 'b-m', type: 'rent', amount: 1_200_000,
+    earnsFrom: '2026-01-31', earnsTo: '2026-02-28' })
+  const months = rentFallingDue(monthEnd, [jan], '2026-05-01', [], 0).map((i) => i.earnsFrom)
+  ok(months.join() === '2026-02-28,2026-03-31,2026-04-30',
+     `a lease begun on the 31st stays on the last day of each month (${months.join()})`)
+
+  const short = { ...lease, id: 'b-s', end: '2026-09-15' }
+  const july = charge({ id: 'i-s', bookingId: 'b-s', type: 'rent', amount: 1_200_000,
+    earnsFrom: '2026-07-01', earnsTo: '2026-08-01' })
+  const tail = rentFallingDue(short, [july], '2026-10-07', [], 0)
+  ok(tail.length === 2 && tail[1].earnsTo === '2026-09-15' && tail[1].amount === 560_000,
+     `a term ending on the 15th bills August and fourteen days of September (${tail.map((i) => `${i.earnsFrom}→${i.earnsTo} ${i.amount}`).join(', ')})`)
+
+  const rental = { ...lease, id: 'b-r', mode: 'rental' as const, end: null }
+  const advance = charge({ id: 'i-r', bookingId: 'b-r', type: 'advance', amount: 3_600_000,
+    earnsFrom: '2026-07-01', earnsTo: '2026-10-01' })
+  const after = rentFallingDue(rental, [advance], '2026-10-07', [], 0)
+  ok(after.length === 1 && after[0].earnsFrom === '2026-10-01',
+     'a rental bills the month after its three-month advance runs out, and not before')
+
+  ok(rentFallingDue({ ...lease, departedOn: '2026-08-15' }, [first], '2026-10-07', [], 0).length === 0,
+     'nothing once they have left — the settlement decides from there')
+  ok(rentFallingDue({ ...lease, status: 'cancelled' }, [first], '2026-10-07', [], 0).length === 0,
+     'nor on a cancelled agreement')
+  ok(rentFallingDue({ ...lease, mode: 'short_stay' }, [first], '2026-10-07', [], 0).length === 0,
+     'nor on a short stay, billed in full when booked')
+
+  const paid = (c: Invoice) => ({ ...c, paidAmount: c.amount })
+  ok(paidThroughOf([paid(first), paid(due[0]), due[1]], 'b-l') === '2026-09-01',
+     'rent is paid through the end of the last month in an unbroken paid run')
+  ok(paidThroughOf([paid(first), due[0], paid(due[1])], 'b-l') === '2026-08-01',
+     'a month paid out of order does not stretch it past one still owed')
+  ok(paidThroughOf([first], 'b-l') === null, 'and nothing paid is paid through nothing')
 }
 
 if (fail.length) {

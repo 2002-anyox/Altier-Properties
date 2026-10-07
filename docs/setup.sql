@@ -1630,6 +1630,23 @@ CREATE TRIGGER role_permissions_owner_ceiling
   FOR EACH ROW EXECUTE FUNCTION altier_guard_permission_matrix();
 
 -- ---------------------------------------------------------------
+-- migration: 0017_recurring_rent
+-- ---------------------------------------------------------------
+/* ------------------------------------------------------------------ *
+ * One rent charge per agreement per period.
+ *
+ * Rent is now raised as it comes due, on demand rather than by a job —
+ * the API runs serverless, with no process alive between requests to run
+ * one. So two people opening the app in the same minute can both find
+ * October unbilled. A lock serialises them in the ordinary case; this is
+ * what makes a second October impossible in every case.
+ * ------------------------------------------------------------------ */
+
+CREATE UNIQUE INDEX invoices_rent_period
+  ON invoices (booking_id, earns_from)
+  WHERE type = 'rent' AND booking_id IS NOT NULL;
+
+-- ---------------------------------------------------------------
 -- Record the migrations as applied, so `npm run db:migrate`
 -- against this database does nothing rather than failing.
 -- ---------------------------------------------------------------
@@ -1656,6 +1673,7 @@ INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('f4c3466
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('4ad85a020f0fc082d69a8a8a6d113d88d5c0a9a31946a5540f8dd6acceb31102', 1788073700000);
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('83983e48d8424fe982f44a4884ae6e91762a44c1a3502a700e11bd47e4330e28', 1788160100000);
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('6c880c8006b8d1872213db38cb788e9beff7439e42d001bc4e4c8e1efcf7442c', 1788246500000);
+INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('f2b325ba3f2b57f600ae7cf3d0f0f63f34630ad6854d6332f44760a3c6dd5dd7', 1788332900000);
 
 -- ---------------------------------------------------------------
 -- Reminder settings. One row, always id 1 — the app reads it on

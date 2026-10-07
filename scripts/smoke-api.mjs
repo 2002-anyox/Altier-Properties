@@ -1163,6 +1163,35 @@ try {
   }))
   ok(jobAttempt.status === 200, `but staff can raise a maintenance job (got ${jobAttempt.status})`)
 
+  /* --------------------------- rent recurs ---------------------------- *
+   * An agreement used to raise its opening charge and nothing after it, so
+   * a year-long lease billed one month. A lease begun three months ago has
+   * to arrive at the portfolio with the months since raised — once, however
+   * many times the portfolio is read.
+   * ------------------------------------------------------------------- */
+  cookie = ownerCookie
+  const rentHome = { ...property, id: `p-rent-${stamp}`, code: `RENT-${stamp}`, name: 'Recurring Rent House' }
+  await get('/properties', json(rentHome))
+  const rentTenant = {
+    ...client, id: `c-rent-${stamp}`, name: 'Recurring Tenant', email: `rent-${stamp}@example.com`,
+    propertyIds: [rentHome.id],
+  }
+  await get('/clients', json(rentTenant))
+  const leaseStart = plusMonths(today, -3)
+  const lease = {
+    ...booking, id: `b-rent-${stamp}`, reference: `RENT-AGR-${stamp}`, propertyId: rentHome.id,
+    clientId: rentTenant.id, mode: 'long_term', status: 'in_progress', start: leaseStart,
+    end: plusMonths(leaseStart, 12), arrivedOn: leaseStart, departedOn: null, rate: 900_000, deposit: 0,
+  }
+  const leased = await get('/bookings', json({ booking: lease, invoices: [] }))
+  ok(leased.status === 200, `a lease begun three months ago can be recorded (got ${leased.status})`)
+  await Promise.all([get('/portfolio'), get('/portfolio'), get('/portfolio')])
+  const rentNow = (await get('/portfolio').then((r) => r.json())).invoices
+    .filter((i) => i.bookingId === lease.id && i.type === 'rent')
+  const periods = new Set(rentNow.map((i) => i.earnsFrom))
+  ok(rentNow.length >= 4, `and arrives with the months since raised (${rentNow.length} rent charges)`)
+  ok(periods.size === rentNow.length, 'each period once, however many times it was read at once')
+
   /* ------------------- a manager can do a manager's job --------------- *
    * The role is granted edit:properties and edit:clients by default, and
    * could do neither: the policies demanded a row be visible before it
