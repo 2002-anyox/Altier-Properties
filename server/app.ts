@@ -1362,14 +1362,80 @@ export function createApp(db: Db, driver: string) {
       res.status(403).json({ error: 'Your role does not allow this.' })
       return
     }
-    if (violation) {
-      res.status(422).json({ error: violation })
+    /* Everything below used to answer with the database's own words —
+       "duplicate key value violates unique constraint clients_pkey", or,
+       for anything unforeseen, the full statement with its parameters,
+       which on one route included a password hash. Those are for the log,
+       which still gets every one of them above. A person gets a sentence. */
+    const pg = driverError(err)
+    if (violation || pg?.code?.startsWith('23')) {
+      res.status(422).json({ error: constraintMessage(pg) })
       return
     }
-    res.status(500).json({ error: err.message })
+    const malformed = pg?.code ? MALFORMED[pg.code] : undefined
+    if (malformed) {
+      res.status(400).json({ error: malformed })
+      return
+    }
+    /* The body parser marks its own failures with a status — a body that
+       is not JSON, or one too large to read — and they are the caller's
+       doing, not ours. They used to be answered as 500s. */
+    const status = (err as { status?: number; statusCode?: number }).status
+      ?? (err as { statusCode?: number }).statusCode
+    if (status && status >= 400 && status < 500) {
+      res.status(status).json({
+        error: status === 413 ? 'That request is too large.'
+          : (err as { type?: string }).type === 'entity.parse.failed'
+            ? 'That request body is not valid JSON.'
+            : 'That request could not be read.',
+      })
+      return
+    }
+    res.status(500).json({ error: 'Something went wrong on our side. It has been logged.' })
   })
 
   return app
+}
+
+
+/* -------------------------- database refusals ----------------------- */
+
+interface DriverError { code?: string; constraint?: string; column?: string; table?: string }
+
+/** The driver's own error, wherever Drizzle has wrapped it. */
+function driverError(err: unknown): DriverError | undefined {
+  let node = err as (DriverError & { cause?: unknown }) | undefined
+  for (let depth = 0; node && depth < 6; depth += 1) {
+    if (typeof node.code === 'string' && /^[0-9A-Z]{5}$/.test(node.code)) return node
+    node = node.cause as (DriverError & { cause?: unknown }) | undefined
+  }
+  return undefined
+}
+
+/** Values the database could not take at all, by SQLSTATE. */
+const MALFORMED: Record<string, string> = {
+  '22P02': 'A value is not one this field accepts.',
+  '22007': 'A date is not a real calendar date.',
+  '22008': 'A date is not a real calendar date.',
+  '22003': 'A number is too large for this field.',
+  '22021': 'Some text contains a character that cannot be stored.',
+  '22P05': 'Some text contains a character that cannot be stored.',
+  '22001': 'Some text is too long for this field.',
+}
+
+/** A field name a person would recognise, from a column name. */
+const fieldName = (column?: string) => (column ?? 'a field').replace(/_/g, ' ')
+
+/** What a refused constraint means, without naming tables or constraints. */
+function constraintMessage(pg?: DriverError): string {
+  switch (pg?.code) {
+    case '23505': return 'That already exists — something else is using the same identifier or number.'
+    case '23502': return `Something required is missing: ${fieldName(pg.column)}.`
+    case '23503': return 'That refers to something that does not exist, or that other records still depend on.'
+    case '23514': return 'A value is outside what is allowed for it.'
+    case '23P01': return 'That overlaps with something already recorded.'
+    default: return 'That change was refused because it would leave the records inconsistent.'
+  }
 }
 
 /** Opens the database and builds the app around it. */
