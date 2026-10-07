@@ -17,9 +17,11 @@ import { holdBlocking, whyBlocked } from '../src/lib/occupancy.js'
 import { stayWindow } from '../src/lib/stay.js'
 import { assertSeatAvailable } from './workspace.js'
 import type {
-  Booking, Client, Invoice, MaintenancePriority, MaintenanceStatus, PaymentMethod,
-  Property, PropertyStatus, ReminderSettings, Role, TeamMember,
+  Booking, Client, Invoice, MaintenanceCategory, MaintenancePriority, MaintenanceStatus,
+  PaymentMethod, Property, PropertyStatus, ReminderSettings, Role, TeamMember,
 } from '../src/lib/types.js'
+import { MAINTENANCE_CATEGORIES } from '../src/lib/types.js'
+import { TRADE_FOR } from '../src/lib/labels.js'
 
 /**
  * The calendar day where the workspace is.
@@ -298,31 +300,74 @@ export interface NewMaintenance {
   assigneeId?: string
   /** What it is expected to cost. This is what the board commits. */
   estimatedCost?: number
+  /** What kind of job it is; the trade sent for it follows from this. */
+  category?: MaintenanceCategory
 }
 
 export async function addMaintenance(db: Db, w: Workspace, input: NewMaintenance) {
-  const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(t.maintenanceRequests)
-  const id = `m-new-${Date.now()}`
-  const reference = `MNT-${3400 + Number(n)}`
+  /* The request body is the only thing standing between this insert and
+     the database, so its shape is checked here rather than discovered as
+     a constraint violation with the statement attached. */
+  const title = String(input.title ?? '').trim()
+  if (!title) throw new BadInput('A job needs a title saying what needs doing.')
+  if (title.length > 200) throw new BadInput('Keep the title under 200 characters; detail goes below it.')
+  const priority = input.priority as string
+  if (!['urgent', 'high', 'medium', 'low'].includes(priority)) {
+    throw new BadInput('A priority has to be urgent, high, medium or low.')
+  }
+  const category = (input.category ?? 'structural') as string
+  if (!(MAINTENANCE_CATEGORIES as readonly string[]).includes(category)) {
+    throw new BadInput(`A category has to be one of ${MAINTENANCE_CATEGORIES.join(', ')}.`)
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(input.dueOn ?? ''))) {
+    throw new BadInput('A target date has to be a calendar date, as YYYY-MM-DD.')
+  }
+  const estimate = input.estimatedCost === undefined ? 0 : Number(input.estimatedCost)
+  if (!Number.isFinite(estimate) || estimate < 0) {
+    throw new BadInput('An estimate has to be zero or more.')
+  }
+  /* The property has to be one this workspace holds. A job against
+     nothing used to be accepted by the form and refused by a foreign key,
+     after the board had already announced it. */
+  await requireOne(
+    await db.select({ id: t.properties.id }).from(t.properties).where(and(
+      eq(t.properties.id, String(input.propertyId ?? '')),
+      eq(t.properties.organizationId, w.organizationId),
+    )),
+    `property ${input.propertyId}`,
+  )
+
+  /* The next number after the highest one taken, not one more than how
+     many there are. Counting worked until something was deleted — a
+     property going takes its jobs with it — after which the count fell
+     behind the numbers already used, the next reference collided with
+     one that existed, and so did every one after it. Maintenance stopped
+     being creatable at all, permanently, from one deletion. */
+  const [{ top }] = await db.select({
+    top: sql<number>`coalesce(max(nullif(regexp_replace(${t.maintenanceRequests.reference}, '\\D', '', 'g'), '')::int), 3399)`,
+  }).from(t.maintenanceRequests)
+    .where(eq(t.maintenanceRequests.organizationId, w.organizationId))
+  const id = `m-${randomUUID().slice(0, 12)}`
+  const reference = `MNT-${Number(top) + 1}`
 
   await db.insert(t.maintenanceRequests).values({
     id,
     organizationId: w.organizationId,
     reference,
     propertyId: input.propertyId,
-    title: input.title,
-    description: input.description?.trim() || 'Logged from the maintenance board.',
-    category: 'structural',
-    priority: input.priority,
+    title,
+    description: String(input.description ?? '').trim() || 'Logged from the maintenance board.',
+    category: category as MaintenanceCategory,
+    priority: priority as MaintenancePriority,
     status: 'reported',
-    vendor: input.vendor,
-    trade: 'Building',
+    vendor: String(input.vendor ?? '').trim(),
+    trade: TRADE_FOR[category as MaintenanceCategory],
     assigneeId: await assignableTo(db, w, input.assigneeId),
     reportedBy: w.name,
     reportedOn: today(w),
     dueOn: input.dueOn,
     completedOn: null,
-    estimatedCost: Math.max(0, Math.round(input.estimatedCost ?? 0)),
+    estimatedCost: Math.round(estimate),
     actualCost: null,
   })
   await db.insert(t.maintenanceEvents).values({
@@ -941,9 +986,29 @@ export async function deleteProperty(db: Db, w: Workspace, id: string) {
       .where(and(eq(t.properties.id, id), eq(t.properties.organizationId, w.organizationId))),
     `property ${id}`,
   )
-  // invoices reference clients with ON DELETE RESTRICT, so clear them first.
-  await db.delete(t.invoices).where(eq(t.invoices.propertyId, id))
-  await db.delete(t.bookings).where(eq(t.bookings.propertyId, id))
+  const [{ n: agreements }] = await db.select({ n: sql<number>`count(*)::int` })
+    .from(t.bookings).where(eq(t.bookings.propertyId, id))
+  const [{ n: charges }] = await db.select({ n: sql<number>`count(*)::int` })
+    .from(t.invoices).where(eq(t.invoices.propertyId, id))
+
+  /* The same rule a client has, for the same reason. This used to delete
+     every charge on the unit first — paid ones included — so removing a
+     property erased the record of money that had actually moved, and
+     a manager scoped to one unit could take seventeen invoices with it.
+     A property with history is retired, not removed. */
+  if (agreements > 0 || charges > 0) {
+    throw new Conflict(
+      `${describe(agreements, 'agreement')} and ${describe(charges, 'charge')} reference this property, `
+      + 'so removing it would destroy that history. Mark it inactive instead.',
+    )
+  }
+
+  /* Nothing financial left, so what remains is the property's own detail
+     and the access granted to it. The access rows carry no foreign key,
+     and left behind they handed a re-created property with the same id
+     straight back to whoever was assigned the old one. */
+  await db.delete(t.memberProperties).where(eq(t.memberProperties.propertyId, id))
+  await db.delete(t.invitationProperties).where(eq(t.invitationProperties.propertyId, id))
   await db.delete(t.properties).where(eq(t.properties.id, id))
 }
 

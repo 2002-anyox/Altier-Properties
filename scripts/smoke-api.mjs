@@ -662,6 +662,17 @@ try {
   const stillThere = await get('/portfolio').then((r) => r.json())
   ok(!!stillThere.clients.find((c) => c.id === client.id), 'the refused client is still there')
 
+  /* The same rule for a property. It used to delete every charge on the
+     unit first, paid ones included, so removing a property erased money
+     that had actually moved. */
+  const chargesBefore = stillThere.invoices.filter((i) => i.propertyId === property.id).length
+  const propRefused = await get(`/properties/${property.id}`, { method: 'DELETE' })
+  ok(propRefused.status === 409, `a property with history refuses deletion as 409 (got ${propRefused.status})`)
+  const propKept = await get('/portfolio').then((r) => r.json())
+  ok(propKept.invoices.filter((i) => i.propertyId === property.id).length === chargesBefore
+     && chargesBefore > 0,
+     `and its charges are untouched (${chargesBefore})`)
+
   /* An end date on or before the start is not a period; the schema refuses
      one, so the API has to refuse it first with a reason worth reading. */
   const badRange = await get(`/bookings/${booking.id}`, put({ ...booking, status: 'completed', end: booking.start }))

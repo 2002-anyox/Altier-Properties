@@ -15,7 +15,11 @@ import { can, roleLabel } from '../lib/rbac.js'
 import { TODAY, dayOffset, daysBetween, iso } from '../lib/dates.js'
 import { mediumDate, money, relativeDay, shortDate } from '../lib/format.js'
 import { itemVariants, listVariants } from '../lib/motion.js'
-import type { MaintenancePriority, MaintenanceRequest, MaintenanceStatus } from '../lib/types.js'
+import type {
+  MaintenanceCategory, MaintenancePriority, MaintenanceRequest, MaintenanceStatus,
+} from '../lib/types.js'
+import { MAINTENANCE_CATEGORIES } from '../lib/types.js'
+import { MAINTENANCE_CATEGORY_LABEL, TRADE_FOR } from '../lib/labels.js'
 
 const COLUMNS: MaintenanceStatus[] = ['reported', 'scheduled', 'in_progress', 'awaiting_parts', 'completed']
 
@@ -36,6 +40,7 @@ export default function Maintenance() {
     title: '',
     propertyId: state.properties[0]?.id ?? '',
     priority: 'medium' as MaintenancePriority,
+    category: 'plumbing' as MaintenanceCategory,
     description: '',
     vendor: '',
     dueOn: dayOffset(7),
@@ -63,19 +68,25 @@ export default function Maintenance() {
   const committed = openJobs.reduce((a, m) => a + m.estimatedCost, 0)
 
   const createRequest = () => {
-    if (!draft.title.trim()) return
+    if (!draft.title.trim() || !draft.propertyId) return
     const id = `m-new-${Date.now()}`
+    /* One past the highest reference on the board, as the server numbers
+       it — counting the list fell behind as soon as a job was deleted. */
+    const top = state.maintenance.reduce((best, m) => {
+      const n = Number(m.reference.replace(/\D/g, ''))
+      return Number.isFinite(n) && n > best ? n : best
+    }, 3399)
     const request: MaintenanceRequest = {
       id,
-      reference: `MNT-${3400 + state.maintenance.length}`,
+      reference: `MNT-${top + 1}`,
       propertyId: draft.propertyId,
       title: draft.title.trim(),
       description: draft.description.trim() || 'Logged from the maintenance board.',
-      category: 'structural',
+      category: draft.category,
       priority: draft.priority,
       status: 'reported',
       vendor: draft.vendor,
-      trade: 'Building',
+      trade: TRADE_FOR[draft.category],
       assigneeId: draft.assigneeId,
       reportedBy: currentMember(state).name,
       reportedOn: iso(TODAY),
@@ -454,7 +465,7 @@ export default function Maintenance() {
         footer={
           <>
             <Button variant="secondary" onClick={() => setCreating(false)}>Cancel</Button>
-            <Button variant="primary" onClick={createRequest} disabled={!draft.title.trim()}>Create job</Button>
+            <Button variant="primary" onClick={createRequest} disabled={!draft.title.trim() || !draft.propertyId}>Create job</Button>
           </>
         }
       >
@@ -466,6 +477,17 @@ export default function Maintenance() {
             <Field label="Property" id="job-prop">
               <Select id="job-prop" value={draft.propertyId} onChange={(e) => setDraft({ ...draft, propertyId: e.target.value })}>
                 {state.properties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </Select>
+            </Field>
+            <Field label="Kind of job" id="job-category">
+              <Select
+                id="job-category"
+                value={draft.category}
+                onChange={(e) => setDraft({ ...draft, category: e.target.value as MaintenanceCategory })}
+              >
+                {MAINTENANCE_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{MAINTENANCE_CATEGORY_LABEL[c]}</option>
+                ))}
               </Select>
             </Field>
             <Field label="Priority" id="job-priority">

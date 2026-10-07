@@ -235,6 +235,11 @@ export interface Invoice {
 export const PAYMENT_METHODS = ['bank_transfer', 'card', 'mobile_money', 'cash'] as const
 export type PaymentMethod = typeof PAYMENT_METHODS[number]
 
+export const MAINTENANCE_CATEGORIES = [
+  'plumbing', 'electrical', 'hvac', 'appliance', 'structural', 'cleaning', 'safety', 'grounds',
+] as const
+export type MaintenanceCategory = typeof MAINTENANCE_CATEGORIES[number]
+
 export type MaintenancePriority = 'urgent' | 'high' | 'medium' | 'low'
 export type MaintenanceStatus =
   | 'reported'
@@ -255,7 +260,7 @@ export interface MaintenanceRequest {
   propertyId: string
   title: string
   description: string
-  category: 'plumbing' | 'electrical' | 'hvac' | 'appliance' | 'structural' | 'cleaning' | 'safety' | 'grounds'
+  category: MaintenanceCategory
   priority: MaintenancePriority
   status: MaintenanceStatus
   vendor: string

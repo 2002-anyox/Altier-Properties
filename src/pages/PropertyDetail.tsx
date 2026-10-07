@@ -523,12 +523,21 @@ export default function PropertyDetail() {
         open={removing}
         onClose={() => setRemoving(false)}
         title="Delete this property"
-        subject={`${property.name} will be removed from the portfolio.`}
-        consequences={[
+        subject={bookings.length || invoices.length
+          ? `${property.name} has history on this portfolio — agreements and charges are the record `
+            + 'of what was owed and paid, so it is kept. Mark it inactive to take it out of availability.'
+          : `${property.name} will be removed from the portfolio.`}
+        blockers={[
           bookings.length && `${bookings.length} agreements against this unit`,
           invoices.length && `${invoices.length} charges, paid and outstanding`,
+        ].filter(Boolean) as string[]}
+        consequences={[
           jobs.length && `${jobs.length} maintenance jobs`,
         ].filter(Boolean) as string[]}
+        alternative={property.status === 'inactive' ? undefined : {
+          label: 'Mark inactive',
+          onSelect: () => dispatch({ type: 'set-property-status', id: property.id, status: 'inactive' }),
+        }}
         confirmLabel="Delete property"
         onConfirm={() => { dispatch({ type: 'delete-property', id: property.id }); navigate('/properties') }}
       />

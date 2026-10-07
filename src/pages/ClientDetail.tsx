@@ -384,11 +384,15 @@ export default function ClientDetail() {
         subject={bookings.length || invoices.length
           ? `${client.name} has history on this portfolio, so the record is kept rather than deleted.`
           : `${client.name} will be removed from the portfolio.`}
-        consequences={[
+        blockers={[
           bookings.length && `${bookings.length} agreements reference them`,
           invoices.length && `${invoices.length} charges reference them`,
         ].filter(Boolean) as string[]}
-        confirmLabel={bookings.length || invoices.length ? 'Try anyway' : 'Delete client'}
+        alternative={client.status === 'past' ? undefined : {
+          label: 'Mark as past',
+          onSelect: () => dispatch({ type: 'update-client', client: { ...client, status: 'past' } }),
+        }}
+        confirmLabel="Delete client"
         onConfirm={() => { dispatch({ type: 'delete-client', id: client.id }); navigate('/clients') }}
       />
 

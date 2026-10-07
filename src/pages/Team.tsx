@@ -255,8 +255,8 @@ export default function Team() {
           ? `${removing?.name} still has work assigned to them, so they cannot be removed yet.`
           : `${removing?.name} loses access here immediately and the seat comes back. Their `
             + 'Altier account is untouched — it may be their seat in somebody else\'s workspace.'}
-        consequences={blockers}
-        confirmLabel={blockers.length ? 'Try anyway' : 'Remove'}
+        blockers={blockers}
+        confirmLabel="Remove"
         onConfirm={() => {
           if (!removing) return
           dispatch({ type: 'delete-member', id: removing.id })

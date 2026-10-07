@@ -821,6 +821,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           propertyId: r.propertyId, title: r.title, description: r.description,
           priority: r.priority, vendor: r.vendor, dueOn: r.dueOn,
           assigneeId: r.assigneeId || undefined,
+          /* Both used to stop here: the form collected them, the optimistic
+             row showed them, and the request left them out — so the
+             estimate committed on the board for under a second and then
+             fell back to nothing when the server's copy replaced it. */
+          estimatedCost: r.estimatedCost,
+          category: r.category,
         })
       }
       case 'add-property': return () => api.addProperty(action.property)

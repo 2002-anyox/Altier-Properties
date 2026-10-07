@@ -16,7 +16,7 @@
  * new one is ever added and forgotten.
  * ------------------------------------------------------------------ */
 
-import type { BookingStatus, ChargeType, InvoiceStatus, TenancyMode } from './types.js'
+import type { BookingStatus, ChargeType, InvoiceStatus, MaintenanceCategory, TenancyMode } from './types.js'
 
 /**
  * Note `in_progress`: "Running" rather than "In residence".
@@ -79,4 +79,32 @@ export function titleOf(value: string, map?: Record<string, string>): string {
   if (map && map[value]) return map[value]
   const spaced = value.replace(/_/g, ' ')
   return spaced.charAt(0).toUpperCase() + spaced.slice(1)
+}
+
+/** What a job is, as the board and the drawer name it. */
+export const MAINTENANCE_CATEGORY_LABEL: Record<MaintenanceCategory, string> = {
+  plumbing: 'Plumbing',
+  electrical: 'Electrical',
+  hvac: 'Air conditioning',
+  appliance: 'Appliance',
+  structural: 'Structural',
+  cleaning: 'Cleaning',
+  safety: 'Safety',
+  grounds: 'Grounds',
+}
+
+/**
+ * Who is sent for each kind of job. Derived rather than typed, so the
+ * trade on a job always agrees with what the job is — every request used
+ * to be filed "structural · Building", a burst pipe included.
+ */
+export const TRADE_FOR: Record<MaintenanceCategory, string> = {
+  plumbing: 'Plumber',
+  electrical: 'Electrician',
+  hvac: 'HVAC technician',
+  appliance: 'Appliance repair',
+  structural: 'Builder',
+  cleaning: 'Cleaner',
+  safety: 'Safety inspector',
+  grounds: 'Groundskeeper',
 }
