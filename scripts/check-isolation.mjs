@@ -308,6 +308,23 @@ if (staff) {
      VALUES ('pr-crowned', 'Crowned', 'crowned@example.com', true)`,
     [], home.p, home.o,
   )
+
+  /* Ownership stays with owners even for somebody the routes would let
+     through. Asserted as a staff member writing directly, so this holds
+     whatever a future route forgets to check. */
+  if (staff) {
+    await refusedWrite(
+      'a non-owner cannot make themselves an owner',
+      `UPDATE organization_members SET role = 'owner' WHERE id = $1`,
+      [staff.m], staff.p, staff.o,
+    )
+    await refusedWrite(
+      'nor rewrite what a role reaches',
+      `INSERT INTO role_permissions (organization_id, role, permission, allowed)
+       VALUES ($1, 'staff', 'edit:payments', true)`,
+      [staff.o], staff.p, staff.o,
+    )
+  }
 }
 
 /* ------------------------------------------------------------------ *

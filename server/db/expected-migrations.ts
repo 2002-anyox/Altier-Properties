@@ -18,4 +18,5 @@ export const EXPECTED_MIGRATIONS: ReadonlyArray<{ tag: string; hash: string }> =
   { tag: '0013_portal_lifecycle', hash: 'f4c346629b152ab4d3623077b21a83efb4e825e0c6b0abbf6c5727c36ffd4705' },
   { tag: '0014_managers_can_create', hash: '4ad85a020f0fc082d69a8a8a6d113d88d5c0a9a31946a5540f8dd6acceb31102' },
   { tag: '0015_super_admin_flag', hash: '83983e48d8424fe982f44a4884ae6e91762a44c1a3502a700e11bd47e4330e28' },
+  { tag: '0016_owner_ceiling', hash: '6c880c8006b8d1872213db38cb788e9beff7439e42d001bc4e4c8e1efcf7442c' },
 ]

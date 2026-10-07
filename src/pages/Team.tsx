@@ -162,6 +162,9 @@ export default function Team() {
                   <td className="px-4 py-3 text-ink-secondary">{mediumDate(member.since)}</td>
                   {mayManage && (
                     <td className="px-5 py-3 text-right sm:px-6">
+                      {/* Managing the team is not owning the workspace: an owner's
+                          record is changed by an owner, which the server enforces. */}
+                      {(member.role !== 'owner' || state.role === 'owner') && (
                       <span className="inline-flex gap-1">
                         <Button size="sm" variant="ghost" onClick={() => { setEditing(member); setFormOpen(true) }}>
                           <Pencil size={14} /><span className="sr-only">Edit {member.name}</span>
@@ -170,6 +173,7 @@ export default function Team() {
                           <Trash2 size={14} /><span className="sr-only">Remove {member.name}</span>
                         </Button>
                       </span>
+                      )}
                     </td>
                   )}
                 </tr>

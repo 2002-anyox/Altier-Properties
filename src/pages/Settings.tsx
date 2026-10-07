@@ -49,7 +49,7 @@ export default function Settings() {
   const live = state.source === 'database'
   /* Only an owner rewrites the matrix; everybody else reads it. The
      server refuses the write either way — this decides what is drawn. */
-  const editable = can(state.role, 'manage:team')
+  const editable = state.role === 'owner'
   /* Whether this workspace has departed from the product's defaults, which
      is the only time offering to put them back means anything. */
   const changed = !!state.permissions && STAFF_ROLE_OPTIONS.some((r) => {

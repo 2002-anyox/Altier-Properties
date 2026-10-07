@@ -13,6 +13,7 @@ export function MemberFormModal({
   open, onClose, member,
 }: { open: boolean; onClose: () => void; member?: TeamMember }) {
   const { state, dispatch, toast } = useStore()
+  const isOwner = state.role === 'owner'
   const editing = !!member
   const live = state.source === 'database'
   const [password, setPassword] = useState('')
@@ -92,7 +93,9 @@ export function MemberFormModal({
 
         <Field label="Role" id="mf-role" hint={STAFF_ROLE_OPTIONS.find((r) => r.id === draft.role)?.blurb}>
           <Select id="mf-role" value={draft.role} onChange={(e) => set('role', e.target.value as Role)}>
-            {STAFF_ROLE_OPTIONS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+            {STAFF_ROLE_OPTIONS
+              .filter((r) => r.id !== 'owner' || isOwner)
+              .map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
           </Select>
         </Field>
 
@@ -115,7 +118,8 @@ export function MemberFormModal({
           onChange={(ids) => set('propertyIds', ids)}
         />
 
-        {live && (
+        {/* Setting a colleague's password is signing in as them — an owner's to do. */}
+        {live && isOwner && (
           <fieldset className="rounded-2xl border border-line p-4">
             <legend className="px-1.5 text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
               {editing ? 'Reset their password' : 'Their password'}

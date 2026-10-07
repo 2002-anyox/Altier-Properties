@@ -689,6 +689,9 @@ export function createApp(db: Db, driver: string) {
    */
   app.put('/api/team/:id/password', requirePermission('manage:team'),
     inWorkspace(async (tx, w, req, res) => {
+      /* Setting somebody's password is signing in as them. Its own
+         comment always said this was an owner's to do. */
+      ownerOnly(req, "set a colleague's password")
       const id = param(req, 'id')
       const password = String(req.body?.password ?? '')
       const [member] = await tx.select({
@@ -964,10 +967,32 @@ export function createApp(db: Db, driver: string) {
       return withPortfolio(tx, w, res, req)
     }))
 
+  /* -------------------------- the owner's ceiling -------------------- *
+   * "Manage team" can be ticked for a manager, so a manager can add and
+   * edit staff. It used to hand over everything else with it: a manager
+   * holding it could reset the owner's password and lock them out, create
+   * a new owner, promote themselves to one, and grant their own role any
+   * permission. Delegating team management is not the same as delegating
+   * ownership, so these stay with owners whatever the matrix says.
+   * ------------------------------------------------------------------- */
+  const ownerOnly = (req: Authed, what: string) => {
+    if (requireViewer(req).membership?.role !== 'owner') {
+      throw new Forbidden(`Only an owner can ${what}.`)
+    }
+  }
+
+  const roleOf = async (tx: Db, w: Workspace, id: string) => {
+    const [row] = await tx.select({ role: organizationMembers.role })
+      .from(organizationMembers)
+      .where(and(eq(organizationMembers.id, id), eq(organizationMembers.organizationId, w.organizationId)))
+    return row?.role ?? null
+  }
+
   app.post('/api/team', requirePermission('manage:team'),
     inWorkspace(async (tx, w, req, res) => {
       const body = req.body as TeamMember & { password?: string }
       requireShape(body, ['id', 'name', 'role', 'title', 'email'], 'team member')
+      if (body.role === 'owner') ownerOnly(req, 'add an owner')
 
       let hash: string | undefined
       if (body.password) {
@@ -983,12 +1008,19 @@ export function createApp(db: Db, driver: string) {
     inWorkspace(async (tx, w, req, res) => {
       const body = req.body as TeamMember
       requireShape(body, ['name', 'role', 'title'], 'team member')
-      await updateMember(tx, w, param(req, 'id'), body)
+      const id = param(req, 'id')
+      const current = await roleOf(tx, w, id)
+      if (current === 'owner' || body.role === 'owner') ownerOnly(req, 'change an owner')
+      if (id === requireViewer(req).membership?.id && current !== body.role) {
+        ownerOnly(req, 'change their own role')
+      }
+      await updateMember(tx, w, id, body)
       return withPortfolio(tx, w, res, req)
     }))
 
   app.delete('/api/team/:id', requirePermission('manage:team'),
     inWorkspace(async (tx, w, req, res) => {
+      if (await roleOf(tx, w, param(req, 'id')) === 'owner') ownerOnly(req, 'remove an owner')
       await deleteMember(tx, w, param(req, 'id'))
       return withPortfolio(tx, w, res, req)
     }))
@@ -1028,6 +1060,7 @@ export function createApp(db: Db, driver: string) {
       const viewer = requireViewer(req)
       const body = req.body as { email?: string; role?: string; title?: string; propertyIds?: string[] }
       requireShape(body, ['email', 'role'], 'invitation')
+      if (body.role === 'owner') ownerOnly(req, 'invite an owner')
 
       const invitation = await inviteMember(tx, w.organizationId, viewer.profile.id, {
         email: String(body.email),
@@ -1071,6 +1104,7 @@ export function createApp(db: Db, driver: string) {
 
   app.put('/api/permissions', requirePermission('manage:team'),
     inWorkspace(async (tx, w, req, res) => {
+      ownerOnly(req, 'change what each role reaches')
       const role = String(req.body?.role ?? '') as TeamMember['role']
       const permission = String(req.body?.permission ?? '') as Permission
       const allowed = req.body?.allowed === true
@@ -1081,6 +1115,7 @@ export function createApp(db: Db, driver: string) {
 
   app.delete('/api/permissions', requirePermission('manage:team'),
     inWorkspace(async (tx, w, req, res) => {
+      ownerOnly(req, 'change what each role reaches')
       const role = String(req.query?.role ?? '') as TeamMember['role']
       await resetPermissions(tx, w.organizationId, role || undefined)
       return withPortfolio(tx, w, res, req)
