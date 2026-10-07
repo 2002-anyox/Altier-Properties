@@ -20,4 +20,5 @@ export const EXPECTED_MIGRATIONS: ReadonlyArray<{ tag: string; hash: string }> =
   { tag: '0015_super_admin_flag', hash: '83983e48d8424fe982f44a4884ae6e91762a44c1a3502a700e11bd47e4330e28' },
   { tag: '0016_owner_ceiling', hash: '6c880c8006b8d1872213db38cb788e9beff7439e42d001bc4e4c8e1efcf7442c' },
   { tag: '0017_recurring_rent', hash: 'f2b325ba3f2b57f600ae7cf3d0f0f63f34630ad6854d6332f44760a3c6dd5dd7' },
+  { tag: '0018_one_tenancy_per_unit', hash: 'f5bb49a3cc33122a666c03bffe2d40eba20114de6433f615438fe32e465d72ea' },
 ]

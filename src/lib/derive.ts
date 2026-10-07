@@ -54,6 +54,40 @@ const receivable = (i: Invoice) => i.type !== 'credit_note'
  * A credit note is never late. It is money owed the other way, and the
  * notifications chase it as a refund, not as arrears.
  */
+/**
+ * Where a unit stands on a given day, read off its agreements.
+ *
+ * Stored, the status was whatever the last agreement write happened to
+ * set: an upcoming renewal flipped an occupied unit to reserved while its
+ * tenant lived there, a check-out set it available with the renewal still
+ * to come, a historical stay recorded after the fact set it occupied for
+ * good, and setting it available by hand while somebody was in residence
+ * was simply believed. Now somebody living there makes it occupied, an
+ * agreement still to start makes it reserved, and otherwise it is free.
+ *
+ * Maintenance and inactive are left as set: those are the operator's
+ * decisions about the unit, not facts about who is in it.
+ */
+export function propertyStatusOn(
+  stored: PropertyStatus,
+  storedAvailableFrom: string | null,
+  agreements: Array<Pick<Booking, 'status' | 'arrivedOn' | 'departedOn' | 'end'>>,
+  today: string,
+): { status: PropertyStatus; availableFrom: string | null } {
+  if (stored === 'maintenance' || stored === 'inactive') {
+    return { status: stored, availableFrom: storedAvailableFrom }
+  }
+  const live = agreements.filter((b) => b.status !== 'cancelled' && !b.departedOn)
+  if (live.some((b) => b.arrivedOn)) return { status: 'occupied', availableFrom: null }
+  if (live.some((b) => !b.end || b.end > today)) return { status: 'reserved', availableFrom: null }
+  /* Free: since whoever last left, or since the date on record if that is
+     already past. A date in the future here belonged to an agreement that
+     has since been cancelled, and made the vacancy clock read ahead. */
+  const lastLeft = agreements.map((b) => b.departedOn).filter((d): d is string => !!d && d <= today).sort().pop()
+  const from = storedAvailableFrom && storedAvailableFrom <= today ? storedAvailableFrom : lastLeft ?? today
+  return { status: 'available', availableFrom: from }
+}
+
 export function invoiceStatusOn(
   i: Pick<Invoice, 'type' | 'amount' | 'paidAmount' | 'issuedOn' | 'dueOn'>,
   today: string,

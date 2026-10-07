@@ -78,11 +78,19 @@ export async function connect(url = process.env.DATABASE_URL) {
   }
 
   const { PGlite } = await import('@electric-sql/pglite')
+  /* 0018's exclusion constraint — one live agreement per unit — needs
+     btree_gist. Hosted Postgres ships it; PGlite has it as a module that
+     has to be handed in, or the migration cannot create it. */
+  const { btree_gist } = await import('@electric-sql/pglite/contrib/btree_gist')
   /* Persisted at .pglite by default, so `npm run db:seed` and `npm run api`
      share one database without any environment set up. PGLITE_PATH=memory://
      makes the run throwaway — what the round-trip check uses. */
   const path = process.env.PGLITE_PATH ?? PGLITE_DEFAULT
-  const pglite = new PGlite(path === MEMORY ? undefined : path)
+  /* Options on their own for an in-memory database: PGlite reads the
+     second argument only when a data directory is given, so
+     new PGlite(undefined, options) quietly drops them. */
+  const extensions = { btree_gist }
+  const pglite = path === MEMORY ? new PGlite({ extensions }) : new PGlite(path, { extensions })
   const db = drizzlePglite(pglite, { schema })
   return {
     db,

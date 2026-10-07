@@ -1647,6 +1647,33 @@ CREATE UNIQUE INDEX invoices_rent_period
   WHERE type = 'rent' AND booking_id IS NOT NULL;
 
 -- ---------------------------------------------------------------
+-- migration: 0018_one_tenancy_per_unit
+-- ---------------------------------------------------------------
+/* ------------------------------------------------------------------ *
+ * One live agreement per unit at a time.
+ *
+ * Nothing checked a unit's existing agreements before adding another, so
+ * a second tenant could be checked into a home somebody was living in,
+ * each raising their own rent. The route now refuses with a reason; this
+ * is the rule itself, so it holds under two requests at once and on any
+ * path a route forgets.
+ *
+ * An agreement occupies its unit from its start until whoever was in it
+ * left, or until the term ends if nobody has yet — the end exclusive, so
+ * a renewal may begin the day the last one ends. A cancelled agreement
+ * occupies nothing.
+ * ------------------------------------------------------------------ */
+
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
+ALTER TABLE bookings
+  ADD CONSTRAINT bookings_one_tenancy_per_unit
+  EXCLUDE USING gist (
+    property_id WITH =,
+    daterange(starts_on, coalesce(departed_on, ends_on), '[)') WITH &&
+  ) WHERE (status <> 'cancelled');
+
+-- ---------------------------------------------------------------
 -- Record the migrations as applied, so `npm run db:migrate`
 -- against this database does nothing rather than failing.
 -- ---------------------------------------------------------------
@@ -1674,6 +1701,7 @@ INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('4ad85a0
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('83983e48d8424fe982f44a4884ae6e91762a44c1a3502a700e11bd47e4330e28', 1788160100000);
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('6c880c8006b8d1872213db38cb788e9beff7439e42d001bc4e4c8e1efcf7442c', 1788246500000);
 INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('f2b325ba3f2b57f600ae7cf3d0f0f63f34630ad6854d6332f44760a3c6dd5dd7', 1788332900000);
+INSERT INTO "drizzle"."__drizzle_migrations" (hash, created_at) VALUES ('f5bb49a3cc33122a666c03bffe2d40eba20114de6433f615438fe32e465d72ea', 1788419300000);
 
 -- ---------------------------------------------------------------
 -- Reminder settings. One row, always id 1 — the app reads it on

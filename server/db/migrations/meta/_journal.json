@@ -127,6 +127,13 @@
       "when": 1788332900000,
       "tag": "0017_recurring_rent",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788419300000,
+      "tag": "0018_one_tenancy_per_unit",
+      "breakpoints": true
     }
   ]
 }

@@ -10,7 +10,7 @@
  * ------------------------------------------------------------------ */
 
 import { dayIn } from '../../src/lib/dates.js'
-import { chargeSign, invoiceStatusOn } from '../../src/lib/derive.js'
+import { chargeSign, invoiceStatusOn, propertyStatusOn } from '../../src/lib/derive.js'
 import { paidThroughOf } from '../../src/lib/create.js'
 import { sql } from 'drizzle-orm'
 import { INVOICES } from '../../scripts/fixture/portfolio.js'
@@ -183,7 +183,7 @@ console.log(`constraint check: 7 invalid rows offered, all refused`)
 /* 9. The reader is the exact inverse of the seeder. A mis-mapped column
       would not fail any constraint — it would just quietly show the wrong
       thing on every page — so compare what comes back to what went in. */
-const portfolio = await readPortfolio(db, SEED_ORG)
+const portfolio = await readPortfolio(db, SEED_ORG, dayIn(DEFAULT_TIMEZONE))
 const data = await import('../../scripts/fixture/portfolio.js')
 
 /** Order is cosmetic for these, so compare them as sets. */
@@ -236,9 +236,14 @@ for (const i of data.INVOICES) {
 const expectedClients = data.CLIENTS.map((c) => ({ ...c, lifetimeValue: collected.get(c.id) ?? 0 }))
 /* paidThrough too: the end of the unbroken run of periods paid in full. */
 const expectedBookings = data.BOOKINGS.map((b) => ({ ...b, paidThrough: paidThroughOf(data.INVOICES, b.id) }))
+/* And a unit's status, from who is living in it. */
+const expectedProperties = data.PROPERTIES.map((p) => ({
+  ...p,
+  ...propertyStatusOn(p.status, p.availableFrom, data.BOOKINGS.filter((b) => b.propertyId === p.id), day),
+}))
 
 for (const [name, fromDb, fromMemory] of [
-  ['properties', portfolio.properties, data.PROPERTIES],
+  ['properties', portfolio.properties, expectedProperties],
   ['clients', portfolio.clients, expectedClients],
   ['bookings', portfolio.bookings, expectedBookings],
   ['invoices', portfolio.invoices, expectedInvoices],

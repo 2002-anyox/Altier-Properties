@@ -10,7 +10,7 @@
 import { and, asc, eq, ne } from 'drizzle-orm'
 import { DEFAULT_REMINDERS, DEFAULT_TIMEZONE } from '../../src/lib/defaults.js'
 import { dayIn } from '../../src/lib/dates.js'
-import { chargeSign, invoiceStatusOn } from '../../src/lib/derive.js'
+import { chargeSign, invoiceStatusOn, propertyStatusOn } from '../../src/lib/derive.js'
 import { paidThroughOf } from '../../src/lib/create.js'
 import { permissionMatrix } from '../workspace.js'
 import type { Db } from './client.js'
@@ -117,8 +117,18 @@ export async function readPortfolio(
     sizeKb: d.sizeKb, uploadedAt: d.uploadedAt, uploadedBy: d.uploadedBy,
   })
 
+  const agreementsOn = groupBy(bookingRows, 'propertyId')
+  const standing = new Map(propertyRows.map((p) => [p.id, propertyStatusOn(
+    p.status, p.availableFrom,
+    (agreementsOn.get(p.id) ?? []).map((b) => ({
+      status: b.status, arrivedOn: b.arrivedOn, departedOn: b.departedOn, end: b.endsOn,
+    })),
+    today,
+  )]))
+
   const properties: Property[] = propertyRows.map((p) => ({
-    id: p.id, code: p.code, name: p.name, type: p.type, mode: p.mode, status: p.status,
+    id: p.id, code: p.code, name: p.name, type: p.type, mode: p.mode,
+    status: standing.get(p.id)!.status,
     address: {
       line1: p.addressLine1, district: p.district, city: p.city,
       country: p.country, x: p.mapX, y: p.mapY,
@@ -127,7 +137,7 @@ export async function readPortfolio(
     bedrooms: p.bedrooms, bathrooms: p.bathrooms, sizeSqm: p.sizeSqm,
     amenities: (amenities.get(p.id) ?? []).map((a) => a.amenity),
     price: p.price, currency: 'UGX', managerId: p.managerId, rating: p.rating,
-    availableFrom: p.availableFrom, acquiredOn: p.acquiredOn,
+    availableFrom: standing.get(p.id)!.availableFrom, acquiredOn: p.acquiredOn,
     yieldPct: p.yieldPct, notes: p.notes, photoSeed: p.photoSeed,
     documents: (propertyDocs.get(p.id) ?? []).map(asDocument),
     occupancyHistory: (spells.get(p.id) ?? []).map((h) => ({

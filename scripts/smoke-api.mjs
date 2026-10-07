@@ -413,8 +413,10 @@ try {
 
     await get(`/bookings/${free.id}`, { method: 'DELETE' })
   }
-  ok(madeBooking.properties?.find((p) => p.id === property.id)?.status === 'occupied',
-     'the agreement flipped the property to occupied')
+  /* Occupied means somebody lives there. Until they check in, an agreement
+     holds the unit for them — which is what reserved says. */
+  ok(madeBooking.properties?.find((p) => p.id === property.id)?.status === 'reserved',
+     'the agreement reserves the unit until somebody arrives')
 
   /* An agreement must never half-land: a bad charge has to take the whole
      write with it, or a unit shows occupied against a tenancy that isn't. */
@@ -475,9 +477,15 @@ try {
     mode: 'long_term', status: 'upcoming',
     start: plusMonths(today, 12), end: plusMonths(today, 24),
   }
+  /* The running agreement here is an open-ended rental, so anything later
+     on this unit overlaps it. The point stands — the same unit is not a
+     second home — and it shows in what the refusal is about: the overlap,
+     never "still in". */
   const renewed = await get('/bookings', json({ booking: renewal, invoices: [] }))
-  ok(renewed.status === 200, `renewing in the same home is allowed (got ${renewed.status})`)
-  await get(`/bookings/${renewal.id}`, { method: 'DELETE' })
+  const renewedBody = await renewed.json()
+  ok(renewed.status === 409 && /already let/.test(renewedBody.error ?? '')
+     && !/still in/.test(renewedBody.error ?? ''),
+     `the same unit is refused only as an overlap, never as a second home (got ${renewed.status})`)
 
   /* ------------------------- arriving and leaving -------------------- *
    * The two moments the business turns on, and until now there was no
@@ -529,11 +537,21 @@ try {
   }
   await get('/properties', json(stayProperty))
 
+  /* Each scenario on a unit of its own. They all sit within the same week,
+     and on one unit they overlapped — which is now refused, as it should
+     always have been. */
+  const unitFor = async (label) => {
+    const unit = { ...stayProperty, id: `p-${label}-${stamp}`, code: `${label.toUpperCase()}-U-${stamp}` }
+    await get('/properties', json(unit))
+    return unit
+  }
+
   const runStay = async (label, { nights, leaveAfter, rate = 200_000 }) => {
     const from = plusDays(today, -nights)
+    const unit = await unitFor(label)
     const stayBooking = {
       id: `b-${label}-${stamp}`, reference: `${label.toUpperCase()}-${stamp}`,
-      propertyId: stayProperty.id, clientId: third.id, mode: 'short_stay',
+      propertyId: unit.id, clientId: third.id, mode: 'short_stay',
       status: 'in_progress', start: from, end: plusDays(from, nights),
       rate, deposit: 0, advanceMonths: 0, paidThrough: null, noticeDays: 0,
       guests: 2, source: 'direct', checkIn: '15:00', checkOut: '11:00',
@@ -541,7 +559,7 @@ try {
     }
     const stayCharge = {
       id: `i-${label}-${stamp}`, number: `${label.toUpperCase()}-INV-${stamp}`,
-      propertyId: stayProperty.id, clientId: third.id, bookingId: stayBooking.id,
+      propertyId: unit.id, clientId: third.id, bookingId: stayBooking.id,
       type: 'booking', issuedOn: from, dueOn: from, amount: rate * nights,
       earnsFrom: from, earnsTo: plusDays(from, nights),
       paidAmount: 0, status: 'pending', method: null, paidOn: null,
@@ -597,9 +615,10 @@ try {
      cancellation nobody is refunding. The flag is the whole decision;
      the amount is never taken from the browser. */
   const waivedFrom = plusDays(today, -7)
+  const waivedUnit = await unitFor('waived')
   const waivedBooking = {
     id: `b-waived-${stamp}`, reference: `WAIVED-${stamp}`,
-    propertyId: stayProperty.id, clientId: third.id, mode: 'short_stay',
+    propertyId: waivedUnit.id, clientId: third.id, mode: 'short_stay',
     status: 'in_progress', start: waivedFrom, end: plusDays(waivedFrom, 7),
     rate: 200_000, deposit: 0, advanceMonths: 0, paidThrough: null, noticeDays: 0,
     guests: 2, source: 'direct', checkIn: '15:00', checkOut: '11:00',
@@ -607,7 +626,7 @@ try {
   }
   const waivedCharge = {
     id: `i-waived-${stamp}`, number: `WAIVED-INV-${stamp}`,
-    propertyId: stayProperty.id, clientId: third.id, bookingId: waivedBooking.id,
+    propertyId: waivedUnit.id, clientId: third.id, bookingId: waivedBooking.id,
     type: 'booking', issuedOn: waivedFrom, dueOn: waivedFrom, amount: 1_400_000,
     earnsFrom: waivedFrom, earnsTo: plusDays(waivedFrom, 7),
     paidAmount: 0, status: 'pending', method: null, paidOn: null, memo: '7-night stay',
@@ -626,8 +645,9 @@ try {
   /* An amount proposed by the caller is ignored: the settlement is worked
      out from the ledger, or it is worth nothing. */
   const forgedFrom = plusDays(today, -7)
-  const forgedBooking = { ...waivedBooking, id: `b-forged-${stamp}`, reference: `FORGED-${stamp}`, start: forgedFrom, end: plusDays(forgedFrom, 7) }
-  const forgedCharge = { ...waivedCharge, id: `i-forged-${stamp}`, number: `FORGED-INV-${stamp}`, bookingId: forgedBooking.id, issuedOn: forgedFrom, dueOn: forgedFrom, earnsFrom: forgedFrom, earnsTo: plusDays(forgedFrom, 7) }
+  const forgedUnit = await unitFor('forged')
+  const forgedBooking = { ...waivedBooking, id: `b-forged-${stamp}`, reference: `FORGED-${stamp}`, propertyId: forgedUnit.id, start: forgedFrom, end: plusDays(forgedFrom, 7) }
+  const forgedCharge = { ...waivedCharge, id: `i-forged-${stamp}`, number: `FORGED-INV-${stamp}`, propertyId: forgedUnit.id, bookingId: forgedBooking.id, issuedOn: forgedFrom, dueOn: forgedFrom, earnsFrom: forgedFrom, earnsTo: plusDays(forgedFrom, 7) }
   await get('/bookings', json({ booking: forgedBooking, invoices: [forgedCharge] }))
   await get(`/bookings/${forgedBooking.id}/check-in`, json({ on: forgedFrom }))
   const forged = await get(`/bookings/${forgedBooking.id}/check-out`, json({

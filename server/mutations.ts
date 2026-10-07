@@ -685,6 +685,7 @@ export async function addBooking(db: Db, w: Workspace, booking: Booking, invoice
      for two homes, from one mis-click. Checked here rather than only in
      the form, because the form is a convenience and this is the rule. */
   await assertNotAlreadyHoused(db, w, booking, client.name)
+  await assertUnitFree(db, w, booking)
 
   /* What the unit is let at, unless this agreement says otherwise.
      A rate of zero used to be stored as written and raise no charge at
@@ -838,6 +839,40 @@ export async function raiseDueRent(db: Db, organizationId: string, today: string
 }
 
 /**
+ * Refuses an agreement that would overlap another on the same unit.
+ *
+ * Nothing looked before, so a second tenant could be checked into a home
+ * somebody was living in, each with their own rent. 0018's exclusion
+ * constraint is the rule; this is the same test asked first, so the
+ * refusal can name the agreement in the way.
+ */
+async function assertUnitFree(
+  db: Db, w: Workspace,
+  booking: Pick<Booking, 'propertyId' | 'start' | 'end' | 'status'> & { departedOn?: string | null },
+  excludeId?: string,
+) {
+  if (booking.status === 'cancelled') return
+  const until = booking.departedOn ?? booking.end ?? null
+  const [clash] = await db.select({
+    reference: t.bookings.reference, startsOn: t.bookings.startsOn,
+    endsOn: t.bookings.endsOn, departedOn: t.bookings.departedOn,
+  }).from(t.bookings).where(and(
+    eq(t.bookings.organizationId, w.organizationId),
+    eq(t.bookings.propertyId, booking.propertyId),
+    ne(t.bookings.status, 'cancelled'),
+    excludeId ? ne(t.bookings.id, excludeId) : undefined,
+    sql`daterange(${t.bookings.startsOn}, coalesce(${t.bookings.departedOn}, ${t.bookings.endsOn}), '[)')
+        && daterange(${booking.start}::date, ${until}::date, '[)')`,
+  )).limit(1)
+  if (!clash) return
+  const to = clash.departedOn ?? clash.endsOn
+  throw new Conflict(
+    `This unit is already let under ${clash.reference} from ${clash.startsOn}`
+    + `${to ? ` to ${to}` : ', open-ended'}. An agreement cannot overlap another on the same unit.`,
+  )
+}
+
+/**
  * Refuses to place a client who is still in somewhere else.
  *
  * Reads the agreements rather than the client_properties links: a link
@@ -849,6 +884,10 @@ export async function raiseDueRent(db: Db, organizationId: string, today: string
 async function assertNotAlreadyHoused(
   db: Db, w: Workspace, booking: Booking, clientName: string,
 ) {
+  /* A record of a stay that is over, or one that never happened, places
+     nobody anywhere. Refusing them — "still in A" — stopped anybody
+     entering a client's history while they lived somewhere. */
+  if (booking.status === 'completed' || booking.status === 'cancelled') return
   const held = await db.select({
     id: t.bookings.id,
     propertyId: t.bookings.propertyId,
@@ -914,6 +953,17 @@ export async function updateBooking(db: Db, w: Workspace, id: string, booking: B
   }
   if (booking.end && booking.end <= booking.start) {
     throw new Conflict('An agreement cannot end on or before the day it starts. Cancel it instead.')
+  }
+  /* Reopening a cancelled agreement, or moving its dates, has to pass the
+     same two rules as making one. Reopening skipped both, so a client
+     could end up holding two homes and a home two live agreements. */
+  if (booking.status !== 'cancelled') {
+    if (existing.status === 'cancelled') {
+      const [who] = await db.select({ name: t.clients.name }).from(t.clients)
+        .where(eq(t.clients.id, existing.clientId))
+      await assertNotAlreadyHoused(db, w, { ...booking, id }, who?.name ?? 'This client')
+    }
+    await assertUnitFree(db, w, { ...booking, departedOn: existing.departedOn }, id)
   }
   await db.update(t.bookings).set({
     status: booking.status, startsOn: booking.start, endsOn: booking.end,
