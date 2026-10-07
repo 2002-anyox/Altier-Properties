@@ -154,8 +154,8 @@ try {
 
   const stranger = await get('/auth/login', jsonInit({ email: 'nobody@example.com', password: 'whatever-x' }))
   const strangerBody = await stranger.json()
-  const wrongBody = await wrong.clone?.().json?.().catch(() => null)
-  ok(strangerBody.error === 'That email and password do not match an account.',
+  const wrongBody = await wrong.json()
+  ok(Boolean(strangerBody.error) && strangerBody.error === wrongBody.error,
      'an unknown email is refused in the same words as a wrong password')
 
   /* -------------------------- the front door ------------------------- *
