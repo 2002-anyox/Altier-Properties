@@ -36,7 +36,51 @@ async function insertAll<T>(db: Db, table: any, rows: T[], chunk = 400) {
   return rows.length
 }
 
+/**
+ * Refuses to run anywhere it could destroy somebody's work.
+ *
+ * The seeder opens with a TRUNCATE of every table that holds a customer's
+ * records and their logins, and nothing used to check what it was pointed
+ * at. `npm run smoke:api` runs it first — and "smoke test" is what
+ * somebody reaches for to check a deployment is alive — so one wrong
+ * DATABASE_URL in a shell or a CI job was a live workspace gone.
+ *
+ * So it only proceeds against a database holding nothing but the sample
+ * workspace, or nothing at all, and never under NODE_ENV=production. A
+ * developer who really means to wipe a database with other workspaces in
+ * it can say so with ALTIER_WIPE_DATABASE=yes, named so nobody types it
+ * by accident.
+ */
+export class SeedRefused extends Error {}
+
+async function assertSafeToWipe(db: Db) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new SeedRefused('Refusing to seed: NODE_ENV is production. The sample portfolio never goes there.')
+  }
+  const result = await db.execute(sql`
+    SELECT
+      (SELECT count(*)::int FROM ${t.organizations} WHERE id <> ${SEED_ORG}) AS workspaces,
+      (SELECT count(*)::int FROM ${t.profiles} p WHERE NOT EXISTS (
+         SELECT 1 FROM ${t.organizationMembers} om
+         WHERE om.profile_id = p.id AND om.organization_id = ${SEED_ORG})) AS accounts
+  `)
+  const row = ((result as unknown as { rows?: unknown[] }).rows ?? (result as unknown as unknown[]))[0] as
+    { workspaces: number; accounts: number } | undefined
+  const workspaces = Number(row?.workspaces ?? 0)
+  const accounts = Number(row?.accounts ?? 0)
+  if ((workspaces > 0 || accounts > 0) && process.env.ALTIER_WIPE_DATABASE !== 'yes') {
+    throw new SeedRefused(
+      `Refusing to seed: this database holds ${workspaces} workspace${workspaces === 1 ? '' : 's'} `
+      + `and ${accounts} account${accounts === 1 ? '' : 's'} besides the sample, and seeding `
+      + 'truncates every table first. Point DATABASE_URL at a scratch database. If you really mean '
+      + 'to wipe this one, run again with ALTIER_WIPE_DATABASE=yes.',
+    )
+  }
+}
+
 export async function seed(db: Db) {
+  await assertSafeToWipe(db)
+
   // Children first is unnecessary with CASCADE, but naming every table keeps
   // the intent obvious and fails loudly if one is ever added and forgotten.
   await db.execute(sql`
