@@ -1054,13 +1054,39 @@ export async function deleteClient(db: Db, w: Workspace, id: string) {
 
 export async function deleteBooking(db: Db, w: Workspace, id: string) {
   const booking = await lockBooking(db, w, id)
-  /* A charge that was actually paid is a record of money that moved, so it
-     survives the agreement, unlinked. One that was never paid was only ever
-     an expectation this agreement created, and goes with it — otherwise a
-     mistaken agreement leaves arrears behind that nobody owes. */
-  await db.delete(t.invoices)
-    .where(and(eq(t.invoices.bookingId, id), eq(t.invoices.paidAmount, 0)))
-  await db.update(t.invoices).set({ bookingId: null }).where(eq(t.invoices.bookingId, id))
+
+  /* Deleting is for an agreement that should never have been recorded:
+     nobody moved in and no money moved. Anything else is history, and
+     history is ended, not erased — the same rule a client and a property
+     already keep.
+
+     The old rule tried to have it both ways. Unpaid charges went with the
+     agreement and paid ones stayed behind unlinked, which left orphans in
+     the ledger belonging to no agreement; a pending credit note — a refund
+     the business owes — counted as unpaid and was silently destroyed; and
+     once a credit note had been refunded the unlinking broke the
+     constraint that a credit note names its agreement, so the delete
+     failed with a raw database message and could never succeed. */
+  const charges = await db.select({
+    type: t.invoices.type, paidAmount: t.invoices.paidAmount,
+  }).from(t.invoices).where(eq(t.invoices.bookingId, id))
+  const paid = charges.filter((c) => c.paidAmount > 0).length
+  const credits = charges.filter((c) => c.type === 'credit_note').length
+  if (booking.arrivedOn || paid > 0 || credits > 0) {
+    const why = [
+      booking.arrivedOn && `they checked in on ${booking.arrivedOn}`,
+      paid > 0 && `${describe(paid, 'charge')} with money against ${paid === 1 ? 'it' : 'them'}`,
+      credits > 0 && `${describe(credits, 'credit note')}`,
+    ].filter(Boolean).join(', ')
+    throw new Conflict(
+      `${booking.reference} has history — ${why} — so it is kept. End it instead.`,
+    )
+  }
+
+  /* A mistake, then. Every charge on it is unpaid, and was only ever an
+     expectation this agreement created, so it goes with it rather than
+     leaving arrears behind that nobody owes. */
+  await db.delete(t.invoices).where(eq(t.invoices.bookingId, id))
   await db.delete(t.bookings).where(eq(t.bookings.id, id))
   await db.update(t.properties)
     .set({ status: 'available', availableFrom: null })

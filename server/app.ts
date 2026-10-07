@@ -42,6 +42,7 @@ import {
   setPassword, setSessionCookie, unlinkIdentity, verifyPassword, type Authed, type Viewer,
 } from './auth.js'
 import { DEFAULT_TIMEZONE } from '../src/lib/defaults.js'
+import { dayIn } from '../src/lib/dates.js'
 import { scoped } from './scope.js'
 import {
   BadInvitation, NoSubscription, SeatLimit, SignupRefused, TooManySignups,
@@ -138,7 +139,7 @@ export function createApp(db: Db, driver: string) {
    * receive them and then merely have them hidden.
    */
   const withPortfolio = (tx: Db, w: Workspace, res: Response, req: Authed) =>
-    readPortfolio(tx, w.organizationId).then((portfolio) => res.json(visibleTo(portfolio, req)))
+    readPortfolio(tx, w.organizationId, dayIn(w.timezone)).then((portfolio) => res.json(visibleTo(portfolio, req)))
 
   /* Channels that carry correspondence with the client. Everything else
      is the staff's own workflow log — 'note' covers internal notes, the
@@ -923,7 +924,7 @@ export function createApp(db: Db, driver: string) {
          the adjustment is worth. That is worked out from the ledger. */
       const settle = req.body?.settle !== false
       const settled = await checkOut(tx, w, param(req, 'id'), on, settle)
-      const portfolio = await readPortfolio(tx, w.organizationId)
+      const portfolio = await readPortfolio(tx, w.organizationId, dayIn(w.timezone))
       res.json({ ...visibleTo(portfolio, req), settled })
       return undefined
     }))

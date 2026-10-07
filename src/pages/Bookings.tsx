@@ -66,6 +66,18 @@ export default function Bookings() {
   const [arriving, setArriving] = useState<Booking | null>(null)
   const [leaving, setLeaving] = useState<Booking | null>(null)
   const [removing, setRemoving] = useState<Booking | null>(null)
+  /* The same test the server applies, so the dialog says what will happen
+     rather than describing a deletion that is about to be refused. */
+  const removingCharges = removing ? state.invoices.filter((i) => i.bookingId === removing.id) : []
+  const removingBlockers = removing
+    ? [
+        removing.arrivedOn && `They checked in on ${mediumDate(removing.arrivedOn)}`,
+        removingCharges.some((i) => i.paidAmount > 0)
+          && `${removingCharges.filter((i) => i.paidAmount > 0).length} charges with money against them`,
+        removingCharges.some((i) => i.type === 'credit_note')
+          && `${removingCharges.filter((i) => i.type === 'credit_note').length} credit notes`,
+      ].filter(Boolean) as string[]
+    : []
 
   const property = (b: Booking | null) => state.properties.find((p) => p.id === b?.propertyId)
 
@@ -500,8 +512,18 @@ export default function Bookings() {
         open={!!removing}
         onClose={() => setRemoving(null)}
         title="Delete this agreement"
-        subject={`${removing?.reference} will be removed entirely, as though it had never been made.`}
-        consequences={['Its charges stay on the ledger, no longer linked to an agreement']}
+        subject={removingBlockers.length
+          ? `${removing?.reference} has history, so it is kept rather than deleted. End it instead — `
+            + 'the unit frees up and every charge stays on the ledger where it belongs.'
+          : `${removing?.reference} will be removed entirely, as though it had never been made.`}
+        blockers={removingBlockers}
+        consequences={removingCharges.length
+          ? [`${removingCharges.length} unpaid ${removingCharges.length === 1 ? 'charge' : 'charges'} it raised`]
+          : []}
+        alternative={removing && !removing.departedOn && removing.status !== 'cancelled' ? {
+          label: 'End agreement',
+          onSelect: () => setEnding(removing),
+        } : undefined}
         confirmLabel="Delete agreement"
         onConfirm={() => {
           if (!removing) return

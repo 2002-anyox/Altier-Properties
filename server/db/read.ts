@@ -8,7 +8,9 @@
  * ------------------------------------------------------------------ */
 
 import { and, asc, eq, ne } from 'drizzle-orm'
-import { DEFAULT_REMINDERS } from '../../src/lib/defaults.js'
+import { DEFAULT_REMINDERS, DEFAULT_TIMEZONE } from '../../src/lib/defaults.js'
+import { dayIn } from '../../src/lib/dates.js'
+import { invoiceStatusOn } from '../../src/lib/derive.js'
 import { permissionMatrix } from '../workspace.js'
 import type { Db } from './client.js'
 import * as t from './schema.js'
@@ -43,7 +45,12 @@ function groupBy<T, K extends keyof T>(rows: T[], key: K) {
  * filter here is not the protection; it is what makes the query say out
  * loud what it is for.
  */
-export async function readPortfolio(db: Db, organizationId: string): Promise<Portfolio> {
+export async function readPortfolio(
+  db: Db,
+  organizationId: string,
+  /** The workspace's calendar day, which decides what is overdue. */
+  today: string = dayIn(DEFAULT_TIMEZONE),
+): Promise<Portfolio> {
   const [
     teamRows, propertyRows, amenityRows, noteRows, propertyDocRows, spellRows,
     clientRows, clientPropertyRows, clientDocRows, commRows,
@@ -160,7 +167,11 @@ export async function readPortfolio(db: Db, organizationId: string): Promise<Por
       id: i.id, number: i.number, propertyId: i.propertyId, clientId: i.clientId,
       bookingId: i.bookingId, type: i.type, issuedOn: i.issuedOn, dueOn: i.dueOn,
       amount: i.amount, earnsFrom: i.earnsFrom, earnsTo: i.earnsTo,
-      paidAmount: i.paidAmount, status: i.status, method: i.method,
+      paidAmount: i.paidAmount,
+      /* Read off the calendar rather than the column — the column is
+         whatever was true when the charge was last written, and nothing
+         ever wrote 'overdue' as days went by. */
+      status: invoiceStatusOn(i, today), method: i.method,
       paidOn: i.paidOn, memo: i.memo,
     }))
     // The ledger reads newest-due first, as the generator produced it.

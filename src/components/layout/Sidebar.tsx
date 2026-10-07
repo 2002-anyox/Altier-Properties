@@ -17,7 +17,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
   const counts = {
     notifications: state.notifications.filter((n) => !n.read).length,
-    overdue: state.invoices.filter((i) => i.status === 'overdue' || i.status === 'partial').length,
+    overdue: state.invoices.filter((i) => i.status === 'overdue').length,
     maintenance: state.maintenance.filter((m) => m.status !== 'completed' && (m.priority === 'urgent' || m.priority === 'high')).length,
   }
 

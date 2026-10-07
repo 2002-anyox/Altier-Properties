@@ -48,7 +48,7 @@ export default function Dashboard() {
   }, [bookings, today])
 
   const overdue = useMemo(
-    () => invoices.filter((i) => i.status === 'overdue' || i.status === 'partial').slice(0, 5),
+    () => invoices.filter((i) => i.status === 'overdue').slice(0, 5),
     [invoices],
   )
 

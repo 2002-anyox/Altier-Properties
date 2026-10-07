@@ -1,7 +1,7 @@
 import { TODAY, addDays, daysBetween, iso } from './dates.js'
 import { presentation } from './money.js'
 import type {
-  Booking, ChargeType, Client, Invoice, MaintenanceRequest, Property, PropertyStatus,
+  Booking, ChargeType, Client, Invoice, InvoiceStatus, MaintenanceRequest, Property, PropertyStatus,
 } from './types.js'
 
 /**
@@ -40,6 +40,31 @@ export const chargeSign = (type: ChargeType) => (type === 'credit_note' ? -1 : 1
  * anybody is chasing.
  */
 const receivable = (i: Invoice) => i.type !== 'credit_note'
+
+/**
+ * Where a charge stands on a given day.
+ *
+ * Overdue is a fact about the calendar, not about the charge, so it is
+ * worked out rather than stored. It used to be stored: a charge was
+ * written 'overdue' only if it was already late the moment it was raised,
+ * which an ordinary charge never is, and nothing moved it afterwards — so
+ * rent unpaid for six months still read 'pending', and every overdue
+ * figure, alert and filter in the product sat at zero.
+ *
+ * A credit note is never late. It is money owed the other way, and the
+ * notifications chase it as a refund, not as arrears.
+ */
+export function invoiceStatusOn(
+  i: Pick<Invoice, 'type' | 'amount' | 'paidAmount' | 'issuedOn' | 'dueOn'>,
+  today: string,
+): InvoiceStatus {
+  if (i.paidAmount >= i.amount) return 'paid'
+  if (i.type === 'credit_note') return i.paidAmount > 0 ? 'partial' : 'pending'
+  if (i.dueOn < today) return 'overdue'
+  if (i.paidAmount > 0) return 'partial'
+  if (i.issuedOn > today) return 'upcoming'
+  return 'pending'
+}
 
 const sumBy = (invoices: Invoice[], cls: ChargeClass) =>
   invoices.filter((i) => chargeClass(i.type) === cls)
@@ -213,7 +238,7 @@ export function computeKpis(
   const upcoming = invoices.filter(
     (i) => receivable(i) && (i.status === 'upcoming' || i.status === 'pending') && daysBetween(today, i.dueOn) >= 0 && daysBetween(today, i.dueOn) <= 30,
   )
-  const overdue = invoices.filter((i) => receivable(i) && (i.status === 'overdue' || i.status === 'partial'))
+  const overdue = invoices.filter((i) => receivable(i) && i.status === 'overdue')
 
   /* Collection is a ratio of money, not of documents, so a credit note
      belongs on both sides of it: it reduces what was billed, and once
@@ -294,7 +319,7 @@ export function ageingBuckets(invoices: Invoice[]) {
     { label: '60+ days', lo: 61, hi: 100000, amount: 0, count: 0 },
   ]
   invoices
-    .filter((i) => receivable(i) && (i.status === 'overdue' || i.status === 'partial'))
+    .filter((i) => receivable(i) && i.status === 'overdue')
     .forEach((i) => {
       const late = Math.abs(daysBetween(today, i.dueOn))
       const b = buckets.find((x) => late >= x.lo && late <= x.hi)

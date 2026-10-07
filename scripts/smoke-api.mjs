@@ -685,18 +685,51 @@ try {
   ok(ended.properties?.find((p) => p.id === property.id)?.status === 'available',
      'closing an agreement freed the unit')
 
-  const orphaned = await get(`/bookings/${booking.id}`, { method: 'DELETE' }).then((r) => r.json())
-  ok(!orphaned.bookings?.find((b) => b.id === booking.id), 'agreement deleted')
-  // The charge was never paid, so it went with the agreement that raised it.
-  ok(!orphaned.invoices?.find((i) => i.id === charge.id),
-     'its unpaid charge went with it, leaving no phantom arrears')
+  /* Somebody stayed in this one — checked in, checked out, credited — so
+     it is history. Deleting used to destroy its unpaid charges and its
+     pending credit note and orphan the rest; it is refused now, and ended
+     instead. Status is checked first: these assertions used to read a
+     refusal's body as if it were a portfolio, find nothing in it, and
+     pass. */
+  const keptStay = await get(`/bookings/${booking.id}`, { method: 'DELETE' })
+  ok(keptStay.status === 409, `an agreement somebody stayed in refuses deletion as 409 (got ${keptStay.status})`)
+  const afterKeep = await get('/portfolio').then((r) => r.json())
+  ok(!!afterKeep.bookings.find((b) => b.id === booking.id), 'and it is still on file')
+  ok(afterKeep.invoices.some((i) => i.bookingId === booking.id && i.type === 'credit_note'),
+     'with its credit note still owed')
 
-  /* Now that nothing references them, the client can go. */
-  const gone = await get(`/clients/${client.id}`, { method: 'DELETE' })
+  /* A mistake — nobody arrived, nothing paid — is what deleting is for,
+     and its charges go with it rather than leaving arrears nobody owes. */
+  const mistake = {
+    ...booking, id: `b-mistake-${stamp}`, reference: `MISTAKE-${stamp}`,
+    status: 'upcoming', start: plusMonths(today, 6), end: plusMonths(today, 18),
+    arrivedOn: null, departedOn: null,
+  }
+  const madeMistake = await get('/bookings', json({ booking: mistake, invoices: [] }))
+  ok(madeMistake.status === 200, `a mistaken agreement can be recorded (got ${madeMistake.status})`)
+  const mistakeCharges = (await madeMistake.json()).invoices
+    .filter((i) => i.bookingId === mistake.id).map((i) => i.id)
+  const unmade = await get(`/bookings/${mistake.id}`, { method: 'DELETE' })
+  ok(unmade.status === 200, `and deleted (got ${unmade.status})`)
+  const afterUnmade = await unmade.json()
+  ok(!afterUnmade.bookings.find((b) => b.id === mistake.id), 'leaving no agreement behind')
+  ok(mistakeCharges.length > 0
+     && mistakeCharges.every((id) => !afterUnmade.invoices.find((i) => i.id === id)),
+     `and none of the ${mistakeCharges.length} charges it raised`)
+
+  /* A client and a property with no history at all can go. The ones above
+     are now history, so these are fresh. */
+  const cleanClient = {
+    ...client, id: `c-clean-${stamp}`, name: 'Clean Record', email: `clean-${stamp}@example.com`,
+  }
+  await get('/clients', json(cleanClient))
+  const gone = await get(`/clients/${cleanClient.id}`, { method: 'DELETE' })
   ok(gone.status === 200, `a client with no history deletes (got ${gone.status})`)
 
-  const propGone = await get(`/properties/${property.id}`, { method: 'DELETE' })
-  ok(propGone.status === 200, `property deleted (got ${propGone.status})`)
+  const cleanProperty = { ...property, id: `p-clean-${stamp}`, code: `CLEAN-${stamp}` }
+  await get('/properties', json(cleanProperty))
+  const propGone = await get(`/properties/${cleanProperty.id}`, { method: 'DELETE' })
+  ok(propGone.status === 200, `a property with no history deletes (got ${propGone.status})`)
 
   /* -------------------------------- team ----------------------------- */
   const member = {
