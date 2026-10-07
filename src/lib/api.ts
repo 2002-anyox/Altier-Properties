@@ -378,6 +378,8 @@ export const admin = {
 
 export const auth = {
   me: () => send('/auth/me') as Promise<Session>,
+  updateProfile: (input: { name: string; title: string; phone: string }) =>
+    send('/auth/profile', { method: 'PUT', body: JSON.stringify(input) }) as Promise<{ member: SessionMember }>,
   providers: () => send('/auth/providers') as Promise<{ providers: SsoProvider[] }>,
   /* A full navigation, not a fetch: the provider answers with its own
      page, and the session cookie has to be set on a top-level request. */

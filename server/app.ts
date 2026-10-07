@@ -736,6 +736,34 @@ export function createApp(db: Db, driver: string) {
     res.json({ identities: await identitiesFor(db, profile.id) })
   }))
 
+  /**
+   * Your own details: name and phone on the account, and the job title
+   * you hold in this workspace. The Settings form used to collect these and
+   * then only show "Profile saved" — no request was ever made.
+   *
+   * Email is not here on purpose. It is the sign-in, and with no mail
+   * server there is no way to check a new address belongs to whoever typed
+   * it; changing it unverified would be a way to move an account.
+   */
+  app.put('/api/auth/profile', route(async (req: Authed, res) => {
+    const viewer = requireViewer(req)
+    const name = String(req.body?.name ?? '').trim()
+    const phone = String(req.body?.phone ?? '').trim()
+    const title = String(req.body?.title ?? '').trim()
+    if (name.length < 2 || name.length > 120) throw new BadRequest('A name is between 2 and 120 characters.')
+    if (phone.length > 40) throw new BadRequest('A phone number is at most 40 characters.')
+    if (title.length > 80) throw new BadRequest('A job title is at most 80 characters.')
+
+    await db.update(profiles).set({ name, phone }).where(eq(profiles.id, viewer.profile.id))
+    if (viewer.membership && viewer.membership.role !== 'tenant') {
+      await db.update(organizationMembers).set({ title })
+        .where(eq(organizationMembers.id, viewer.membership.id))
+    }
+    res.json({
+      member: publicMember(await readViewer(viewer.profile.id, viewer.membership?.organizationId ?? null)),
+    })
+  }))
+
   /** Changing your own password. Requires the current one, and signs out
    *  every other session — a change is usually a response to a worry. */
   app.put('/api/auth/password', route(async (req: Authed, res) => {

@@ -88,15 +88,7 @@ export default function Settings() {
           <div className="grid gap-4 lg:grid-cols-3">
             <Card className="card-pad lg:col-span-2">
               <h3 className="text-[15px] font-semibold text-ink">Your details</h3>
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                <Field label="Full name" id="p-name"><Input id="p-name" defaultValue={me.name} /></Field>
-                <Field label="Job title" id="p-title"><Input id="p-title" defaultValue={me.title} /></Field>
-                <Field label="Email" id="p-email"><Input id="p-email" type="email" defaultValue={me.email} /></Field>
-                <Field label="Direct line" id="p-phone"><Input id="p-phone" defaultValue={me.phone} /></Field>
-              </div>
-              <div className="mt-5 flex justify-end">
-                <Button variant="primary" onClick={() => toast({ title: 'Profile saved', tone: 'success' })}>Save changes</Button>
-              </div>
+              <ProfileForm />
             </Card>
 
             {state.member && (
@@ -675,3 +667,66 @@ function PermissionBox({
     </button>
   )
 }
+
+/**
+ * Your own name, title and phone.
+ *
+ * This used to be four uncontrolled inputs and a button whose whole
+ * handler was a "Profile saved" toast: nothing was read and nothing was
+ * sent, so a corrected phone number was confirmed and forgotten on every
+ * visit. It saves now, and only says so once the server has.
+ */
+function ProfileForm() {
+  const { state, dispatch, toast } = useStore()
+  const me = currentMember(state)
+  const live = state.source === 'database'
+  const [name, setName] = useState(me.name)
+  const [title, setTitle] = useState(me.title)
+  const [phone, setPhone] = useState(me.phone)
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+  const changed = name.trim() !== me.name || title.trim() !== me.title || phone.trim() !== me.phone
+
+  const save = async () => {
+    if (!live || busy || !changed) return
+    setBusy(true)
+    setProblem(null)
+    try {
+      const { member } = await auth.updateProfile({ name: name.trim(), title: title.trim(), phone: phone.trim() })
+      dispatch({ type: 'profile-saved', member })
+      toast({ title: 'Profile saved', tone: 'success' })
+    } catch (error) {
+      setProblem((error as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <Field label="Full name" id="p-name">
+          <Input id="p-name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+        </Field>
+        <Field label="Job title" id="p-title">
+          <Input id="p-title" value={title} onChange={(e) => setTitle(e.target.value)} />
+        </Field>
+        <Field label="Email" id="p-email" hint="This is how you sign in, so it is not changed here.">
+          <Input id="p-email" type="email" value={me.email} readOnly aria-readonly="true" />
+        </Field>
+        <Field label="Direct line" id="p-phone">
+          <Input id="p-phone" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" />
+        </Field>
+      </div>
+      {problem && (
+        <p role="alert" className="mt-3 text-[12.5px] text-status-critical-ink">{problem}</p>
+      )}
+      <div className="mt-5 flex justify-end">
+        <Button variant="primary" onClick={save} disabled={!live || busy || !changed || name.trim().length < 2}>
+          {busy ? 'Saving…' : 'Save changes'}
+        </Button>
+      </div>
+    </>
+  )
+}
+

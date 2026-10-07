@@ -125,6 +125,7 @@ type Action =
   | { type: 'signed-out' }
   | { type: 'setup-needed'; needed: boolean }
   | { type: 'account'; hasPassword: boolean; identities: Identity[] }
+  | { type: 'profile-saved'; member: SessionMember }
   | { type: 'workspaces'; workspace: Membership | null; workspaces: Membership[] }
   | { type: 'reset' }
 
@@ -505,6 +506,16 @@ function reducer(state: State, action: Action): State {
        one would leave nobody able to get in. */
     case 'account':
       return { ...state, hasPassword: action.hasPassword, identities: action.identities }
+    /* The server's answer to saving your own details, carried into both
+       places they are drawn from: the signed-in member and the team list. */
+    case 'profile-saved':
+      return {
+        ...state,
+        member: { ...state.member, ...action.member },
+        team: state.team.map((t) => (t.id === action.member.id
+          ? { ...t, name: action.member.name, title: action.member.title, phone: action.member.phone }
+          : t)),
+      }
     case 'workspaces':
       return { ...state, workspace: action.workspace, workspaces: action.workspaces }
     case 'reset':
