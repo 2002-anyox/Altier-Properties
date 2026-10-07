@@ -1145,6 +1145,43 @@ try {
   }))
   ok(jobAttempt.status === 200, `but staff can raise a maintenance job (got ${jobAttempt.status})`)
 
+  /* ------------------- a manager can do a manager's job --------------- *
+   * The role is granted edit:properties and edit:clients by default, and
+   * could do neither: the policies demanded a row be visible before it
+   * could be written, and a new row cannot be. Both inserts failed as a
+   * 500. Asserted from the manager's side, with nothing granted beyond
+   * the defaults.
+   * ------------------------------------------------------------------- */
+  cookie = ownerCookie
+  const manager = {
+    id: `tm-mgr-${stamp}`, name: 'Smoke Manager Two', role: 'manager', title: 'Property Manager',
+    email: `smoke-mgr-${stamp}@example.com`, phone: '', since: today, propertyIds: [],
+  }
+  await get('/team', json({ ...manager, password: 'manager-smoke-password' }))
+  cookie = ''
+  const mgrSignedIn = await get('/auth/login', jsonInit({
+    email: manager.email, password: 'manager-smoke-password',
+  }))
+  ok(mgrSignedIn.status === 200, `a manager signs in (got ${mgrSignedIn.status})`)
+  const mgrProperty = { ...property, id: `p-mgr-${stamp}`, code: `MGR-${stamp}`, name: 'Manager Made' }
+  const mgrMadeProperty = await get('/properties', json(mgrProperty))
+  ok(mgrMadeProperty.status === 200, `a manager can add a property (got ${mgrMadeProperty.status})`)
+  ok((await mgrMadeProperty.json()).properties.some((p) => p.id === mgrProperty.id),
+     'and sees it afterwards')
+  const mgrClient = {
+    ...client, id: `c-mgr-${stamp}`, name: 'Manager Client', email: `mgr-client-${stamp}@example.com`,
+    propertyIds: [mgrProperty.id],
+  }
+  const mgrMadeClient = await get('/clients', json(mgrClient))
+  ok(mgrMadeClient.status === 200, `a manager can add a client to their property (got ${mgrMadeClient.status})`)
+  ok((await mgrMadeClient.json()).clients.some((c) => c.id === mgrClient.id),
+     'and sees them afterwards')
+  const mgrLoose = await get('/clients', json({
+    ...client, id: `c-loose-${stamp}`, email: `loose-${stamp}@example.com`, propertyIds: [],
+  }))
+  ok(mgrLoose.status === 400,
+     `one linked to nothing is refused rather than saved out of sight (got ${mgrLoose.status})`)
+
   cookie = ownerCookie
   const loggedOut = await get('/auth/logout', { method: 'POST' })
   ok(loggedOut.status === 200, 'sign out succeeds')

@@ -1237,6 +1237,16 @@ export function createApp(db: Db, driver: string) {
     }
     const violation = chain.find((m) => /violates .*constraint/i.test(m))
     console.error(err)
+    /* A row-level policy saying no is a refusal, not a fault. It used to
+       fall through to the 500 below and arrive with the statement and its
+       parameters attached. The database's own words name tables and
+       policies a customer has no business seeing, so the message is ours. */
+    const refused = chain.some((m) => /row-level security|insufficient_privilege|permission denied/i.test(m))
+      || (err as { cause?: { code?: string } }).cause?.code === '42501'
+    if (refused) {
+      res.status(403).json({ error: 'Your role does not allow this.' })
+      return
+    }
     if (violation) {
       res.status(422).json({ error: violation })
       return

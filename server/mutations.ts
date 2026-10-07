@@ -8,7 +8,7 @@
  * ------------------------------------------------------------------ */
 
 import { randomUUID } from 'node:crypto'
-import { and, eq, ne, sql } from 'drizzle-orm'
+import { and, eq, inArray, ne, sql } from 'drizzle-orm'
 import type { Db } from './db/client.js'
 import * as t from './db/schema.js'
 import { openingCharges, settlementCharges } from '../src/lib/create.js'
@@ -509,6 +509,11 @@ async function writeAmenities(db: Db, w: Workspace, propertyId: string, amenitie
 
 export async function addProperty(db: Db, w: Workspace, property: Property) {
   await db.insert(t.properties).values(propertyColumns(property, w.organizationId))
+  /* A manager sees the properties assigned to them, and a property nobody
+     has been assigned to yet is invisible to the manager who just created
+     it — so before anything else is written against it, it is theirs.
+     The function decides; for an owner or accountant it does nothing. */
+  await db.execute(sql`select altier_claim_property(${property.id})`)
   await writeAmenities(db, w, property.id, property.amenities)
   if (property.maintenanceNotes.length) {
     await db.insert(t.propertyNotes).values(property.maintenanceNotes.map((note, i) => ({
@@ -533,6 +538,20 @@ export async function updateProperty(db: Db, w: Workspace, id: string, property:
 }
 
 export async function addClient(db: Db, w: Workspace, client: Client) {
+  /* Every unit named has to be one this person looks after. Checked here,
+     where it can be said plainly, rather than left to the policy on the
+     link table, which would refuse just the same with less to go on. */
+  const wanted = [...new Set(client.propertyIds ?? [])]
+  if (wanted.length) {
+    const visible = await db.select({ id: t.properties.id }).from(t.properties)
+      .where(and(
+        eq(t.properties.organizationId, w.organizationId),
+        inArray(t.properties.id, wanted),
+      ))
+    const missing = wanted.filter((id) => !visible.some((v) => v.id === id))
+    if (missing.length) throw new NotFound(`property ${missing[0]} not found`)
+  }
+
   await db.insert(t.clients).values({
     id: client.id, organizationId: w.organizationId,
     name: client.name, kind: client.kind, email: client.email,
@@ -554,6 +573,21 @@ export async function addClient(db: Db, w: Workspace, client: Client) {
       clientId: client.id, channel: c.channel, direction: c.direction,
       subject: c.subject, preview: c.preview, at: c.at, author: c.author,
     })))
+  }
+
+  /* A manager sees the clients linked to their properties. One created
+     with no link would be saved and then vanish from the list of the
+     person who made it — and could never be booked, because the booking
+     form can only offer clients it can see. Refused instead, which rolls
+     the whole insert back. An owner sees every client, so this never
+     fires for them. */
+  const [seen] = await db.select({ id: t.clients.id }).from(t.clients)
+    .where(eq(t.clients.id, client.id))
+  if (!seen) {
+    throw new BadInput(
+      'Link this client to one of the properties you look after, or you will not be '
+      + 'able to see them once they are saved.',
+    )
   }
 }
 

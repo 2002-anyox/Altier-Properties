@@ -99,6 +99,13 @@
       "when": 1787987300000,
       "tag": "0013_portal_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788073700000,
+      "tag": "0014_managers_can_create",
+      "breakpoints": true
     }
   ]
 }

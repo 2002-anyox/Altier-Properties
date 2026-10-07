@@ -16,4 +16,5 @@ export const EXPECTED_MIGRATIONS: ReadonlyArray<{ tag: string; hash: string }> =
   { tag: '0011_settlement', hash: 'e4821b8f24bf4ed2a4f1326ba9565d8535fb773e52110b2f18de2329f50a9bcc' },
   { tag: '0012_numbering_per_workspace', hash: 'd22e72910b3fb0f892849b3b72452a0d198e6b3c61bbb997004f9eff17508dd4' },
   { tag: '0013_portal_lifecycle', hash: 'f4c346629b152ab4d3623077b21a83efb4e825e0c6b0abbf6c5727c36ffd4705' },
+  { tag: '0014_managers_can_create', hash: '4ad85a020f0fc082d69a8a8a6d113d88d5c0a9a31946a5540f8dd6acceb31102' },
 ]
