@@ -139,16 +139,43 @@ export function createApp(db: Db, driver: string) {
   const withPortfolio = (tx: Db, w: Workspace, res: Response, req: Authed) =>
     readPortfolio(tx, w.organizationId).then((portfolio) => res.json(visibleTo(portfolio, req)))
 
+  /* Channels that carry correspondence with the client. Everything else
+     is the staff's own workflow log — 'note' covers internal notes, the
+     payment-reminder flags and the arrival and departure lines. */
+  const TENANT_CHANNELS = new Set(['email', 'call', 'sms', 'portal'])
+
+  /**
+   * One person's own record, as that person may see it.
+   *
+   * Row isolation already narrows a tenant to their own client row, and
+   * that part is right: the row really is theirs. The columns are not.
+   * `notes` and the 'note' thread are what staff write *about* somebody,
+   * and the interface promises staff those stay internal — so they are
+   * withheld here, where the promise can be kept, rather than left to
+   * whatever the browser chooses to render.
+   */
+  const asTenantSees = (portfolio: Awaited<ReturnType<typeof readPortfolio>>) => ({
+    ...portfolio,
+    clients: portfolio.clients.map((client: Client) => ({
+      ...client,
+      notes: '',
+      communications: client.communications
+        .filter((entry) => TENANT_CHANNELS.has(entry.channel)),
+    })),
+  })
+
   const visibleTo = (portfolio: Awaited<ReturnType<typeof readPortfolio>>, req: Authed) => {
     /* This workspace's matrix, carried on the request — not the defaults
        compiled into the app. One process answers for every customer, so
        a module-level can() here would give an owner who granted their
        staff the books the same answer as one who did not. */
     const viewer = req.viewer
+    let out = portfolio
+    if (viewer?.membership?.role === 'tenant') out = asTenantSees(out)
     if (viewer?.membership && !viewer.permissions.has('view:payments')) {
-      return { ...portfolio, invoices: [] }
+      out = { ...out, invoices: [] }
     }
-    return portfolio
+    return out
   }
 
   /* Reports whether the schema is actually there, not just whether the

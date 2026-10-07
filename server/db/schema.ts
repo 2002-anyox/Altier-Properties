@@ -199,8 +199,14 @@ export const organizationMembers = pgTable('organization_members', {
 
   /* Set only when role is 'tenant': which client's records this login may
      see. A tenant membership without one can reach nothing, which is the
-     safe way round. */
-  clientId: text('client_id'),
+     safe way round.
+
+     The key is what stops the login outliving the record it was granted
+     from. Without it a deleted client left the membership behind, and
+     because the tenant policy matches on this id — supplied by the
+     caller — the login went on to read whatever record next took it. */
+  clientId: text('client_id')
+    .references(() => clients.id, { onDelete: 'cascade' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('organization_members_unique').on(t.organizationId, t.profileId),

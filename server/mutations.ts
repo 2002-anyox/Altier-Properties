@@ -841,6 +841,23 @@ export async function deleteClient(db: Db, w: Workspace, id: string) {
       + 'so removing them would destroy that history. Mark them as past instead.',
     )
   }
+
+  /* A portal login is granted from this record and has to leave with it.
+     Left behind, it kept working: it reached whatever record next took
+     this id, because the policy matches on the id and ids are supplied by
+     the caller. And with the record gone there was no longer a screen to
+     close it from. The foreign key added in 0013 is the backstop; this is
+     the part that also ends the sessions and retires the account. */
+  const [portal] = await db.select({
+    id: t.organizationMembers.id,
+    profileId: t.organizationMembers.profileId,
+  })
+    .from(t.organizationMembers).where(and(
+      eq(t.organizationMembers.organizationId, w.organizationId),
+      eq(t.organizationMembers.clientId, id),
+    ))
+  if (portal) await retirePortalLogin(db, w, portal)
+
   await db.delete(t.clients).where(eq(t.clients.id, id))
 }
 
@@ -1090,12 +1107,19 @@ export async function grantPortalAccess(
     ))
   if (existingPortal.length) throw new Conflict('That record already has portal access.')
 
-  const [existing] = await db.select({ id: t.profiles.id }).from(t.profiles)
-    .where(sql`lower(${t.profiles.email}) = ${email}`)
-  if (existing) {
+  /* Asked through a function that reads unscoped, because a plain select
+     here only ever saw this workspace's own profiles. For anybody else's
+     address it found nothing, carried on, and the insert raised — a 500
+     with the statement and the password hash in it, where this refusal
+     was what the code meant to do. */
+  const [{ taken }] = await db.select({
+    taken: sql<boolean>`altier_profile_exists(${email})`,
+  }).from(sql`(select 1) as one`)
+  if (taken) {
     throw new Conflict(
-      `${email} already has an Altier account, so portal access has to be `
-      + 'invited rather than created here.',
+      `${email} already has an Altier account. Portal access creates a new `
+      + 'login, so it cannot use that address — give this record an address '
+      + 'of its own, or ask them to sign in with the account they have.',
     )
   }
   const profileId = await createProfile(db, {
@@ -1128,6 +1152,52 @@ export async function revokePortalAccess(db: Db, w: Workspace, clientId: string)
   ))
   const membership = rows[0]
   if (!membership) throw new NotFound('That record has no portal access.')
+  await retirePortalLogin(db, w, membership)
+}
+
+/**
+ * Taking a portal login out of service.
+ *
+ * Removing the membership alone used to leave the profile and its
+ * password behind, which had two costs: the credentials still
+ * authenticated — reaching nothing, but answering — and granting access
+ * again collided with the leftover profile and failed. So the account
+ * goes too, once we are sure it exists for nothing else.
+ *
+ * "Nothing else" is read unscoped on purpose. A tenant who is also a
+ * landlord in another workspace, or who signs in with Google, owns that
+ * account beyond this record, and this workspace does not get to delete
+ * it — the membership is withdrawn and the account is left alone.
+ */
+async function retirePortalLogin(
+  db: Db, w: Workspace, membership: { id: string; profileId: string },
+) {
+  const [elsewhere] = await db.select({ n: sql<number>`count(*)::int` })
+    .from(t.organizationMembers)
+    .where(and(
+      eq(t.organizationMembers.profileId, membership.profileId),
+      ne(t.organizationMembers.id, membership.id),
+    ))
+  const [linked] = await db.select({ n: sql<number>`count(*)::int` })
+    .from(t.identities)
+    .where(eq(t.identities.profileId, membership.profileId))
+
+  if ((elsewhere?.n ?? 0) === 0 && (linked?.n ?? 0) === 0) {
+    /* The account exists for this record and nothing else, so it goes.
+       Order matters and is easy to get wrong: a profile is visible to
+       this caller *because* of the membership, so deleting the membership
+       first puts the profile out of reach and the delete below matches
+       nothing — quietly, which is how the login survived its own
+       revocation. Deleting the profile while the membership still stands
+       takes the membership, the sessions and every way back in with it,
+       by cascade. */
+    await db.delete(t.profiles).where(eq(t.profiles.id, membership.profileId))
+    return
+  }
+
+  /* The account lives on for its other work — another workspace, or a
+     Google sign-in — so this workspace withdraws the membership and ends
+     its own sessions, and leaves the account alone. */
   await db.delete(t.organizationMembers).where(eq(t.organizationMembers.id, membership.id))
   await db.delete(t.sessions).where(and(
     eq(t.sessions.profileId, membership.profileId),

@@ -845,6 +845,12 @@ try {
     ok(after.seats.tenants === before.seats.tenants + 1,
        `though it is counted as a portal login (${after.seats.tenants})`)
 
+    /* Something internal to withhold, written before the measurement so
+       the check below cannot pass by there being nothing there. */
+    await get(`/clients/${tenantOf.id}/notes`, json({
+      text: 'Internal: lease under review, do not discuss with the tenant.',
+    }))
+
     /* What the owner can see of this tenant, to measure the portal against. */
     const ownerView = await get('/portfolio').then((r) => r.json())
     const theirBookings = ownerView.bookings.filter((b) => b.clientId === tenantOf.id).length
@@ -871,6 +877,23 @@ try {
     ok(portalView.team.length === 0 && portalView.maintenance.length === 0,
        `and neither the staff list nor the repair board (${portalView.team.length} staff, ${portalView.maintenance.length} jobs)`)
 
+    /* The right rows is not the same as the right columns. `notes` and the
+       'note' thread are what staff write *about* somebody, and Settings
+       calls them internal — so the portal must not carry them even on the
+       tenant's own row. Measured against the owner's copy of that row, so
+       this fails if the fixture ever stops having anything to withhold. */
+    const ownerRow = ownerView.clients.find((c) => c.id === tenantOf.id)
+    const portalRow = portalView.clients.find((c) => c.id === tenantOf.id)
+    const ownerNotes = ownerRow.communications.filter((m) => m.channel === 'note').length
+    ok(ownerNotes > 0,
+       `the owner's copy has an internal thread to withhold (${ownerNotes} entries)`)
+    ok(portalRow && portalRow.name === ownerRow.name,
+       'the tenant still receives their own record')
+    ok(portalRow.notes === '',
+       `and not the private notes on it (${JSON.stringify(portalRow.notes)})`)
+    ok(portalRow.communications.every((m) => m.channel !== 'note'),
+       `nor the internal thread (${portalRow.communications.filter((m) => m.channel === 'note').length} of ${ownerNotes} leaked)`)
+
     const peek = await get('/workspace')
     ok(peek.status === 403, `a tenant cannot open Team & access (got ${peek.status})`)
     const meddle = await get('/team', jsonInit({
@@ -893,6 +916,40 @@ try {
     ok(stillIn === 403 || stillIn === 401,
        `after which that login reaches nothing (got ${stillIn})`)
     cookie = ownerHere
+
+    /* Closing access used to leave the account behind, so the credentials
+       went on authenticating and opening access again collided with the
+       leftover profile. Both halves are checked: it is refused, and it can
+       be granted again. */
+    ok(afterClosing.status === 401,
+       `the closed credentials no longer authenticate at all (got ${afterClosing.status})`)
+    const reopened = await get(`/clients/${tenantOf.id}/portal`, json({ password: TENANT_PASSWORD }))
+    ok(reopened.status === 200, `and access can be opened again (got ${reopened.status})`)
+
+    /* A login granted from a record cannot outlive it. Deleting the client
+       has to take the membership with it — otherwise the login kept
+       working and read whatever record next took the id. */
+    const sacrificial = `c-portal-life-${stamp}`
+    await get('/clients', json({
+      id: sacrificial, name: 'Portal Lifetime', kind: 'tenant',
+      email: `portal.life.${stamp}@example.com`, phone: '', nationality: 'Ugandan',
+      since: today, status: 'active', propertyIds: [], idDocuments: [], notes: '',
+      emergencyContact: '', communications: [], lifetimeValue: 0, rating: 0,
+    }))
+    await get(`/clients/${sacrificial}/portal`, json({ password: TENANT_PASSWORD }))
+    const removed = await get(`/clients/${sacrificial}`, { method: 'DELETE' })
+    ok(removed.status === 200, `a client with no history can be deleted (got ${removed.status})`)
+    const listed = await get('/clients/portal').then((r) => r.json())
+    ok(!listed.portal.some((row) => row.clientId === sacrificial),
+       'and its portal login goes with it')
+    const ownerAgain = cookie
+    cookie = ''
+    const orphaned = await get('/auth/login', jsonInit({
+      email: `portal.life.${stamp}@example.com`, password: TENANT_PASSWORD,
+    }))
+    ok(orphaned.status === 401,
+       `so those credentials cannot sign in afterwards (got ${orphaned.status})`)
+    cookie = ownerAgain
   }
 
   /* Accepting the invitation, in what is effectively another browser:
