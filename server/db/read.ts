@@ -10,7 +10,7 @@
 import { and, asc, eq, ne } from 'drizzle-orm'
 import { DEFAULT_REMINDERS, DEFAULT_TIMEZONE } from '../../src/lib/defaults.js'
 import { dayIn } from '../../src/lib/dates.js'
-import { invoiceStatusOn } from '../../src/lib/derive.js'
+import { chargeSign, invoiceStatusOn } from '../../src/lib/derive.js'
 import { permissionMatrix } from '../workspace.js'
 import type { Db } from './client.js'
 import * as t from './schema.js'
@@ -136,6 +136,12 @@ export async function readPortfolio(
     maintenanceNotes: (notes.get(p.id) ?? []).map((n) => n.note),
   }))
 
+  const collectedFrom = new Map<string, number>()
+  for (const i of invoiceRows) {
+    if (i.type === 'deposit') continue
+    collectedFrom.set(i.clientId, (collectedFrom.get(i.clientId) ?? 0) + chargeSign(i.type) * i.paidAmount)
+  }
+
   const clients: Client[] = clientRows.map((c) => ({
     id: c.id, name: c.name, kind: c.kind, email: c.email, phone: c.phone,
     nationality: c.nationality, since: c.since, status: c.status,
@@ -149,7 +155,13 @@ export async function readPortfolio(
         subject: m.subject, preview: m.preview, at: m.at, author: m.author,
       }))
       .sort((a, b) => (a.at < b.at ? 1 : -1)),
-    lifetimeValue: c.lifetimeValue, rating: c.rating,
+    /* What this client has actually paid, net of anything returned and
+       not counting deposits, which are theirs — read off the charges this
+       viewer can see. The column it replaces was written once, from the
+       request, and never again: forgeable on the way in, frozen after,
+       and summed across units a scoped manager could not otherwise see. */
+    lifetimeValue: collectedFrom.get(c.id) ?? 0,
+    rating: c.rating,
   }))
 
   const bookings: Booking[] = bookingRows.map((b) => ({

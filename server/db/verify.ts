@@ -9,9 +9,11 @@
  * Run with `npm run db:check`.
  * ------------------------------------------------------------------ */
 
+import { dayIn } from '../../src/lib/dates.js'
+import { chargeSign, invoiceStatusOn } from '../../src/lib/derive.js'
 import { sql } from 'drizzle-orm'
 import { INVOICES } from '../../scripts/fixture/portfolio.js'
-import { DEFAULT_REMINDERS } from '../../src/lib/defaults.js'
+import { DEFAULT_REMINDERS, DEFAULT_TIMEZONE } from '../../src/lib/defaults.js'
 import { TODAY, iso } from '../../src/lib/dates.js'
 import { chargeClass, deferredPortion, earnedInMonth } from '../../src/lib/derive.js'
 import type { Invoice } from '../../src/lib/types.js'
@@ -209,11 +211,25 @@ const diff = (a: unknown, b: unknown, path = ''): string | null => {
   return Object.is(a, b) ? null : `${path}: ${JSON.stringify(a)} vs ${JSON.stringify(b)}`
 }
 
+/* Two fields are worked out on read rather than stored, so the fixture's
+   copies are not what should come back. An invoice's status follows the
+   calendar, and a client's lifetime value is what the ledger collected —
+   the fixture's figure for the first client was 196 million against 75
+   million actually paid. Each is held to its derivation instead. */
+const day = dayIn(DEFAULT_TIMEZONE)
+const expectedInvoices = data.INVOICES.map((i) => ({ ...i, status: invoiceStatusOn(i, day) }))
+const collected = new Map<string, number>()
+for (const i of data.INVOICES) {
+  if (i.type === 'deposit') continue
+  collected.set(i.clientId, (collected.get(i.clientId) ?? 0) + chargeSign(i.type) * i.paidAmount)
+}
+const expectedClients = data.CLIENTS.map((c) => ({ ...c, lifetimeValue: collected.get(c.id) ?? 0 }))
+
 for (const [name, fromDb, fromMemory] of [
   ['properties', portfolio.properties, data.PROPERTIES],
-  ['clients', portfolio.clients, data.CLIENTS],
+  ['clients', portfolio.clients, expectedClients],
   ['bookings', portfolio.bookings, data.BOOKINGS],
-  ['invoices', portfolio.invoices, data.INVOICES],
+  ['invoices', portfolio.invoices, expectedInvoices],
   ['maintenance', portfolio.maintenance, data.MAINTENANCE],
   ['team', portfolio.team, data.TEAM],
 ] as const) {

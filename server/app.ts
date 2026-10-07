@@ -17,7 +17,7 @@ import cors from 'cors'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import { and, eq, sql } from 'drizzle-orm'
 import { connect, type Db } from './db/client.js'
-import { organizationMembers, organizations, profiles, properties, subscriptions } from './db/schema.js'
+import { clients, organizationMembers, organizations, profiles, properties, subscriptions } from './db/schema.js'
 import { readPortfolio } from './db/read.js'
 import { missingMigrations } from './db/applied.js'
 import { classify, explain, rootCause } from './db/fault.js'
@@ -175,7 +175,13 @@ export function createApp(db: Db, driver: string) {
     let out = portfolio
     if (viewer?.membership?.role === 'tenant') out = asTenantSees(out)
     if (viewer?.membership && !viewer.permissions.has('view:payments')) {
-      out = { ...out, invoices: [] }
+      /* The charges are withheld, and so is the total made from them —
+         otherwise the figure says what the hidden ledger adds up to. */
+      out = {
+        ...out,
+        invoices: [],
+        clients: out.clients.map((client: Client) => ({ ...client, lifetimeValue: 0 })),
+      }
     }
     return out
   }
@@ -1122,6 +1128,10 @@ export function createApp(db: Db, driver: string) {
     })
       .from(organizationMembers)
       .innerJoin(profiles, eq(profiles.id, organizationMembers.profileId))
+      /* Through the client record, which the row policies narrow to the
+         clients this person may see. Without it a manager with one unit
+         received the portal email of every tenant in the workspace. */
+      .innerJoin(clients, eq(clients.id, organizationMembers.clientId))
       .where(and(
         eq(organizationMembers.organizationId, w.organizationId),
         eq(organizationMembers.role, 'tenant'),

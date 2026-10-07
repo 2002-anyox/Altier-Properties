@@ -558,7 +558,9 @@ export async function addClient(db: Db, w: Workspace, client: Client) {
     phone: client.phone, nationality: client.nationality, since: client.since,
     status: client.status, notes: client.notes,
     emergencyContact: client.emergencyContact,
-    lifetimeValue: client.lifetimeValue, rating: client.rating,
+    /* Derived from the ledger on read now; whatever the request says is
+       not a figure anybody earned. */
+    lifetimeValue: 0, rating: Math.max(0, Math.min(5, Number(client.rating) || 0)),
   })
   if (client.propertyIds.length) {
     await db.insert(t.clientProperties).values(
