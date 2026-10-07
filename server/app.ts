@@ -422,9 +422,19 @@ export function createApp(db: Db, driver: string) {
     const password = String(req.body?.password ?? '')
     const profile = await findByEmail(db, email)
 
-    /* One message for every failure. Saying "no such account" tells an
-       attacker which addresses are worth attacking. */
-    const refuse = () => { throw new Unauthorized('That email and password do not match an account.') }
+    /* One message for every failure, the lockout included. Saying "no such
+       account" tells an attacker which addresses are worth attacking — and
+       so did "too many attempts", which only an address with an account
+       could ever earn: eight wrong guesses were enough to find out. The
+       lockout still holds; it just does not announce itself. The sentence
+       says it might be in force, so somebody locked out is not left
+       retyping a password that is right. */
+    const refuse = () => {
+      throw new Unauthorized(
+        'That email and password do not match an account. After several wrong attempts an '
+        + 'account is locked for a few minutes.',
+      )
+    }
 
     if (!profile || !profile.passwordHash) {
       // Spend comparable time either way so absence is not timeable.
@@ -432,9 +442,11 @@ export function createApp(db: Db, driver: string) {
       refuse()
       return
     }
-    const minutes = lockedFor(profile)
-    if (minutes > 0) {
-      throw new Unauthorized(`Too many attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`)
+    if (lockedFor(profile) > 0) {
+      // And a locked account costs the same as a wrong password.
+      await equaliseTiming(password)
+      refuse()
+      return
     }
     if (!await verifyPassword(password, profile.passwordHash)) {
       await recordFailure(db, profile.id, profile.failedAttempts)

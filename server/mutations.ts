@@ -460,19 +460,50 @@ export async function addNote(db: Db, w: Workspace, clientId: string, text: stri
   })
 }
 
+/* Each lead time with the range that makes sense for it. A negative
+   lead time, or one of ten thousand days, was stored as given and then
+   drove the notifications — and now drives how far ahead rent is raised. */
+const LEADS: Array<[keyof ReminderSettings, string, number]> = [
+  ['rentDueLeadDays', 'Rent reminders', 60],
+  ['leaseExpiryLeadDays', 'Lease expiry reminders', 365],
+  ['checkInLeadHours', 'Arrival reminders', 168],
+  ['vacancyAlertDays', 'Vacancy alerts', 365],
+  ['maintenanceLeadDays', 'Maintenance reminders', 90],
+]
+const CLOCK = /^([01]\d|2[0-3]):[0-5]\d$/
+
 export async function updateReminders(db: Db, w: Workspace, patch: Partial<ReminderSettings>) {
   const set: Record<string, unknown> = { updatedAt: new Date() }
-  if (patch.rentDueLeadDays !== undefined) set.rentDueLeadDays = patch.rentDueLeadDays
-  if (patch.leaseExpiryLeadDays !== undefined) set.leaseExpiryLeadDays = patch.leaseExpiryLeadDays
-  if (patch.checkInLeadHours !== undefined) set.checkInLeadHours = patch.checkInLeadHours
-  if (patch.vacancyAlertDays !== undefined) set.vacancyAlertDays = patch.vacancyAlertDays
-  if (patch.maintenanceLeadDays !== undefined) set.maintenanceLeadDays = patch.maintenanceLeadDays
-  if (patch.channels !== undefined) set.channels = patch.channels
-  if (patch.digest !== undefined) set.digest = patch.digest
+  for (const [key, label, max] of LEADS) {
+    const value = patch[key]
+    if (value === undefined) continue
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > max) {
+      throw new BadInput(`${label} have to be a whole number from 0 to ${max}.`)
+    }
+    set[key] = value
+  }
+  if (patch.channels !== undefined) {
+    const c = patch.channels as unknown as Record<string, unknown>
+    const names = ['inApp', 'email', 'sms', 'push']
+    if (!c || typeof c !== 'object' || names.some((n) => typeof c[n] !== 'boolean')) {
+      throw new BadInput('Channels have to say on or off for in-app, email, SMS and push.')
+    }
+    set.channels = { inApp: c.inApp, email: c.email, sms: c.sms, push: c.push }
+  }
+  if (patch.digest !== undefined) {
+    if (!['off', 'daily', 'weekly'].includes(patch.digest as string)) {
+      throw new BadInput('A digest is off, daily or weekly.')
+    }
+    set.digest = patch.digest
+  }
   if (patch.quietHours !== undefined) {
-    set.quietHoursEnabled = patch.quietHours.enabled
-    set.quietHoursFrom = patch.quietHours.from
-    set.quietHoursTo = patch.quietHours.to
+    const q = patch.quietHours
+    if (typeof q?.enabled !== 'boolean' || !CLOCK.test(String(q?.from)) || !CLOCK.test(String(q?.to))) {
+      throw new BadInput('Quiet hours need on or off, and a start and end as HH:MM.')
+    }
+    set.quietHoursEnabled = q.enabled
+    set.quietHoursFrom = q.from
+    set.quietHoursTo = q.to
   }
   await db.update(t.reminderSettings).set(set)
     .where(eq(t.reminderSettings.organizationId, w.organizationId))
