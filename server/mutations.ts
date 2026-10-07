@@ -601,6 +601,28 @@ export async function addClient(db: Db, w: Workspace, client: Client) {
 }
 
 /**
+ * The figures an agreement is made of, checked before any of them is used.
+ * An edit used to accept a negative rate and a negative deposit, which the
+ * settlement arithmetic then multiplied by days.
+ */
+function assertTerms(booking: Partial<Booking>) {
+  const whole = (value: unknown, what: string, { optional = false } = {}) => {
+    if (value === undefined || value === null) {
+      if (optional) return
+      throw new BadInput(`An agreement needs ${what}.`)
+    }
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+      throw new BadInput(`${what[0].toUpperCase()}${what.slice(1)} has to be a whole number, zero or more.`)
+    }
+  }
+  whole(booking.rate, 'a rate', { optional: true })
+  whole(booking.deposit, 'a deposit', { optional: true })
+  whole(booking.advanceMonths, 'the advance months', { optional: true })
+  whole(booking.noticeDays, 'the notice period', { optional: true })
+  whole(booking.guests, 'the number of guests', { optional: true })
+}
+
+/**
  * An agreement commits the unit, opens the client's charges and links the
  * two. Every write happens in one transaction so a rejected charge cannot
  * leave a property marked occupied against a tenancy that does not exist.
@@ -639,10 +661,15 @@ export async function addBooking(db: Db, w: Workspace, booking: Booking, invoice
      million shillings and appear on the client's account owing nothing.
      The property is the authority on what it costs; the agreement only
      overrides it deliberately. */
+  assertTerms(booking)
   const rate = booking.rate > 0 ? booking.rate : property.price
-  const deposit = booking.deposit > 0
-    ? booking.deposit
-    : (booking.mode === 'short_stay' ? Math.round(property.price * 1.5) : property.price * 2)
+  /* Zero is an answer. A deposit left out takes the property's usual one;
+     a deposit of zero — most short stays take none — is zero. Both used
+     to mean "use the default", so declining a deposit billed one anyway,
+     and the check-out screen then told the guest it was being held. */
+  const deposit = booking.deposit === undefined || booking.deposit === null
+    ? (booking.mode === 'short_stay' ? Math.round(property.price * 1.5) : property.price * 2)
+    : booking.deposit
 
   /* No transaction opened here: the request already runs inside one, so
      these writes either all land or all roll back with the rest of it. A
@@ -670,13 +697,28 @@ export async function addBooking(db: Db, w: Workspace, booking: Booking, invoice
   }
 
   if (invoices.length) {
+    /* The schedule may come from the request — the form works it out to
+       show it before saving — but nothing about money having moved can.
+       Every opening charge starts unpaid, against this agreement, this
+       client and this unit. They used to be stored as sent, so a request
+       could open a tenancy with its charges already marked paid: cash in
+       the ledger that nobody ever received. A credit note is raised by a
+       departure and never arrives with an agreement. */
+    for (const i of invoices) {
+      if (i.type === 'credit_note') {
+        throw new BadInput('An agreement cannot open with a credit note on it.')
+      }
+      if (typeof i.amount !== 'number' || !Number.isInteger(i.amount) || i.amount < 0) {
+        throw new BadInput('A charge has to be a whole number of shillings, zero or more.')
+      }
+    }
     await db.insert(t.invoices).values(invoices.map((i) => ({
       id: i.id, organizationId: w.organizationId,
-      number: i.number, propertyId: i.propertyId, clientId: i.clientId,
-      bookingId: i.bookingId, type: i.type, issuedOn: i.issuedOn, dueOn: i.dueOn,
+      number: i.number, propertyId: booking.propertyId, clientId: booking.clientId,
+      bookingId: booking.id, type: i.type, issuedOn: i.issuedOn, dueOn: i.dueOn,
       amount: i.amount, earnsFrom: i.earnsFrom, earnsTo: i.earnsTo,
-      paidAmount: i.paidAmount, status: i.status, method: i.method,
-      paidOn: i.paidOn, memo: i.memo,
+      paidAmount: 0, status: 'pending' as const, method: null,
+      paidOn: null, memo: i.memo,
     })))
   }
 
@@ -764,6 +806,7 @@ export async function updateClient(db: Db, w: Workspace, id: string, client: Cli
 }
 
 export async function updateBooking(db: Db, w: Workspace, id: string, booking: Booking) {
+  assertTerms(booking)
   const existing = await lockBooking(db, w, id)
   /* Which unit and which client an agreement is for decides what was
      already charged against it, so an edit may not move either. */

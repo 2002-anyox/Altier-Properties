@@ -394,7 +394,7 @@ try {
       id: `b-free-${stamp}`, reference: `FREE-${stamp}`, propertyId: priced.id,
       clientId: second.id, mode: priced.mode === 'rental' ? 'long_term' : priced.mode,
       status: 'upcoming', start: from, end: to,
-      rate: 0, deposit: 0, advanceMonths: 0, paidThrough: null, noticeDays: 0,
+      rate: 0, deposit: undefined, advanceMonths: 0, paidThrough: null, noticeDays: 0,
       guests: 2, source: 'direct', checkIn: '15:00', checkOut: '11:00',
       notes: '', createdAt: today,
     }
@@ -402,7 +402,7 @@ try {
     const stored = billed.bookings?.find((b) => b.id === free.id)
     ok(stored?.rate === priced.price,
        `an agreement with no rate takes the property's (${stored?.rate} vs ${priced.price})`)
-    ok((stored?.deposit ?? 0) > 0, `and a deposit proportional to it (${stored?.deposit})`)
+    ok((stored?.deposit ?? 0) > 0, `and, with none given, a deposit proportional to it (${stored?.deposit})`)
 
     const raised = (billed.invoices ?? []).filter((i) => i.bookingId === free.id)
     ok(raised.length >= 2, `charges are raised rather than none at all (${raised.length})`)
