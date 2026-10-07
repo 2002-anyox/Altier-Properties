@@ -414,6 +414,14 @@ async function sharedNumbering() {
 }
 await sharedNumbering()
 
+/* Leave the database as it was found. The rival workspace exists only to
+   be looked at from the other side, and left behind it is a second
+   customer as far as anything else can tell — enough, for one, to make
+   the seeder refuse the next run, which CI does straight after this. */
+await client.query(`DELETE FROM properties WHERE organization_id = 'org-rival'`)
+await client.query(`DELETE FROM organizations WHERE id = 'org-rival'`)
+await client.query(`DELETE FROM profiles WHERE id = 'pr-rival-owner'`)
+
 await client.end()
 console.log(failures === 0 ? '\nISOLATION CHECK CLEAN\n' : `\n${failures} ISOLATION CHECK(S) FAILED\n`)
 process.exit(failures === 0 ? 0 : 1)

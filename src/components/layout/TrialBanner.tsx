@@ -63,7 +63,7 @@ export function TrialBanner() {
             <>
               <span className="font-semibold">Your free trial has ended.</span>{' '}
               Everything you have is still here and still readable. Choose a plan to
-              add people again.
+              make changes again.
             </>
           ) : (
             <>

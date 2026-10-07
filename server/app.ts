@@ -49,7 +49,7 @@ import {
   assertSignupAllowed, createWorkspace, defaultOrganization, signUp,
   BadPermission, acceptInvitation, invitationByToken, inviteMember, membershipsFor,
   openInvitations, permissionMatrix, resetPermissions, revokeInvitation, seatUsage,
-  setRolePermission,
+  setRolePermission, subscriptionOpen,
 } from './workspace.js'
 import { SsoError, configuredProviders } from './oidc.js'
 
@@ -125,6 +125,23 @@ export function createApp(db: Db, driver: string) {
       memberId: membership.id,
       name: viewer.profile.name,
       timezone: viewer.timezone,
+    }
+    /* A lapsed subscription leaves the workspace readable and stops it
+       changing. The trial banner always promised exactly that —
+       "everything you have is still here and still readable" — but
+       nothing enforced it: twenty days past the end of a trial, every
+       read and every write still went through. Reading stays open on
+       purpose: somebody's records are never held back from them. */
+    if (req.method !== 'GET') {
+      const [sub] = await db.select({ status: subscriptions.status, trialEndsAt: subscriptions.trialEndsAt })
+        .from(subscriptions).where(eq(subscriptions.organizationId, membership.organizationId))
+      if (!sub || !subscriptionOpen(sub, dayIn(viewer.timezone))) {
+        throw new NoSubscription(sub?.status === 'trialing'
+          ? 'Your free trial has ended. Everything is still here to read; choose a plan to make changes again.'
+          : sub?.status === 'past_due'
+            ? 'This workspace has an unpaid invoice, so it is read-only until that is settled.'
+            : 'This workspace has no active subscription, so it is read-only.')
+      }
     }
     return scoped(
       db,
