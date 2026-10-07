@@ -17,7 +17,7 @@ import cors from 'cors'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import { and, eq, sql } from 'drizzle-orm'
 import { connect, type Db } from './db/client.js'
-import { clients, organizationMembers, organizations, profiles, properties, subscriptions } from './db/schema.js'
+import { clients, identities, organizationMembers, organizations, profiles, properties, subscriptions } from './db/schema.js'
 import { readPortfolio } from './db/read.js'
 import { missingMigrations } from './db/applied.js'
 import { classify, explain, rootCause } from './db/fault.js'
@@ -483,19 +483,72 @@ export function createApp(db: Db, driver: string) {
 
     const invitation = await invitationByToken(db, token)
     const existing = await findByEmail(db, invitation.email)
+    const viewer = req.viewer
+
+    /* Signed in as somebody else, accepting would sign them out of their
+       own account and into a different one without saying so. */
+    if (viewer && viewer.profile.email.toLowerCase() !== invitation.email.toLowerCase()) {
+      throw new BadInvitation(
+        `This invitation is for ${invitation.email}, and you are signed in as `
+        + `${viewer.profile.email}. Sign out, then open the link again.`,
+      )
+    }
+
+    /* Altier has no mail server, so the link is handed to whoever sent the
+       invitation to pass on. Holding it proves somebody gave it to you —
+       not that the address is yours. It may create a new account; it may
+       never stand in for proof of an existing one. It used to: for an
+       address with a password, accepting asked for none and signed the
+       holder in as that person; for one without, it let the holder choose
+       the password, and with it every workspace that account belonged to. */
     let hash: string | undefined
-    if (password) {
+    let claimShell = false
+    if (!existing) {
+      if (!password) throw new BadRequest('Choose a password to finish setting up your account.')
       const problem = rejectPassword(password, { name, email: invitation.email })
       if (problem) throw new BadRequest(problem)
       hash = await hashPassword(password)
-    } else if (!existing?.passwordHash) {
-      throw new BadRequest('Choose a password to finish setting up your account.')
+    } else if (viewer?.profile.id !== existing.id) {
+      if (existing.passwordHash) {
+        const minutes = lockedFor(existing)
+        if (minutes > 0) {
+          throw new Unauthorized(`Too many attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`)
+        }
+        if (!password || !await verifyPassword(password, existing.passwordHash)) {
+          if (password) await recordFailure(db, existing.id, existing.failedAttempts)
+          throw new Unauthorized(
+            `${invitation.email} already has an Altier account. Sign in to it, or enter its `
+            + 'password here, to accept.',
+          )
+        }
+        await clearFailures(db, existing.id)
+      } else {
+        /* An account with no password is still somebody's if it can be
+           reached another way — a Google sign-in, or a seat elsewhere that
+           an owner will give a password to. Only one that is truly empty
+           can be finished off from a link. */
+        const [linked] = await db.select({ n: sql<number>`count(*)::int` }).from(identities)
+          .where(eq(identities.profileId, existing.id))
+        const [seated] = await db.select({ n: sql<number>`count(*)::int` }).from(organizationMembers)
+          .where(eq(organizationMembers.profileId, existing.id))
+        if ((linked?.n ?? 0) > 0 || (seated?.n ?? 0) > 0) {
+          throw new Unauthorized(
+            `${invitation.email} already has an Altier account. Sign in to it to accept.`,
+          )
+        }
+        if (!password) throw new BadRequest('Choose a password to finish setting up your account.')
+        const problem = rejectPassword(password, { name, email: invitation.email })
+        if (problem) throw new BadRequest(problem)
+        hash = await hashPassword(password)
+        claimShell = true
+      }
     }
 
     const { profileId, organizationId } = await acceptInvitation(db, token, {
       name,
       passwordHash: hash ?? null,
-      profileId: req.viewer?.profile.id,
+      profileId: viewer?.profile.id,
+      claimShell,
     })
 
     const { token: session, expiresAt } = await createSession(db, profileId, organizationId, req.get('user-agent'))

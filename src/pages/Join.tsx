@@ -143,10 +143,23 @@ export default function Join({ token }: { token: string }) {
                 )}
 
                 {hasAccount && (
-                  <p className="rounded-xl border border-line bg-surface-inset/60 px-3.5 py-3 text-[12.5px] leading-relaxed text-ink-secondary">
-                    You already have an Altier account at that address. Accepting adds
-                    this workspace to it — your password does not change.
-                  </p>
+                  <>
+                    <p className="rounded-xl border border-line bg-surface-inset/60 px-3.5 py-3 text-[12.5px] leading-relaxed text-ink-secondary">
+                      There is already an Altier account at that address. Accepting adds this
+                      workspace to it, so it asks you to show the account is yours — a link
+                      can be passed on, and holding one is not the same as owning the address.
+                    </p>
+                    <Field
+                      label="That account's password"
+                      id="jn-current"
+                      hint="Not needed if you are signed in to it already. If you sign in with Google, sign in first and open this link again."
+                    >
+                      <Input
+                        id="jn-current" type="password" autoComplete="current-password" autoFocus
+                        value={password} onChange={(e) => setPassword(e.target.value)}
+                      />
+                    </Field>
+                  </>
                 )}
 
                 {problem && (

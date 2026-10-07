@@ -158,7 +158,11 @@ export async function seatUsage(db: Db, organizationId: string): Promise<SeatUsa
  * not paid for. The message is the one the upgrade prompt shows, so it
  * says what the plan is and what the next one would give.
  */
-export async function assertSeatAvailable(db: Db, organizationId: string, role: Role) {
+export async function assertSeatAvailable(
+  db: Db, organizationId: string, role: Role,
+  /** The caller is spending a pending invitation, which is already counted. */
+  holdsOne = false,
+) {
   const usage = await seatUsage(db, organizationId)
 
   if (!usage.open) {
@@ -174,7 +178,7 @@ export async function assertSeatAvailable(db: Db, organizationId: string, role: 
 
   const free = role !== 'tenant' || usage.tenantsCountAsSeats ? false : true
   if (free || usage.limit === null) return usage
-  if (usage.used < usage.limit) return usage
+  if (usage.used - (holdsOne ? 1 : 0) < usage.limit) return usage
 
   throw new SeatLimit(
     `The ${usage.planLabel} plan covers ${usage.limit} ${usage.limit === 1 ? 'seat' : 'seats'}`
@@ -549,9 +553,17 @@ export async function acceptInvitation(db: Db, token: string, input: {
   name?: string
   passwordHash?: string | null
   profileId?: string
+  /** The route has established the existing account is an empty shell
+   *  that may be given this password. Nothing else writes one onto an
+   *  account that already exists. */
+  claimShell?: boolean
 }) {
   const invitation = await invitationByToken(db, token)
-  await assertSeatAvailable(db, invitation.organizationId, invitation.role)
+  /* This invitation is already one of the seats counted as used — that is
+     what holding a pending invitation means — so accepting it moves a seat
+     rather than taking a new one. Counting it twice made the invitation
+     for the last seat impossible to accept. */
+  await assertSeatAvailable(db, invitation.organizationId, invitation.role, true)
 
   const [existing] = await db.select().from(t.profiles)
     .where(sql`lower(${t.profiles.email}) = ${invitation.email.toLowerCase()}`)
@@ -572,7 +584,7 @@ export async function acceptInvitation(db: Db, token: string, input: {
       passwordHash: input.passwordHash ?? null,
       passwordSetAt: input.passwordHash ? new Date() : null,
     })
-  } else if (input.passwordHash && !existing?.passwordHash) {
+  } else if (input.claimShell && input.passwordHash && !existing?.passwordHash) {
     /* They exist but have never set a password — a shell somebody made
        for them. Accepting is them proving the address is theirs, so this
        is the one moment it can be filled in. */

@@ -1024,6 +1024,24 @@ try {
   ok(afterJoining.seats.used === invited.seats.used + filler.length,
      `and the seat it held is now the seat they hold (${afterJoining.seats.used})`)
 
+  /* A link is handed to whoever sent the invitation, since there is no
+     mail server — so holding one proves nothing about owning the address.
+     Invite somebody who already has an account in another workspace, and
+     try to accept as the inviter would: with no password, then the wrong
+     one. Both used to sign the holder in as that person. */
+  await get(`/workspace/invitations/${filler.pop()}`, { method: 'DELETE' })
+  const existingInvite = await get('/workspace/invitations', json({ email: newcomerEmail, role: 'staff' }))
+  ok(existingInvite.status === 200, `an existing account can be invited (got ${existingInvite.status})`)
+  const existingToken = (await existingInvite.json()).link.split('/join/')[1]
+  cookie = ''
+  const noProof = await get(`/auth/invitation/${existingToken}`, json({}))
+  ok(noProof.status === 401, `holding the link is not enough to join as them (got ${noProof.status})`)
+  const wrongProof = await get(`/auth/invitation/${existingToken}`, json({ password: 'not-their-password-at-all' }))
+  ok(wrongProof.status === 401, `nor is guessing their password (got ${wrongProof.status})`)
+  const realProof = await get(`/auth/invitation/${existingToken}`, json({ password: 'a-sufficiently-long-passphrase' }))
+  ok(realProof.status === 200, `their own password accepts it (got ${realProof.status})`)
+  cookie = ownerSession
+
   for (const id of filler) await get(`/workspace/invitations/${id}`, { method: 'DELETE' })
 
   /* ---------------------- the roles are enforced --------------------- *
