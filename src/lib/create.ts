@@ -11,7 +11,7 @@
  * record is indistinguishable in shape from a seeded one.
  * ------------------------------------------------------------------ */
 
-import { TODAY, addDays, iso } from './dates.js'
+import { TODAY, addDays, addMonths, iso } from './dates.js'
 import { AMENITY_POOL, COMMERCIAL_AMENITIES } from './defaults.js'
 import { depositFor, timesFor } from './agreement.js'
 import { creditNote, dailyRate, extraNote, settleStay, timeCharges, valueOver } from './stay.js'
@@ -20,11 +20,6 @@ import type {
   PropertyStatus, PropertyType, Role, TeamMember, TenancyMode,
 } from './types.js'
 
-const addMonths = (from: string, months: number) => {
-  const d = new Date(`${from}T00:00:00`)
-  d.setMonth(d.getMonth() + months)
-  return iso(d)
-}
 
 /** Short, sortable and collision-free without a round trip to the server. */
 const uid = (prefix: string) =>

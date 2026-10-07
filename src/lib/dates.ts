@@ -51,3 +51,29 @@ export const daysBetween = (a: string, b: string) =>
  */
 export const dayIn = (timezone: string, at = new Date()) =>
   new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(at)
+
+/**
+ * A calendar date some whole months on, held to the last day of a month
+ * that is too short to have the same day.
+ *
+ * The version this replaces let Date overflow: 31 January plus a month
+ * became 3 March, so a rental started at a month's end earned over 31
+ * days where 28 were priced — and since every settlement takes its daily
+ * rate as amount over span, that diluted the rate for the whole
+ * agreement. Worked in UTC on the date parts, so no timezone or DST can
+ * move it either.
+ *
+ * Step a series from its anchor rather than chaining: the anchor plus two
+ * months from 31 January is 31 March, where 28 February plus one is 28
+ * March.
+ */
+export function addMonths(from: string, months: number): string {
+  const [y, m, d] = from.slice(0, 10).split('-').map(Number)
+  const total = (m - 1) + months
+  const year = y + Math.floor(total / 12)
+  const month = ((total % 12) + 12) % 12
+  const last = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+  const day = Math.min(d, last)
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+

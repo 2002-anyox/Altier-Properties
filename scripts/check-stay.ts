@@ -16,6 +16,7 @@ import { computeKpis } from '../src/lib/derive.js'
 import { settleStay, stayWindow, valueOver, timeCharges, gapsIn, mergeWindows } from '../src/lib/stay.js'
 import { settlementCharges } from '../src/lib/create.js'
 import type { Booking, Invoice, Property } from '../src/lib/types.js'
+import { addMonths } from '../src/lib/dates.js'
 
 const fail: string[] = []
 let ran = 0
@@ -336,6 +337,26 @@ const recognised = (invoices: Invoice[]) =>
   const broken = charge({ earnsFrom: '2026-01-10', earnsTo: '2026-01-10' })
   const s = settleStay(b, [broken], '2026-01-13')
   ok(Number.isFinite(s.credit) && Number.isFinite(s.due), 'a zero-length charge does not divide by zero')
+}
+
+/* ----------------------- months that end early ---------------------- *
+ * A month added to the 31st used to overflow into the next month: 31
+ * January plus one became 3 March, so a month-end rental earned over 31
+ * days where 28 were priced, and every per-day figure taken from it was
+ * diluted for the life of the agreement.
+ * ------------------------------------------------------------------- */
+ok(addMonths('2026-01-31', 1) === '2026-02-28', `31 January plus a month is 28 February (${addMonths('2026-01-31', 1)})`)
+ok(addMonths('2024-01-31', 1) === '2024-02-29', 'and 29 February in a leap year')
+ok(addMonths('2026-03-31', 1) === '2026-04-30', '31 March plus a month is 30 April')
+ok(addMonths('2026-08-31', 6) === '2027-02-28', 'six months on from 31 August is 28 February')
+ok(addMonths('2026-01-31', 2) === '2026-03-31', 'stepping from the anchor keeps the 31st where the month has one')
+ok(addMonths('2026-12-15', 1) === '2027-01-15', 'and the year turns over')
+{
+  const advance = charge({ type: 'advance', amount: 2_800_000, earnsFrom: '2026-01-31', earnsTo: addMonths('2026-01-31', 1) })
+  const b = booking({ mode: 'rental', start: '2026-01-31', end: null, arrivedOn: '2026-01-31', departedOn: '2026-02-14' })
+  const s = settleStay(b, [advance], '2026-02-14')
+  ok(s.credit === 1_400_000,
+     `leaving halfway through February returns half of February, not 14 of 31 days (${s.credit})`)
 }
 
 if (fail.length) {
